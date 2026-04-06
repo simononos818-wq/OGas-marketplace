@@ -1,0 +1,82 @@
+'use client';
+
+import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { registerVendor } from '@/lib/vendorService';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { Store, MapPin, Package } from 'lucide-react';
+
+export default function VendorRegister() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [businessName, setBusinessName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [inventory, setInventory] = useState([{ gasType: '12.5kg', brand: 'Total', price: 9500, quantity: 10 }, { gasType: '5kg', brand: 'Total', price: 4000, quantity: 15 }]);
+
+  const detectLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }));
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!user || !location) return;
+    setLoading(true);
+    try {
+      await registerVendor(user.uid, {
+        businessName, phone, email: user.email || '', address,
+        location: { lat: location.lat, lng: location.lng, geohash: '' },
+        isOpen: true, deliveryFee: 500, deliveryRadius: 10, minOrderAmount: 2000,
+        operatingHours: { open: '08:00', close: '18:00' }, paymentMethods: ['paystack', 'cash']
+      }, inventory);
+      router.push('/seller-dashboard');
+    } catch (err) {
+      alert('Registration failed');
+      console.error(err);
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-950 py-8">
+      <div className="max-w-lg mx-auto px-4">
+        <h1 className="text-2xl font-bold text-white mb-6">Register as Vendor</h1>
+        {step === 1 ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+            <h2 className="font-bold text-lg text-white flex items-center gap-2"><Store className="w-5 h-5 text-orange-400" />Business Information</h2>
+            <div><label className="block text-sm text-zinc-400 mb-1">Business Name</label><input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} className="w-full p-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white" required /></div>
+            <div><label className="block text-sm text-zinc-400 mb-1">Phone Number</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full p-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white" required /></div>
+            <div><label className="block text-sm text-zinc-400 mb-1">Address</label><textarea value={address} onChange={(e) => setAddress(e.target.value)} className="w-full p-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white h-24" required /></div>
+            <div><label className="block text-sm text-zinc-400 mb-1 flex items-center gap-2"><MapPin className="w-4 h-4" />Location</label><button onClick={detectLocation} className={`w-full p-3 border rounded-xl text-left ${location ? 'bg-green-500/10 border-green-500 text-green-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400'}`}>{location ? `📍 Location detected` : 'Detect My Location'}</button></div>
+            <button onClick={() => setStep(2)} disabled={!businessName || !phone || !address || !location} className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl disabled:bg-zinc-700">Continue</button>
+          </motion.div>
+        ) : (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+            <h2 className="font-bold text-lg text-white mb-4 flex items-center gap-2"><Package className="w-5 h-5 text-orange-400" />Initial Inventory</h2>
+            <div className="space-y-4 mb-6">
+              {inventory.map((item, idx) => (
+                <div key={idx} className="bg-zinc-800 rounded-xl p-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="text-xs text-zinc-500">Size</label><select value={item.gasType} onChange={(e) => { const newInv = [...inventory]; newInv[idx].gasType = e.target.value; setInventory(newInv); }} className="w-full p-2 bg-zinc-700 border border-zinc-600 rounded text-white">{['3kg', '5kg', '6kg', '12.5kg', '25kg', '50kg'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                    <div><label className="text-xs text-zinc-500">Brand</label><select value={item.brand} onChange={(e) => { const newInv = [...inventory]; newInv[idx].brand = e.target.value; setInventory(newInv); }} className="w-full p-2 bg-zinc-700 border border-zinc-600 rounded text-white">{['Total', 'Oando', 'Mobil', 'Nipco', 'Rainoil', 'Other'].map(b => <option key={b} value={b}>{b}</option>)}</select></div>
+                    <div><label className="text-xs text-zinc-500">Price (₦)</label><input type="number" value={item.price} onChange={(e) => { const newInv = [...inventory]; newInv[idx].price = parseInt(e.target.value); setInventory(newInv); }} className="w-full p-2 bg-zinc-700 border border-zinc-600 rounded text-white" /></div>
+                    <div><label className="text-xs text-zinc-500">Quantity</label><input type="number" value={item.quantity} onChange={(e) => { const newInv = [...inventory]; newInv[idx].quantity = parseInt(e.target.value); setInventory(newInv); }} className="w-full p-2 bg-zinc-700 border border-zinc-600 rounded text-white" /></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setInventory([...inventory, { gasType: '12.5kg', brand: 'Total', price: 0, quantity: 0 }])} className="w-full py-3 border-2 border-dashed border-zinc-700 text-zinc-400 rounded-xl mb-4">+ Add Another Size</button>
+            <div className="flex gap-3">
+              <button onClick={() => setStep(1)} className="flex-1 py-3 border border-zinc-700 text-white rounded-xl">Back</button>
+              <button onClick={handleSubmit} disabled={loading} className="flex-1 bg-orange-500 text-white font-bold py-3 rounded-xl disabled:bg-zinc-700">{loading ? 'Creating...' : 'Complete Registration'}</button>
+            </div>
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+}
