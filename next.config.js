@@ -1,10 +1,10 @@
-/** @type {import("next").NextConfig} */
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "export",
-  distDir: "dist",
-  images: { unoptimized: true },
-  trailingSlash: true,
-  eslint: { ignoreDuringBuilds: true },
-  typescript: { ignoreBuildErrors: true }
+  outputFileTracingRoot: __dirname,
+  images: {
+    unoptimized: false,
+  },
+  reactStrictMode: true,
 }
+
 module.exports = nextConfig
