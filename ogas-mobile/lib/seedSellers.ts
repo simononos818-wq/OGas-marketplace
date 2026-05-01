@@ -1,5 +1,5 @@
 import { collection, addDoc, getDocs, deleteDoc, GeoPoint, Timestamp } from "firebase/firestore";
-import { db } from "./firebase";
+import { db } from "@/config/firebase";
 
 const LAGOS_LOCATIONS = [
   { name: "Gas Hub Lekki", lat: 6.4281, lng: 3.4219, area: "Lekki" },

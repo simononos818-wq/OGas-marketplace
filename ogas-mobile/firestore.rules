@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Anyone can read verified sellers
+    match /sellers/{sellerId} {
+      allow read: if resource.data.isVerified == true || request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null 
+        && (request.auth.token.email == "simononos818@gmail.com" 
+            || request.auth.uid == sellerId);
+    }
+    
+    // Seller inventory & pricing - sellers manage their own
+    match /sellerInventory/{sellerId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == sellerId;
+    }
+    
+    // Delivery zones - sellers manage their own
+    match /deliveryZones/{sellerId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == sellerId;
+    }
+    
+    // Orders - users can read/write their own
+    match /orders/{orderId} {
+      allow read, write: if request.auth != null 
+        && (resource.data.userId == request.auth.uid 
+            || resource.data.sellerId == request.auth.uid
+            || request.resource.data.userId == request.auth.uid
+            || request.resource.data.sellerId == request.auth.uid);
+    }
+    
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null;
+    }
+    
+    // Admin collection - only you
+    match /admin/{doc} {
+      allow read, write: if request.auth != null 
+        && request.auth.token.email == "simononos818@gmail.com";
+    }
+  }
+}

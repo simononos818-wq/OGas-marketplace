@@ -1,50 +1,47 @@
-# Welcome to your Expo app 👋
+# OGas - Nigeria's #1 LPG Marketplace
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## 🚀 About
+OGas connects gas buyers with nearby sellers (vendors) for quick and reliable LPG delivery.
 
-## Get started
+## 👥 For Users
 
-1. Install dependencies
+### Buyers:
+1. Register as a **Buyer**
+2. See nearby gas vendors with prices
+3. Select cylinder size (3kg, 5kg, 6kg, 12.5kg, 25kg, 50kg)
+4. Pay securely with Paystack
+5. Track delivery in real-time
 
-   ```bash
-   npm install
-   ```
+### Sellers (Vendors):
+1. Register as a **Seller**
+2. Set your inventory and prices
+3. Toggle store open/closed
+4. Accept incoming orders
+5. Manage deliveries and earnings
 
-2. Start the app
+## 🔧 Tech Stack
+- React Native + Expo
+- Firebase (Auth + Firestore)
+- Paystack Payments
+- Location Services
 
-   ```bash
-   npx expo start
-   ```
+## 📱 Download
+- Web: [Add your web link]
+- Android: [Add Play Store link]
+- iOS: [Add App Store link]
 
-In the output, you'll find options to open the app in a
+## 💰 Revenue Model
+- Commission per order
+- Featured vendor listings
+- Delivery fees
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## 📞 Support
+Email: support@ogaslpgmarketplace.com
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 🌐 Deploying to ogaslpgmarketplace.com
+1. Build the web app:
+   - `npm run build:web`
+2. Upload the `web-build` output to your hosting provider.
+3. Point `ogaslpgmarketplace.com` and `www.ogaslpgmarketplace.com` to your host via DNS.
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+If you use a platform such as Vercel, Netlify, or Firebase Hosting, connect your repository and set the build command to `npm run build:web` and publish the generated static site.

@@ -1,127 +1,207 @@
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, Alert } from "react-native";
-import { useOrder } from "@/contexts/OrderContext";
-import { MapPin, CreditCard, Truck } from "lucide-react-native";
-import { useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Switch } from "react-native";
+import { useOrder } from "../../contexts/OrderContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "expo-router";
-import * as Location from "expo-location";
+import { useState, useEffect } from "react";
+import { FontAwesome } from "@expo/vector-icons";
+import * as WebBrowser from "expo-web-browser";
+
+const PAYSTACK_KEY = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || "";
 
 export default function CheckoutScreen() {
-  const { cart, cartTotal, createOrder } = useOrder();
-  const [address, setAddress] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { cart, getCartTotal, placeOrder, clearCart } = useOrder();
+  const { userData } = useAuth();
   const router = useRouter();
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState(userData?.phone || "");
+  const [loading, setLoading] = useState(false);
+  const [deliveryRequested, setDeliveryRequested] = useState(false);
 
-  const handlePlaceOrder = async () => {
-    if (!address.trim()) {
-      Alert.alert("Error", "Please enter delivery address");
+  const sellerDeliveryAvailable = cart.some((item) => item.sellerDeliveryAvailable);
+  const sellerDeliveryFee = cart.find((item) => item.sellerDeliveryAvailable)?.sellerDeliveryFee || 0;
+
+  useEffect(() => {
+    setDeliveryRequested(sellerDeliveryAvailable);
+  }, [sellerDeliveryAvailable]);
+
+  const subtotal = getCartTotal();
+  const deliveryFee = deliveryRequested ? sellerDeliveryFee : 0;
+  const total = subtotal + deliveryFee;
+
+  const handlePayment = async () => {
+    if (!phone) {
+      Alert.alert("Error", "Please enter your phone number");
+      return;
+    }
+    if (deliveryRequested && !address) {
+      Alert.alert("Error", "Please enter a delivery address or disable delivery");
+      return;
+    }
+    if (cart.length === 0) {
+      Alert.alert("Error", "Your cart is empty");
       return;
     }
 
     setLoading(true);
     try {
-      let location = await Location.getCurrentPositionAsync({});
-      const orderId = await createOrder(address, {
-        lat: location.coords.latitude,
-        lng: location.coords.longitude
+      const orderId = await placeOrder({
+        customerAddress: address,
+        customerPhone: phone,
+        deliveryRequested,
+        deliveryFee,
       });
+
+      const reference = "OGAS_" + Date.now();
+      const amountInKobo = total * 100;
       
-      Alert.alert(
-        "Order Placed!",
-        "Your gas order has been placed. Track it in real-time.",
-        [
-          { 
-            text: "Track Order", 
-            onPress: () => router.push(`/order/tracking?id=${orderId}`) 
-          }
-        ]
-      );
-    } catch (error) {
-      Alert.alert("Error", "Failed to place order. Please try again.");
+      const params = new URLSearchParams({
+        email: userData?.email || "customer@ogas.com",
+        amount: amountInKobo.toString(),
+        reference: reference,
+        public_key: PAYSTACK_KEY,
+        callback_url: "https://standard.paystack.co/close",
+      });
+
+      const paystackUrl = "https://checkout.paystack.com/?" + params.toString();
+      const result = await WebBrowser.openBrowserAsync(paystackUrl);
+
+      if (result.type === "dismiss") {
+        Alert.alert(
+          "Payment Verified!",
+          `Your order #${orderId.slice(-6).toUpperCase()} has been confirmed. You will receive your gas soon.`,
+          [{ text: "OK", onPress: () => {
+            clearCart();
+            router.replace("/(tabs)/orders");
+          }}]
+        );
+      } else {
+        Alert.alert("Payment Cancelled", "Your payment was not completed. You can try again.");
+      }
+    } catch (error: any) {
+      Alert.alert("Error", error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Checkout</Text>
-      </View>
-
-      <View style={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Delivery Address</Text>
-          <View style={styles.inputContainer}>
-            <MapPin color="#f97316" size={20} />
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your address"
-              placeholderTextColor="#6b7280"
-              value={address}
-              onChangeText={setAddress}
-              multiline
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Summary</Text>
-          {cart.map((item, idx) => (
-            <View key={idx} style={styles.summaryRow}>
-              <Text style={styles.summaryText}>{item.size} × {item.quantity}</Text>
-              <Text style={styles.summaryPrice}>₦{(item.price * item.quantity).toLocaleString()}</Text>
-            </View>
-          ))}
-          <View style={[styles.summaryRow, styles.totalRow]}>
-            <Text style={styles.totalText}>Total</Text>
-            <Text style={styles.totalAmount}>₦{cartTotal.toLocaleString()}</Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
-          <TouchableOpacity style={styles.paymentOption}>
-            <CreditCard color="#f97316" size={24} />
-            <Text style={styles.paymentText}>Pay on Delivery</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.footer}>
-        <TouchableOpacity 
-          style={[styles.placeOrderBtn, loading && styles.disabledBtn]}
-          onPress={handlePlaceOrder}
-          disabled={loading}
-        >
-          <Truck color="white" size={20} />
-          <Text style={styles.placeOrderText}>
-            {loading ? "Placing Order..." : "Place Order"}
-          </Text>
+  if (cart.length === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <FontAwesome name="shopping-cart" size={64} color="#ccc" />
+        <Text style={styles.emptyText}>Your cart is empty</Text>
+        <TouchableOpacity style={styles.browseBtn} onPress={() => router.back()}>
+          <Text style={styles.browseBtnText}>Browse Gas</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>Checkout</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Order Summary</Text>
+        {cart.map((item, index) => (
+          <View key={index} style={styles.cartItem}>
+            <Text style={styles.itemName}>{item.name}</Text>
+            <Text style={styles.itemPrice}>N{(item.price * item.quantity).toLocaleString()}</Text>
+          </View>
+        ))}
+        <View style={styles.divider} />
+        <View style={styles.row}>
+          <Text>Subtotal</Text>
+          <Text>N{subtotal.toLocaleString()}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text>Delivery Fee</Text>
+          <Text>N{deliveryFee.toLocaleString()}</Text>
+        </View>
+        <View style={[styles.row, styles.totalRow]}>
+          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalAmount}>N{total.toLocaleString()}</Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Delivery Details</Text>
+        {sellerDeliveryAvailable ? (
+          <View style={styles.deliveryRow}>
+            <Text style={styles.label}>Request delivery</Text>
+            <Switch
+              value={deliveryRequested}
+              onValueChange={setDeliveryRequested}
+              trackColor={{ false: "#767577", true: "#FF6B35" }}
+              thumbColor={deliveryRequested ? "#fff" : "#fff"}
+            />
+          </View>
+        ) : (
+          <Text style={styles.infoText}>This seller only supports pickup orders.</Text>
+        )}
+
+        <Text style={styles.label}>Phone Number</Text>
+        <TextInput
+          style={styles.input}
+          value={phone}
+          onChangeText={setPhone}
+          keyboardType="phone-pad"
+          placeholder="Enter phone number"
+        />
+
+        <Text style={styles.label}>Delivery Address</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={address}
+          onChangeText={setAddress}
+          placeholder={sellerDeliveryAvailable ? "Enter full address" : "Pickup location optional"}
+          multiline
+          numberOfLines={3}
+          editable={sellerDeliveryAvailable}
+        />
+      </View>
+
+      <TouchableOpacity 
+        style={[styles.payButton, loading && styles.disabled]}
+        onPress={handlePayment}
+        disabled={loading}
+      >
+        <Text style={styles.payButtonText}>
+          {loading ? "Processing..." : "Pay N" + total.toLocaleString()}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
+        <Text style={styles.cancelText}>Cancel</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "black" },
-  header: { padding: 16, paddingTop: 48, borderBottomWidth: 1, borderBottomColor: "#374151" },
-  headerTitle: { color: "white", fontSize: 24, fontWeight: "bold" },
-  content: { padding: 16, flex: 1 },
-  section: { marginBottom: 24 },
-  sectionTitle: { color: "#9ca3af", fontSize: 14, marginBottom: 12, textTransform: "uppercase" },
-  inputContainer: { backgroundColor: "#111827", borderRadius: 12, padding: 16, flexDirection: "row", alignItems: "flex-start", gap: 12, borderWidth: 1, borderColor: "#374151" },
-  input: { color: "white", fontSize: 16, flex: 1, minHeight: 60, textAlignVertical: "top" },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  summaryText: { color: "#d1d5db", fontSize: 16 },
-  summaryPrice: { color: "white", fontSize: 16 },
-  totalRow: { borderTopWidth: 1, borderTopColor: "#374151", paddingTop: 12, marginTop: 12 },
-  totalText: { color: "white", fontSize: 18, fontWeight: "bold" },
-  totalAmount: { color: "#f97316", fontSize: 20, fontWeight: "bold" },
-  paymentOption: { backgroundColor: "#111827", borderRadius: 12, padding: 16, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "#374151" },
-  paymentText: { color: "white", fontSize: 16 },
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: "#374151" },
-  placeOrderBtn: { backgroundColor: "#f97316", padding: 16, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  disabledBtn: { opacity: 0.7 },
-  placeOrderText: { color: "white", fontWeight: "bold", fontSize: 16 },
+  container: { flex: 1, backgroundColor: "#f5f5f5", padding: 15 },
+  title: { fontSize: 24, fontWeight: "bold", marginBottom: 15, color: "#333" },
+  section: { backgroundColor: "#fff", padding: 15, borderRadius: 12, marginBottom: 15 },
+  sectionTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 15, color: "#333" },
+  cartItem: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
+  itemName: { color: "#333" },
+  itemPrice: { fontWeight: "600", color: "#FF6B35" },
+  divider: { height: 1, backgroundColor: "#f0f0f0", marginVertical: 10 },
+  row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  totalRow: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#f0f0f0" },
+  totalLabel: { fontSize: 18, fontWeight: "bold", color: "#333" },
+  totalAmount: { fontSize: 20, fontWeight: "bold", color: "#FF6B35" },
+  label: { fontSize: 14, color: "#666", marginBottom: 8 },
+  deliveryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  infoText: { fontSize: 14, color: "#666", marginBottom: 14 },
+  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 12, marginBottom: 15, fontSize: 16, backgroundColor: "#fff" },
+  textArea: { height: 80, textAlignVertical: "top" },
+  payButton: { backgroundColor: "#FF6B35", padding: 18, borderRadius: 12, alignItems: "center", marginTop: 10 },
+  disabled: { opacity: 0.7 },
+  payButtonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  cancelBtn: { alignItems: "center", marginTop: 15, marginBottom: 30 },
+  cancelText: { color: "#666" },
+  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
+  emptyText: { fontSize: 18, color: "#666", marginTop: 20, marginBottom: 30 },
+  browseBtn: { backgroundColor: "#FF6B35", paddingHorizontal: 30, paddingVertical: 15, borderRadius: 10 },
+  browseBtnText: { color: "#fff", fontWeight: "bold" },
 });

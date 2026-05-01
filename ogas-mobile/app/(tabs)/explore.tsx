@@ -1,111 +1,69 @@
-import { View, StyleSheet, Dimensions, TouchableOpacity, Text } from "react-native";
-import MapView, { Marker, Callout } from "react-native-maps";
-import { useLocationAndSellers } from "@/hooks/useLocationAndSellers";
-import { Flame, Navigation } from "lucide-react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from "react-native";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import * as Location from "expo-location";
-
-const { width, height } = Dimensions.get("window");
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "../../config/firebase";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function ExploreScreen() {
-  const { nearbySellers, loading } = useLocationAndSellers();
-  const [region, setRegion] = useState({
-    latitude: 6.5244,
-    longitude: 3.3792,
-    latitudeDelta: 0.1,
-    longitudeDelta: 0.1,
-  });
+  const router = useRouter();
+  const [sellers, setSellers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      let location = await Location.getCurrentPositionAsync({});
-      setRegion({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      });
-    })();
+    const q = query(collection(db, "users"), where("role", "==", "seller"));
+    const unsub = onSnapshot(q, (snap) => {
+      setSellers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, () => setLoading(false));
+    return unsub;
   }, []);
 
-  const centerOnUser = async () => {
-    let location = await Location.getCurrentPositionAsync({});
-    setRegion({
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-      latitudeDelta: 0.05,
-      longitudeDelta: 0.05,
-    });
-  };
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#FF6B35" /></View>;
+
+  if (sellers.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Ionicons name="storefront-outline" size={64} color="#ccc" />
+        <Text style={styles.emptyTitle}>No sellers yet</Text>
+        <Text style={styles.emptyText}>Be the first to register as a seller!</Text>
+        <TouchableOpacity style={styles.btn} onPress={() => router.push("/auth/seller-register")}>
+          <Text style={styles.btnText}>Register as Seller</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <MapView
-        style={styles.map}
-        region={region}
-        onRegionChangeComplete={setRegion}
-        showsUserLocation
-        showsMyLocationButton={false}
-      >
-        {nearbySellers.map((seller) => (
-          <Marker
-            key={seller.id}
-            coordinate={{
-              latitude: seller.location.latitude,
-              longitude: seller.location.longitude,
-            }}
-            title={seller.name}
-          >
-            <View style={styles.markerContainer}>
-              <View style={styles.marker}>
-                <Flame color="white" size={20} />
-              </View>
-              <View style={styles.markerTail} />
-            </View>
-            <Callout tooltip>
-              <View style={styles.callout}>
-                <Text style={styles.calloutTitle}>{seller.name}</Text>
-                <Text style={styles.calloutSubtitle}>{seller.area}</Text>
-                <Text style={styles.calloutRating}>★ {seller.rating.toFixed(1)}</Text>
-                <View style={styles.inventoryPreview}>
-                  {seller.inventory.slice(0, 3).map((item, idx) => (
-                    <Text key={idx} style={styles.inventoryItem}>
-                      {item.size}: ₦{item.price.toLocaleString()}
-                    </Text>
-                  ))}
-                </View>
-              </View>
-            </Callout>
-          </Marker>
-        ))}
-      </MapView>
-
-      <View style={styles.overlay}>
-        <Text style={styles.title}>Nearby Sellers</Text>
-        <Text style={styles.subtitle}>{nearbySellers.length} sellers in your area</Text>
-      </View>
-
-      <TouchableOpacity style={styles.locationBtn} onPress={centerOnUser}>
-        <Navigation color="white" size={24} />
-      </TouchableOpacity>
+      <Text style={styles.title}>Find Sellers</Text>
+      <FlatList
+        data={sellers}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.card} onPress={() => router.push({ pathname: "/buyer/sellers", params: { sellerId: item.id } })}>
+            <Text style={styles.sellerName}>{item.businessName || item.fullName || "Gas Seller"}</Text>
+            <Text style={styles.sellerPhone}>{item.phone || "No phone"}</Text>
+            <Text style={styles.sellerAddress}>{item.address || "Address not set"}</Text>
+            {item.deliveryAvailable && <Text style={styles.deliveryBadge}>Delivery Available</Text>}
+          </TouchableOpacity>
+        )}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "black" },
-  map: { width, height },
-  markerContainer: { alignItems: "center" },
-  marker: { backgroundColor: "#f97316", width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center", borderWidth: 3, borderColor: "white" },
-  markerTail: { width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 10, borderLeftColor: "transparent", borderRightColor: "transparent", borderTopColor: "#f97316", marginTop: -3 },
-  callout: { backgroundColor: "#111827", borderRadius: 12, padding: 16, width: 200, borderWidth: 1, borderColor: "#374151" },
-  calloutTitle: { color: "white", fontSize: 16, fontWeight: "bold" },
-  calloutSubtitle: { color: "#9ca3af", fontSize: 14, marginTop: 2 },
-  calloutRating: { color: "#fbbf24", fontSize: 14, marginTop: 4 },
-  inventoryPreview: { marginTop: 8, borderTopWidth: 1, borderTopColor: "#374151", paddingTop: 8 },
-  inventoryItem: { color: "#d1d5db", fontSize: 12, marginTop: 2 },
-  overlay: { position: "absolute", top: 48, left: 16, right: 16, backgroundColor: "rgba(0,0,0,0.8)", padding: 16, borderRadius: 16, borderWidth: 1, borderColor: "#374151" },
-  title: { color: "white", fontSize: 20, fontWeight: "bold" },
-  subtitle: { color: "#9ca3af", fontSize: 14, marginTop: 4 },
-  locationBtn: { position: "absolute", bottom: 100, right: 16, backgroundColor: "#f97316", width: 56, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 8 },
+  container: { flex: 1, backgroundColor: "#f5f5f5", padding: 16, paddingTop: 60 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 30 },
+  title: { fontSize: 26, fontWeight: "bold", color: "#222", marginBottom: 20 },
+  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+  sellerName: { fontSize: 18, fontWeight: "bold", color: "#333", marginBottom: 4 },
+  sellerPhone: { fontSize: 14, color: "#666", marginBottom: 2 },
+  sellerAddress: { fontSize: 14, color: "#888", marginBottom: 8 },
+  deliveryBadge: { fontSize: 12, color: "#27ae60", fontWeight: "bold", backgroundColor: "#e8f5e9", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, alignSelf: "flex-start" },
+  emptyTitle: { fontSize: 20, fontWeight: "bold", color: "#333", marginTop: 16, marginBottom: 8 },
+  emptyText: { color: "#888", textAlign: "center", marginBottom: 28 },
+  btn: { backgroundColor: "#FF6B35", paddingHorizontal: 32, paddingVertical: 14, borderRadius: 10 },
+  btnText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
 });

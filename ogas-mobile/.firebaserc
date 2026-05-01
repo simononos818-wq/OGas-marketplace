@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "ogasapp-5a003"
+  },
+  "targets": {
+    "ogasapp-5a003": {
+      "hosting": {
+        "ogasapp-5a003": [
+          "ogasapp-5a003"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

@@ -1,24 +1,13 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { ToastContainer } from "@/components/Toast";
+import { Logo } from "@/components/Logo";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "OGas - Nigeria's #1 Gas Marketplace",
-  description: "Buy gas from nearby vendors or order home delivery. Fast, reliable, and affordable cooking gas in Nigeria.",
-  keywords: "gas, cooking gas, LPG, Nigeria, delivery, pickup, Total, Oando",
-  authors: [{ name: "OGas" }],
-  manifest: "/manifest.json",
-};
-
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  themeColor: "#f97316",
+  title: "OGas - Gas Marketplace",
+  description: "Connect with verified gas suppliers and customers",
 };
 
 export default function RootLayout({
@@ -27,16 +16,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <head>
-        <script src="https://js.paystack.co/v1/inline.js" async></script>
-        <link rel="apple-touch-icon" href="/icon-192x192.png" />
-      </head>
-      <body className={inter.className}>
-        <AuthProvider>
-          <ToastContainer />
-          {children}
-        </AuthProvider>
+    <html lang="en" className="dark">
+      <body className={`${inter.className} antialiased bg-slate-900 text-white`}>
+        <nav className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
+          <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-3">
+            <Logo variant="icon" size="sm" animated />
+            <span className="font-bold text-xl tracking-tight">OGas</span>
+          </div>
+        </nav>
+        {children}
       </body>
     </html>
   );

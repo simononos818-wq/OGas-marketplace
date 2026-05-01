@@ -1,72 +1,91 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
-import { collection, addDoc, Timestamp, GeoPoint } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import React, { createContext, useContext, useState } from 'react';
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from '../config/firebase';
 
 interface CartItem {
-  size: string;
+  id: string;
+  name: string;
   price: number;
   quantity: number;
-  sellerId: string;
-  sellerName: string;
+  sellerId?: string;
+  sellerName?: string;
+  sellerDeliveryAvailable?: boolean;
+  sellerDeliveryFee?: number;
+}
+
+interface PlaceOrderParams {
+  customerAddress: string;
+  customerPhone: string;
+  deliveryRequested: boolean;
+  deliveryFee: number;
 }
 
 interface OrderContextType {
   cart: CartItem[];
-  addToCart: (item: CartItem) => void;
-  removeFromCart: (index: number) => void;
+  addToCart: (item: Omit<CartItem, 'quantity'>) => void;
+  removeFromCart: (id: string) => void;
+  updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
-  cartTotal: number;
-  createOrder: (deliveryAddress: string, location: { lat: number; lng: number }) => Promise<string>;
-  loading: boolean;
+  getCartTotal: () => number;
+  total: number;
+  placeOrder: (params: PlaceOrderParams) => Promise<string>;
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
 export function OrderProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(false);
 
-  const addToCart = useCallback((item: CartItem) => {
-    setCart(prev => [...prev, item]);
-  }, []);
+  const addToCart = (item: Omit<CartItem, 'quantity'>) => {
+    setCart((prev) => {
+      const existing = prev.find((i) => i.id === item.id);
+      if (existing) {
+        return prev.map((i) =>
+          i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+        );
+      }
+      return [...prev, { ...item, quantity: 1 }];
+    });
+  };
 
-  const removeFromCart = useCallback((index: number) => {
-    setCart(prev => prev.filter((_, i) => i !== index));
-  }, []);
+  const removeFromCart = (id: string) => {
+    setCart((prev) => prev.filter((i) => i.id !== id));
+  };
 
-  const clearCart = useCallback(() => {
-    setCart([]);
-  }, []);
-
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
-  const createOrder = async (deliveryAddress: string, location: { lat: number; lng: number }) => {
-    setLoading(true);
-    try {
-      const sellerId = cart[0]?.sellerId;
-      const orderData = {
-        buyerId: "current_user_id",
-        sellerId,
-        items: cart,
-        total: cartTotal,
-        status: "pending",
-        deliveryAddress,
-        location: new GeoPoint(location.lat, location.lng),
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
-      const orderRef = await addDoc(collection(db, "orders"), orderData);
-      clearCart();
-      return orderRef.id;
-    } finally {
-      setLoading(false);
+  const updateQuantity = (id: string, quantity: number) => {
+    if (quantity < 1) {
+      removeFromCart(id);
+      return;
     }
+    setCart((prev) => prev.map((i) => i.id === id ? { ...i, quantity } : i));
+  };
+
+  const clearCart = () => setCart([]);
+
+  const getCartTotal = () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = getCartTotal();
+
+  const placeOrder = async (params: PlaceOrderParams) => {
+    const orderData = {
+      items: cart,
+      total: total + params.deliveryFee,
+      subtotal: total,
+      deliveryFee: params.deliveryFee,
+      deliveryRequested: params.deliveryRequested,
+      customerAddress: params.customerAddress,
+      customerPhone: params.customerPhone,
+      paymentReference: `OGAS_${Date.now()}`,
+      paymentStatus: 'pending',
+      status: 'pending_payment',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    const docRef = await addDoc(collection(db, 'orders'), orderData);
+    return docRef.id;
   };
 
   return (
-    <OrderContext.Provider value={{
-      cart, addToCart, removeFromCart, clearCart, cartTotal, createOrder, loading
-    }}>
+    <OrderContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, clearCart, getCartTotal, total, placeOrder }}>
       {children}
     </OrderContext.Provider>
   );
@@ -74,6 +93,6 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
 
 export const useOrder = () => {
   const context = useContext(OrderContext);
-  if (!context) throw new Error("useOrder must be used within OrderProvider");
+  if (!context) throw new Error('useOrder must be used within OrderProvider');
   return context;
 };

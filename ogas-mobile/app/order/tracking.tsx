@@ -1,143 +1,392 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native";
-import { useOrder } from "@/contexts/OrderContext";
-import { useEffect } from "react";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { MapPin, Phone, Package, CheckCircle, Truck, Navigation } from "lucide-react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useOrder } from '../../contexts/OrderContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { Truck, Package, CheckCircle, Clock, MapPin, ArrowLeft } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 
-const { width, height } = Dimensions.get("window");
-
-const STATUS_STEPS = [
-  { key: "pending", label: "Order Placed", icon: Package },
-  { key: "accepted", label: "Driver Assigned", icon: Truck },
-  { key: "picked_up", label: "Picked Up", icon: Navigation },
-  { key: "delivered", label: "Delivered", icon: CheckCircle },
-];
-
-export default function TrackingScreen() {
-  const { id } = useLocalSearchParams();
-  const { activeOrder, trackOrder, stopTracking } = useOrder();
+export default function OrderTrackingScreen() {
   const router = useRouter();
+  const { orders, loading } = useOrder();
+  const { user } = useAuth();
+  const [activeOrders, setActiveOrders] = useState([]);
 
   useEffect(() => {
-    if (id) trackOrder(id as string);
-    return () => stopTracking();
-  }, [id]);
+    // Filter active orders (pending, confirmed, out_for_delivery)
+    const active = orders.filter(order => 
+      ['pending', 'confirmed', 'out_for_delivery'].includes(order.status)
+    );
+    setActiveOrders(active);
+  }, [orders]);
 
-  if (!activeOrder) {
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'pending':
+        return <Clock size={24} color="#FFA500" />;
+      case 'confirmed':
+        return <CheckCircle size={24} color="#4CAF50" />;
+      case 'out_for_delivery':
+        return <Truck size={24} color="#2196F3" />;
+      case 'delivered':
+        return <Package size={24} color="#4CAF50" />;
+      default:
+        return <Clock size={24} color="#999" />;
+    }
+  };
+
+  const getStatusText = (status) => {
+    const statusMap = {
+      pending: 'Order Pending',
+      confirmed: 'Order Confirmed',
+      out_for_delivery: 'Out for Delivery',
+      delivered: 'Delivered',
+      cancelled: 'Cancelled'
+    };
+    return statusMap[status] || status;
+  };
+
+  const renderOrderCard = (order) => (
+    <View key={order.id} style={styles.orderCard}>
+      <View style={styles.orderHeader}>
+        <View style={styles.orderIdContainer}>
+          <Text style={styles.orderId}>Order #{order.id.slice(-6)}</Text>
+          <Text style={styles.orderDate}>
+            {new Date(order.createdAt?.toDate()).toLocaleDateString()}
+          </Text>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
+          {getStatusIcon(order.status)}
+          <Text style={styles.statusText}>{getStatusText(order.status)}</Text>
+        </View>
+      </View>
+
+      <View style={styles.orderDetails}>
+        <Text style={styles.detailText}>
+          {order.items?.length || 0} items • ₦{order.total?.toLocaleString()}
+        </Text>
+        <Text style={styles.sellerText}>
+          From: {order.sellerName || 'Unknown Seller'}
+        </Text>
+      </View>
+
+      {/* Progress Steps */}
+      <View style={styles.progressContainer}>
+        <View style={styles.progressStep}>
+          <View style={[styles.stepCircle, order.status !== 'cancelled' && styles.stepActive]}>
+            <CheckCircle size={16} color="#fff" />
+          </View>
+          <Text style={styles.stepText}>Ordered</Text>
+        </View>
+        <View style={styles.progressLine} />
+        <View style={styles.progressStep}>
+          <View style={[styles.stepCircle, ['confirmed', 'out_for_delivery', 'delivered'].includes(order.status) && styles.stepActive]}>
+            <Package size={16} color="#fff" />
+          </View>
+          <Text style={styles.stepText}>Confirmed</Text>
+        </View>
+        <View style={styles.progressLine} />
+        <View style={styles.progressStep}>
+          <View style={[styles.stepCircle, ['out_for_delivery', 'delivered'].includes(order.status) && styles.stepActive]}>
+            <Truck size={16} color="#fff" />
+          </View>
+          <Text style={styles.stepText}>Delivery</Text>
+        </View>
+        <View style={styles.progressLine} />
+        <View style={styles.progressStep}>
+          <View style={[styles.stepCircle, order.status === 'delivered' && styles.stepActive]}>
+            <MapPin size={16} color="#fff" />
+          </View>
+          <Text style={styles.stepText}>Delivered</Text>
+        </View>
+      </View>
+
+      {/* Delivery Info */}
+      {order.status === 'out_for_delivery' && (
+        <View style={styles.deliveryInfo}>
+          <Text style={styles.deliveryText}>Your order is on the way!</Text>
+          <Text style={styles.etaText}>Estimated arrival: 30-45 mins</Text>
+        </View>
+      )}
+
+      {/* Action Buttons */}
+      <View style={styles.actionButtons}>
+        <TouchableOpacity style={styles.trackButton}>
+          <MapPin size={18} color="#FF6B35" />
+          <Text style={styles.trackButtonText}>Track on Map</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.contactButton}>
+          <Text style={styles.contactButtonText}>Contact Seller</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: '#FFF3E0',
+      confirmed: '#E8F5E9',
+      out_for_delivery: '#E3F2FD',
+      delivered: '#E8F5E9',
+      cancelled: '#FFEBEE'
+    };
+    return colors[status] || '#F5F5F5';
+  };
+
+  if (!user) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loadingText}>Loading order...</Text>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <ArrowLeft size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Order Tracking</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>Please login to view your orders</Text>
+          <TouchableOpacity 
+            style={styles.loginButton}
+            onPress={() => router.push('/auth/login')}
+          >
+            <Text style={styles.loginButtonText}>Login</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
-  const currentStepIndex = STATUS_STEPS.findIndex(s => s.key === activeOrder.status);
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Order #{id?.toString().slice(-6)}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(activeOrder.status) }]}>
-          <Text style={styles.statusText}>{activeOrder.status.replace("_", " ").toUpperCase()}</Text>
-        </View>
+        <TouchableOpacity onPress={() => router.back()}>
+          <ArrowLeft size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Order Tracking</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <MapView
-        style={styles.map}
-        initialRegion={{
-          latitude: activeOrder.location.lat,
-          longitude: activeOrder.location.lng,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
-      >
-        <Marker
-          coordinate={{
-            latitude: activeOrder.location.lat,
-            longitude: activeOrder.location.lng,
-          }}
-          title="Delivery Location"
-        >
-          <View style={styles.markerContainer}>
-            <MapPin color="#f97316" size={32} />
+      <ScrollView style={styles.content}>
+        {activeOrders.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Truck size={64} color="#ccc" />
+            <Text style={styles.emptyText}>No active orders</Text>
+            <Text style={styles.emptySubtext}>
+              Your active orders will appear here
+            </Text>
+            <TouchableOpacity 
+              style={styles.orderButton}
+              onPress={() => router.push('/(tabs)')}
+            >
+              <Text style={styles.orderButtonText}>Order Gas Now</Text>
+            </TouchableOpacity>
           </View>
-        </Marker>
-      </MapView>
-
-      <View style={styles.trackingCard}>
-        <Text style={styles.etaText}>Estimated arrival: 15-25 mins</Text>
-        
-        <View style={styles.stepsContainer}>
-          {STATUS_STEPS.map((step, index) => {
-            const Icon = step.icon;
-            const isActive = index <= currentStepIndex;
-            const isCurrent = index === currentStepIndex;
-            
-            return (
-              <View key={step.key} style={styles.step}>
-                <View style={[styles.stepIcon, isActive && styles.stepIconActive, isCurrent && styles.stepIconCurrent]}>
-                  <Icon color={isActive ? "white" : "#6b7280"} size={20} />
-                </View>
-                <Text style={[styles.stepLabel, isActive && styles.stepLabelActive]}>{step.label}</Text>
-                {index < STATUS_STEPS.length - 1 && (
-                  <View style={[styles.stepLine, index < currentStepIndex && styles.stepLineActive]} />
-                )}
-              </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.driverCard}>
-          <View style={styles.driverInfo}>
-            <Text style={styles.driverLabel}>Your Driver</Text>
-            <Text style={styles.driverName}>John Doe</Text>
-            <Text style={styles.driverVehicle}>Toyota Camry • ABC-123-GJ</Text>
-          </View>
-          <TouchableOpacity style={styles.callBtn}>
-            <Phone color="white" size={20} />
-          </TouchableOpacity>
-        </View>
-      </View>
+        ) : (
+          activeOrders.map(renderOrderCard)
+        )}
+      </ScrollView>
     </View>
   );
 }
 
-function getStatusColor(status: string) {
-  const colors: Record<string, string> = {
-    pending: "#fbbf24",
-    accepted: "#3b82f6",
-    picked_up: "#f97316",
-    delivered: "#22c55e",
-    cancelled: "#ef4444",
-  };
-  return colors[status] || "#6b7280";
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "black" },
-  header: { padding: 16, paddingTop: 48, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#111827" },
-  headerTitle: { color: "white", fontSize: 20, fontWeight: "bold" },
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  statusText: { color: "white", fontWeight: "bold", fontSize: 12 },
-  loadingText: { color: "white", textAlign: "center", marginTop: 100 },
-  map: { width, height: height * 0.4 },
-  markerContainer: { backgroundColor: "white", borderRadius: 20, padding: 4 },
-  trackingCard: { backgroundColor: "#111827", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, marginTop: -20, flex: 1 },
-  etaText: { color: "#fbbf24", fontSize: 18, fontWeight: "600", marginBottom: 20 },
-  stepsContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },
-  step: { alignItems: "center", flex: 1 },
-  stepIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#374151", justifyContent: "center", alignItems: "center", marginBottom: 8 },
-  stepIconActive: { backgroundColor: "#22c55e" },
-  stepIconCurrent: { backgroundColor: "#f97316" },
-  stepLabel: { color: "#6b7280", fontSize: 10, textAlign: "center" },
-  stepLabelActive: { color: "white" },
-  stepLine: { position: "absolute", top: 20, right: -50, width: 100, height: 2, backgroundColor: "#374151" },
-  stepLineActive: { backgroundColor: "#22c55e" },
-  driverCard: { backgroundColor: "#1f2937", borderRadius: 16, padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderColor: "#374151" },
-  driverInfo: { flex: 1 },
-  driverLabel: { color: "#9ca3af", fontSize: 12 },
-  driverName: { color: "white", fontSize: 18, fontWeight: "bold", marginTop: 4 },
-  driverVehicle: { color: "#6b7280", fontSize: 14, marginTop: 2 },
-  callBtn: { backgroundColor: "#22c55e", width: 48, height: 48, borderRadius: 24, justifyContent: "center", alignItems: "center" },
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  content: {
+    padding: 15,
+  },
+  orderCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 15,
+  },
+  orderIdContainer: {
+    flex: 1,
+  },
+  orderId: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  orderDate: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#333',
+  },
+  orderDetails: {
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingVertical: 15,
+    marginBottom: 15,
+  },
+  detailText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  sellerText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  progressStep: {
+    alignItems: 'center',
+  },
+  stepCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepActive: {
+    backgroundColor: '#FF6B35',
+  },
+  stepText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 5,
+  },
+  progressLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#E0E0E0',
+    marginHorizontal: 5,
+  },
+  deliveryInfo: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 15,
+  },
+  deliveryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1976D2',
+  },
+  etaText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  trackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FF6B35',
+  },
+  trackButtonText: {
+    color: '#FF6B35',
+    marginLeft: 8,
+    fontWeight: '600',
+  },
+  contactButton: {
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  contactButtonText: {
+    color: '#333',
+    fontWeight: '600',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    marginTop: 100,
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 20,
+  },
+  emptySubtext: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  orderButton: {
+    backgroundColor: '#FF6B35',
+    borderRadius: 12,
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    marginTop: 30,
+  },
+  orderButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  loginButton: {
+    backgroundColor: '#FF6B35',
+    borderRadius: 12,
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    marginTop: 20,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });

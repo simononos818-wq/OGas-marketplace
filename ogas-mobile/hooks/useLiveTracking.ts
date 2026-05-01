@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db } from "@/config/firebase";
 
 export function useLiveTracking(orderId: string) {
   const [tracking, setTracking] = useState(null);

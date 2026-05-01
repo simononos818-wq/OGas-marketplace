@@ -1,5 +1,5 @@
 import { collection, query, where, getDocs, GeoPoint } from "firebase/firestore";
-import { db } from "./firebase";
+import { db } from "@/config/firebase";
 
 interface Seller {
   id: string;
