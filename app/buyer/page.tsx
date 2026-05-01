@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { app } from "@/lib/firebase";
 import Link from "next/link";
@@ -17,8 +17,8 @@ export default function BuyerRegister() {
 
   // Initialize reCAPTCHA once on mount [^114^]
   useEffect(() => {
-    if (typeof window !== "undefined" && !window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+    if (typeof window !== "undefined" && !(window as any).recaptchaVerifier) {
+      (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
         size: "invisible",
         callback: (response) => {
           console.log("reCAPTCHA verified", response);
@@ -30,7 +30,7 @@ export default function BuyerRegister() {
     }
   }, [auth]);
 
-  const sendOTP = async (e) => {
+  const sendOTP = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -42,7 +42,7 @@ export default function BuyerRegister() {
       const confirmation = await signInWithPhoneNumber(
         auth, 
         formattedPhone, 
-        window.recaptchaVerifier
+        (window as any).recaptchaVerifier
       );
       
       setConfirmationResult(confirmation);

@@ -1,31 +1,32 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
-const axios = require("axios");
-const cors = require("cors")({ origin: true });
+/**
+ * Import function triggers from their respective submodules:
+ *
+ * const {onCall} = require("firebase-functions/v2/https");
+ * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
+ *
+ * See a full list of supported triggers at https://firebase.google.com/docs/functions
+ */
 
-admin.initializeApp();
-const db = admin.firestore();
-const PAYSTACK_SECRET = functions.config().paystack?.secret;
+const {setGlobalOptions} = require("firebase-functions");
+const {onRequest} = require("firebase-functions/https");
+const logger = require("firebase-functions/logger");
 
-exports.verifyPaystackPayment = functions.https.onRequest((req, res) => {
-  return cors(req, res, async () => {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-    try {
-      const { reference, vendorId, size, price } = req.body;
-      const response = await axios.get("https://api.paystack.co/transaction/verify/" + reference, {
-        headers: { Authorization: "Bearer " + PAYSTACK_SECRET }
-      });
-      if (response.data.data.status !== "success") return res.status(400).json({ error: "Payment failed" });
-      const commission = Math.round(price * 0.05);
-      const order = await db.collection("orders").add({
-        reference, vendorId, size, price, commission,
-        vendorEarnings: price - commission, status: "paid",
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      return res.json({ success: true, orderId: order.id, yourEarnings: commission });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: "Server error" });
-    }
-  });
-});
+// For cost control, you can set the maximum number of containers that can be
+// running at the same time. This helps mitigate the impact of unexpected
+// traffic spikes by instead downgrading performance. This limit is a
+// per-function limit. You can override the limit for each function using the
+// `maxInstances` option in the function's options, e.g.
+// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
+// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
+// functions should each use functions.runWith({ maxInstances: 10 }) instead.
+// In the v1 API, each function can only serve one request per container, so
+// this will be the maximum concurrent request count.
+setGlobalOptions({ maxInstances: 10 });
+
+// Create and deploy your first functions
+// https://firebase.google.com/docs/functions/get-started
+
+// exports.helloWorld = onRequest((request, response) => {
+//   logger.info("Hello logs!", {structuredData: true});
+//   response.send("Hello from Firebase!");
+// });

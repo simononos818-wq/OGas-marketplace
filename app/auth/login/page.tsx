@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, FormEvent } from 'react';
 import { motion } from 'framer-motion';
 import { Phone, Mail, ArrowRight, Flame } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -25,20 +25,23 @@ export default function LoginPage() {
     return null;
   }
 
-  const handlePhoneSubmit = async (e) => {
+  const handlePhoneSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
       const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : '+234' + phoneNumber.replace(/^0/, '');
       const { auth } = await import('../../../lib/firebase');
-      const recaptchaVerifier = new RecaptchaVerifier(recaptchaRef.current, { size: 'invisible' }, auth);
-      const confirmation = await loginWithPhone(formattedPhone, recaptchaVerifier);
-      setStep('otp');
+      if (recaptchaRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const recaptchaVerifier = new RecaptchaVerifier(recaptchaRef.current, { size: 'invisible' } as any, auth);
+        const confirmation = await loginWithPhone(formattedPhone, recaptchaVerifier);
+        setStep('otp');
+      }
     } catch (error) {
       alert('Failed to send OTP');
     }
   };
 
-  const handleOTPSubmit = async (e) => {
+  const handleOTPSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
       await verifyOTP('', otp);
@@ -48,7 +51,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleEmailSubmit = async (e) => {
+  const handleEmailSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
       await loginWithEmail(email, password);
