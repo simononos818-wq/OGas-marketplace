@@ -17,3 +17,5 @@ yarn-error.log*
 *.dmg
 zulu*/
 *.jdk/
+.env.local
+.env
