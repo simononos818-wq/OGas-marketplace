@@ -20,7 +20,7 @@ export default function BuyerRegister() {
     if (typeof window !== "undefined" && !(window as any).recaptchaVerifier) {
       (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
         size: "invisible",
-        callback: (response) => {
+        callback: (response: string) => {
           console.log("reCAPTCHA verified", response);
         },
         "expired-callback": () => {

@@ -11,7 +11,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Search, SlidersHorizontal, Flame } from 'lucide-react';
 
 export default function BuyGas() {
-  const { user } = useAuth();
+  const auth = useAuth();
+  const user = auth?.user;
   const router = useRouter();
   const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

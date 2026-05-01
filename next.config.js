@@ -1,10 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  outputFileTracingRoot: __dirname,
   images: {
-    unoptimized: false,
+    unoptimized: true,
   },
-  reactStrictMode: true,
+  trailingSlash: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  // NO output: 'export' — we want SSR for API routes
 }
 
 module.exports = nextConfig

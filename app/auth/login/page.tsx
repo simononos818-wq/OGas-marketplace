@@ -8,109 +8,169 @@ import { useRouter } from 'next/navigation';
 import { RecaptchaVerifier } from 'firebase/auth';
 
 export default function LoginPage() {
-  const [method, setMethod] = useState('phone');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const auth = useAuth();
+  const router = useRouter();
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState('input');
-  const [role, setRole] = useState('buyer');
-  
-  const recaptchaRef = useRef(null);
-  const { loginWithPhone, verifyOTP, loginWithEmail, user } = useAuth();
-  const router = useRouter();
+  const [verificationId, setVerificationId] = useState('');
+  const [mode, setMode] = useState<'phone' | 'email' | 'otp'>('phone');
+  const recaptchaRef = useRef<HTMLDivElement>(null);
 
-  if (user) {
-    router.push(role === 'seller' ? '/seller-dashboard' : '/buyer');
-    return null;
+  if (!auth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
+        <motion.div 
+          animate={{ scale: [1, 1.2, 1] }}
+          transition={{ repeat: Infinity, duration: 1.5 }}
+          className="text-orange-500 text-xl font-bold"
+        >
+          🔥 OGas Loading...
+        </motion.div>
+      </div>
+    );
   }
 
-  const handlePhoneSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const { loginWithPhone, verifyOTP, loginWithEmail } = auth;
+
+  const handlePhoneSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!recaptchaRef.current) return;
+    
+    const verifier = new RecaptchaVerifier(
+      auth.auth, 
+      recaptchaRef.current,
+      { size: 'invisible' }
+    );
+    
     try {
-      const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : '+234' + phoneNumber.replace(/^0/, '');
-      const { auth } = await import('../../../lib/firebase');
-      if (recaptchaRef.current) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const recaptchaVerifier = new RecaptchaVerifier(recaptchaRef.current, { size: 'invisible' } as any, auth);
-        const confirmation = await loginWithPhone(formattedPhone, recaptchaVerifier);
-        setStep('otp');
-      }
-    } catch (error) {
-      alert('Failed to send OTP');
+      const confirmation = await loginWithPhone(phone, verifier);
+      setVerificationId(confirmation.verificationId);
+      setMode('otp');
+    } catch (err) {
+      alert('Phone login failed: ' + (err as Error).message);
     }
   };
 
-  const handleOTPSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleOTPSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await verifyOTP('', otp);
+      await verifyOTP(verificationId, otp);
       router.push('/buyer');
-    } catch (error) {
-      alert('Invalid OTP');
+    } catch (err) {
+      alert('OTP verification failed: ' + (err as Error).message);
     }
   };
 
-  const handleEmailSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleEmailSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
       await loginWithEmail(email, password);
       router.push('/buyer');
-    } catch (error) {
-      alert('Login failed');
+    } catch (err) {
+      alert('Login failed: ' + (err as Error).message);
     }
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-      <div ref={recaptchaRef}></div>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/25">
-            <Flame className="w-8 h-8 text-white" />
-          </div>
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md bg-[#1a1a1a] rounded-2xl p-8 border border-orange-500/20"
+      >
+        <div className="text-center mb-8">
+          <Flame className="w-12 h-12 text-orange-500 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-white">OGas</h1>
+          <p className="text-gray-400 mt-2">Nigeria&apos;s LPG Marketplace</p>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
-          <h1 className="text-2xl font-bold text-white text-center mb-2">Welcome to OGas</h1>
-          <p className="text-zinc-400 text-center mb-6">Sign in to continue</p>
-          
-          <div className="flex gap-2 mb-6 p-1 bg-zinc-800 rounded-xl">
-            <button onClick={() => setRole('buyer')} className={'flex-1 py-2 rounded-lg text-sm font-medium ' + (role === 'buyer' ? 'bg-orange-500 text-white' : 'text-zinc-400')}>I need Gas</button>
-            <button onClick={() => setRole('seller')} className={'flex-1 py-2 rounded-lg text-sm font-medium ' + (role === 'seller' ? 'bg-orange-500 text-white' : 'text-zinc-400')}>I sell Gas</button>
-          </div>
 
-          <div className="flex gap-2 mb-6">
-            <button onClick={() => setMethod('phone')} className={'flex-1 py-3 rounded-xl border flex items-center justify-center gap-2 ' + (method === 'phone' ? 'border-orange-500 bg-orange-500/10 text-orange-400' : 'border-zinc-700 text-zinc-400')}><Phone className="w-4 h-4"/>Phone</button>
-            <button onClick={() => setMethod('email')} className={'flex-1 py-3 rounded-xl border flex items-center justify-center gap-2 ' + (method === 'email' ? 'border-orange-500 bg-orange-500/10 text-orange-400' : 'border-zinc-700 text-zinc-400')}><Mail className="w-4 h-4"/>Email</button>
-          </div>
-
-          {method === 'phone' ? (
-            step === 'input' ? (
-              <form onSubmit={handlePhoneSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">Phone Number</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500">+234</span>
-                    <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))} placeholder="801 234 5678" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 pl-14 pr-4 text-white" maxLength={10} />
-                  </div>
-                </div>
-                <button type="submit" className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold rounded-xl">Continue <ArrowRight className="w-4 h-4 inline"/></button>
-              </form>
-            ) : (
-              <form onSubmit={handleOTPSubmit} className="space-y-4">
-                <input type="text" value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white text-center text-2xl" maxLength={6} />
-                <button type="submit" className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold rounded-xl">Verify</button>
-                <button type="button" onClick={() => setStep('input')} className="w-full py-3 text-zinc-400 text-sm">Change Number</button>
-              </form>
-            )
-          ) : (
-            <form onSubmit={handleEmailSubmit} className="space-y-4">
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white" />
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white" />
-              <button type="submit" className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold rounded-xl">Sign In</button>
-            </form>
-          )}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setMode('phone')}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
+              mode === 'phone' ? 'bg-orange-500 text-white' : 'bg-[#2a2a2a] text-gray-400'
+            }`}
+          >
+            <Phone className="w-4 h-4 inline mr-1" /> Phone
+          </button>
+          <button
+            onClick={() => setMode('email')}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
+              mode === 'email' ? 'bg-orange-500 text-white' : 'bg-[#2a2a2a] text-gray-400'
+            }`}
+          >
+            <Mail className="w-4 h-4 inline mr-1" /> Email
+          </button>
         </div>
+
+        {mode === 'phone' && (
+          <form onSubmit={handlePhoneSubmit}>
+            <input
+              type="tel"
+              placeholder="Enter your phone number"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 text-white mb-4 focus:border-orange-500 focus:outline-none"
+            />
+            <div ref={recaptchaRef} />
+            <button
+              type="submit"
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-lg flex items-center justify-center gap-2 transition"
+            >
+              Send OTP <ArrowRight className="w-5 h-5" />
+            </button>
+          </form>
+        )}
+
+        {mode === 'otp' && (
+          <form onSubmit={handleOTPSubmit}>
+            <p className="text-gray-400 text-sm mb-4">Enter OTP sent to {phone}</p>
+            <input
+              type="text"
+              placeholder="123456"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 text-white mb-4 focus:border-orange-500 focus:outline-none text-center text-2xl tracking-widest"
+            />
+            <button
+              type="submit"
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-lg transition"
+            >
+              Verify OTP
+            </button>
+          </form>
+        )}
+
+        {mode === 'email' && (
+          <form onSubmit={handleEmailSubmit}>
+            <input
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 text-white mb-4 focus:border-orange-500 focus:outline-none"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 text-white mb-4 focus:border-orange-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-lg transition"
+            >
+              Login
+            </button>
+          </form>
+        )}
+
+        <p className="text-center text-gray-500 text-sm mt-6">
+          New here? <a href="/auth/register" className="text-orange-500 hover:underline">Create account</a>
+        </p>
       </motion.div>
     </div>
   );

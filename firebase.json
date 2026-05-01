@@ -11,11 +11,21 @@
         "source": "**",
         "destination": "/index.html"
       }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "max-age=31536000"
+          }
+        ]
+      }
     ]
   },
   "firestore": {
     "database": "(default)",
-    "location": "europe-west3",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
@@ -28,7 +38,6 @@
         "node_modules",
         ".git",
         "firebase-debug.log",
-        "firebase-debug.*.log",
         "*.local"
       ]
     }

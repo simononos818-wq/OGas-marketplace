@@ -1,0 +1,122 @@
+
+
+
+
+
+
+
+import { useState, useRef, FormEvent } from 'react';
+import { motion } from 'framer-motion';
+import { Phone, Mail, ArrowRight, Flame } from 'lucide-react';
+import { useAuth } from '../../../contexts/AuthContext';
+import { useRouter } from 'next/navigation';
+import { RecaptchaVerifier } from 'firebase/auth';
+
+export default function LoginPage() {
+  const [method, setMethod] = useState('phone');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [step, setStep] = useState('input');
+  const [role, setRole] = useState('buyer');
+  
+  const recaptchaRef = useRef(null);
+  const { loginWithPhone, verifyOTP, loginWithEmail, user } = useAuth();
+  const router = useRouter();
+
+  if (user) {
+    router.push(role === 'seller' ? '/seller-dashboard' : '/buyer');
+    return null;
+  }
+
+  const handlePhoneSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    try {
+      const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : '+234' + phoneNumber.replace(/^0/, '');
+      const { auth } = await import('../../../lib/firebase');
+      if (recaptchaRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const recaptchaVerifier = new RecaptchaVerifier(recaptchaRef.current, { size: 'invisible' } as any, auth);
+        const confirmation = await loginWithPhone(formattedPhone, recaptchaVerifier);
+        setStep('otp');
+      }
+    } catch (error) {
+      alert('Failed to send OTP');
+    }
+  };
+
+  const handleOTPSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    try {
+      await verifyOTP('', otp);
+      router.push('/buyer');
+    } catch (error) {
+      alert('Invalid OTP');
+    }
+  };
+
+  const handleEmailSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    try {
+      await loginWithEmail(email, password);
+      router.push('/buyer');
+    } catch (error) {
+      alert('Login failed');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+      <div ref={recaptchaRef}></div>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+        <div className="flex justify-center mb-8">
+          <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/25">
+            <Flame className="w-8 h-8 text-white" />
+          </div>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
+          <h1 className="text-2xl font-bold text-white text-center mb-2">Welcome to OGas</h1>
+          <p className="text-zinc-400 text-center mb-6">Sign in to continue</p>
+          
+          <div className="flex gap-2 mb-6 p-1 bg-zinc-800 rounded-xl">
+            <button onClick={() => setRole('buyer')} className={'flex-1 py-2 rounded-lg text-sm font-medium ' + (role === 'buyer' ? 'bg-orange-500 text-white' : 'text-zinc-400')}>I need Gas</button>
+            <button onClick={() => setRole('seller')} className={'flex-1 py-2 rounded-lg text-sm font-medium ' + (role === 'seller' ? 'bg-orange-500 text-white' : 'text-zinc-400')}>I sell Gas</button>
+          </div>
+
+          <div className="flex gap-2 mb-6">
+            <button onClick={() => setMethod('phone')} className={'flex-1 py-3 rounded-xl border flex items-center justify-center gap-2 ' + (method === 'phone' ? 'border-orange-500 bg-orange-500/10 text-orange-400' : 'border-zinc-700 text-zinc-400')}><Phone className="w-4 h-4"/>Phone</button>
+            <button onClick={() => setMethod('email')} className={'flex-1 py-3 rounded-xl border flex items-center justify-center gap-2 ' + (method === 'email' ? 'border-orange-500 bg-orange-500/10 text-orange-400' : 'border-zinc-700 text-zinc-400')}><Mail className="w-4 h-4"/>Email</button>
+          </div>
+
+          {method === 'phone' ? (
+            step === 'input' ? (
+              <form onSubmit={handlePhoneSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Phone Number</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500">+234</span>
+                    <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))} placeholder="801 234 5678" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 pl-14 pr-4 text-white" maxLength={10} />
+                  </div>
+                </div>
+                <button type="submit" className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold rounded-xl">Continue <ArrowRight className="w-4 h-4 inline"/></button>
+              </form>
+            ) : (
+              <form onSubmit={handleOTPSubmit} className="space-y-4">
+                <input type="text" value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white text-center text-2xl" maxLength={6} />
+                <button type="submit" className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold rounded-xl">Verify</button>
+                <button type="button" onClick={() => setStep('input')} className="w-full py-3 text-zinc-400 text-sm">Change Number</button>
+              </form>
+            )
+          ) : (
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white" />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white" />
+              <button type="submit" className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold rounded-xl">Sign In</button>
+            </form>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
