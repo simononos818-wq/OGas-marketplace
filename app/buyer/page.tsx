@@ -60,7 +60,6 @@ export default function BuyerRegister() {
     try {
       await confirmationResult.confirm(otp);
       setLoading(false);
-      // Redirect to buyer dashboard
       window.location.href = "/buyer/dashboard";
     } catch (err: any) {
       setError(err.message || "Invalid OTP");
