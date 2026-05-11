@@ -35,3 +35,7 @@ next-env.d.ts
 
 # Firebase
 .firebase/
+ogas-source.zip
+ogas-mobile/ogas-deploy.zip
+deploy_out/
+*.pack
