@@ -1,177 +1,115 @@
 'use client';
 
-import { useState, useRef, FormEvent } from 'react';
-import { motion } from 'framer-motion';
-import { Phone, Mail, ArrowRight, Flame } from 'lucide-react';
-import { useAuth } from '../../../contexts/AuthContext';
+import { useState } from 'react';
+import { Flame, Loader2, Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { RecaptchaVerifier } from 'firebase/auth';
+import { auth, db } from '@/app/lib/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function LoginPage() {
-  const auth = useAuth();
-  const router = useRouter();
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [verificationId, setVerificationId] = useState('');
-  const [mode, setMode] = useState<'phone' | 'email' | 'otp'>('phone');
-  const recaptchaRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const router = useRouter();
 
-  if (!auth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
-        <motion.div 
-          animate={{ scale: [1, 1.2, 1] }}
-          transition={{ repeat: Infinity, duration: 1.5 }}
-          className="text-orange-500 text-xl font-bold"
-        >
-          🔥 OGas Loading...
-        </motion.div>
-      </div>
-    );
-  }
-
-  const { loginWithPhone, verifyOTP, loginWithEmail } = auth;
-
-  const handlePhoneSubmit = async (e: FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!recaptchaRef.current) return;
-    
-    const verifier = new RecaptchaVerifier(
-      auth.auth, 
-      recaptchaRef.current,
-      { size: 'invisible' }
-    );
-    
-    try {
-      const confirmation = await loginWithPhone(phone, verifier);
-      setVerificationId(confirmation.verificationId);
-      setMode('otp');
-    } catch (err) {
-      alert('Phone login failed: ' + (err as Error).message);
-    }
-  };
+    setError('');
+    setLoading(true);
 
-  const handleOTPSubmit = async (e: FormEvent) => {
-    e.preventDefault();
     try {
-      await verifyOTP(verificationId, otp);
-      router.push('/buyer');
-    } catch (err) {
-      alert('OTP verification failed: ' + (err as Error).message);
-    }
-  };
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userData = userDoc.data();
 
-  const handleEmailSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await loginWithEmail(email, password);
-      router.push('/buyer');
-    } catch (err) {
-      alert('Login failed: ' + (err as Error).message);
+      if (userData?.userType === 'seller') {
+        router.push('/seller-dashboard');
+      } else {
+        router.push('/buyer');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-[#1a1a1a] rounded-2xl p-8 border border-orange-500/20"
-      >
-        <div className="text-center mb-8">
-          <Flame className="w-12 h-12 text-orange-500 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-white">OGas</h1>
-          <p className="text-gray-400 mt-2">Nigeria&apos;s LPG Marketplace</p>
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 mb-3">
+            <Flame className="w-7 h-7 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-1">Welcome Back</h1>
+          <p className="text-zinc-400 text-sm">Sign in to OGas</p>
         </div>
 
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => setMode('phone')}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-              mode === 'phone' ? 'bg-orange-500 text-white' : 'bg-[#2a2a2a] text-gray-400'
-            }`}
-          >
-            <Phone className="w-4 h-4 inline mr-1" /> Phone
-          </button>
-          <button
-            onClick={() => setMode('email')}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-              mode === 'email' ? 'bg-orange-500 text-white' : 'bg-[#2a2a2a] text-gray-400'
-            }`}
-          >
-            <Mail className="w-4 h-4 inline mr-1" /> Email
-          </button>
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl mb-4 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 rounded-3xl p-6 space-y-5">
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-white placeholder-zinc-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-12 text-white placeholder-zinc-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || !email || !password}
+              className="w-full py-3.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
+            </button>
+          </form>
         </div>
 
-        {mode === 'phone' && (
-          <form onSubmit={handlePhoneSubmit}>
-            <input
-              type="tel"
-              placeholder="Enter your phone number"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 text-white mb-4 focus:border-orange-500 focus:outline-none"
-            />
-            <div ref={recaptchaRef} />
-            <button
-              type="submit"
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-lg flex items-center justify-center gap-2 transition"
-            >
-              Send OTP <ArrowRight className="w-5 h-5" />
-            </button>
-          </form>
-        )}
-
-        {mode === 'otp' && (
-          <form onSubmit={handleOTPSubmit}>
-            <p className="text-gray-400 text-sm mb-4">Enter OTP sent to {phone}</p>
-            <input
-              type="text"
-              placeholder="123456"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 text-white mb-4 focus:border-orange-500 focus:outline-none text-center text-2xl tracking-widest"
-            />
-            <button
-              type="submit"
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-lg transition"
-            >
-              Verify OTP
-            </button>
-          </form>
-        )}
-
-        {mode === 'email' && (
-          <form onSubmit={handleEmailSubmit}>
-            <input
-              type="email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 text-white mb-4 focus:border-orange-500 focus:outline-none"
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 text-white mb-4 focus:border-orange-500 focus:outline-none"
-            />
-            <button
-              type="submit"
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-lg transition"
-            >
-              Login
-            </button>
-          </form>
-        )}
-
-        <p className="text-center text-gray-500 text-sm mt-6">
-          New here? <a href="/auth/register" className="text-orange-500 hover:underline">Create account</a>
+        <p className="text-center mt-6 text-zinc-500 text-sm">
+          Don't have an account?{' '}
+          <Link href="/auth/register" className="text-orange-400 hover:text-orange-300 transition-colors">Create one</Link>
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 }

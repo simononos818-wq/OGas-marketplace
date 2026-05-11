@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { User, Mail, Phone, MapPin, Camera, Save, Shield, Bell, CreditCard } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const auth = useAuth(); const user = auth?.user;
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     displayName: user?.displayName || '',

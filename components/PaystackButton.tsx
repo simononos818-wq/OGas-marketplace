@@ -20,7 +20,7 @@ declare global {
 }
 
 export function PaystackButton({ amount, email: propEmail, onSuccess, onClose, metadata = {}, text = 'Pay Now', className = '' }: Props) {
-  const { user } = useAuth();
+  const auth = useAuth(); const user = auth?.user;
   const [isLoading, setIsLoading] = useState(false);
   const email = propEmail || user?.email || '';
   const publicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '';

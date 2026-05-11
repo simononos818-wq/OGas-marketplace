@@ -12,7 +12,7 @@ interface RouteGuardProps {
 const publicRoutes = ['/login', '/register', '/verify-phone', '/forgot-password'];
 
 export function RouteGuard({ children, allowedRoles }: RouteGuardProps) {
-  const { user, loading } = useAuth();
+  const auth = useAuth(); const user = auth?.user; const loading = auth?.loading;
   const router = useRouter();
   const pathname = usePathname();
 

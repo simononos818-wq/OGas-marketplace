@@ -1,45 +1,24 @@
 {
+  "functions": {
+    "source": "functions"
+  },
   "hosting": {
     "public": "out",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ],
-    "headers": [
+        "source": "/api/payment/verify/**",
+        "run": { "serviceId": "paymentverify", "region": "us-central1" }
+      },
       {
-        "source": "**/*.@(js|css)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "max-age=31536000"
-          }
-        ]
-      }
+        "source": "/api/payment/webhook/**",
+        "run": { "serviceId": "paymentwebhook", "region": "us-central1" }
+      },
+      {
+        "source": "/api/paystack/resolve-bank/**",
+        "run": { "serviceId": "resolvebank", "region": "us-central1" }
+      },
+      { "source": "**", "destination": "/index.html" }
     ]
-  },
-  "firestore": {
-    "database": "(default)",
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "disallowLegacyRuntimeConfig": true,
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "*.local"
-      ]
-    }
-  ]
+  }
 }

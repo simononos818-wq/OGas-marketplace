@@ -1,19 +1,44 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
+    
+    // Users - owner only
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Products - public read, seller write
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && resource.data.sellerId == request.auth.uid;
+    }
+    
+    // Sellers - public read, owner write (includes location data)
+    match /sellers/{sellerId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == sellerId;
+    }
+    
+    // Orders - buyer/seller only
+    match /orders/{orderId} {
+      allow read: if request.auth != null && 
+        (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.buyerId == request.auth.uid;
+      allow update: if request.auth != null && 
+        (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
+    }
+    
+    // Escrow - Cloud Functions only
+    match /escrow/{transactionId} {
+      allow read: if request.auth != null &&
+        (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
+      allow write: if false;
+    }
+    
+    // Deny everything else
     match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2026, 5, 1);
+      allow read, write: if false;
     }
   }
 }

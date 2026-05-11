@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { User, Mail, Phone, Truck, Star, Shield, Camera, FileText, Award } from 'lucide-react';
 
 export default function DriverProfilePage() {
-  const { user } = useAuth();
+  const auth = useAuth(); const user = auth?.user;
 
   return (
     <div className="space-y-6">

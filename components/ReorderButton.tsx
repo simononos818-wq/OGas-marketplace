@@ -12,7 +12,7 @@ interface Props {
 }
 
 export function ReorderButton({ previousOrder }: Props) {
-  const { user } = useAuth();
+  const auth = useAuth(); const user = auth?.user;
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 

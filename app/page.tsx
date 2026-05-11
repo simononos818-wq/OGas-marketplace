@@ -18,15 +18,15 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="flex gap-4 justify-center">
-          <Link href="/customer" className="px-8 py-3 bg-teal-500 hover:bg-teal-600 text-white font-semibold rounded-lg transition-all hover:scale-105">
-            Customer App
+        <div className="flex gap-4 justify-center flex-wrap">
+          <Link href="/auth/register" className="px-8 py-3 bg-teal-500 hover:bg-teal-600 text-white font-semibold rounded-lg transition-all hover:scale-105">
+            Get Started
           </Link>
-          <Link href="/driver" className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all hover:scale-105">
-            Driver App
+          <Link href="/buy" className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all hover:scale-105">
+            Browse Gas
           </Link>
-          <Link href="/admin" className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all hover:scale-105">
-            Admin Panel
+          <Link href="/auth/login" className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all hover:scale-105">
+            Sign In
           </Link>
         </div>
       </div>

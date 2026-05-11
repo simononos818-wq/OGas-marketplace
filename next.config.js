@@ -1,16 +1,12 @@
+const path = require('path');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  images: {
-    unoptimized: true,
-  },
+  output: 'export',
+  distDir: 'out',
+  images: { unoptimized: true },
   trailingSlash: true,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  // NO output: 'export' — we want SSR for API routes
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
+  outputFileTracingRoot: path.join(__dirname),
 }
-
 module.exports = nextConfig

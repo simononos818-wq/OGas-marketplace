@@ -36,7 +36,7 @@ const activeOrders = [
 ];
 
 export default function DriverDashboard() {
-  const { user } = useAuth();
+  const auth = useAuth(); const user = auth?.user;
   const [isOnline, setIsOnline] = useState(true);
 
   return (

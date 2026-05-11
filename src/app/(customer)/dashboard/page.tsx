@@ -16,7 +16,7 @@ const recentOrders = [
 ];
 
 export default function CustomerDashboard() {
-  const { user } = useAuth();
+  const auth = useAuth(); const user = auth?.user;
 
   return (
     <div className="space-y-8">
