@@ -15,13 +15,13 @@ const packages = [
     badgeColor: 'bg-orange-500',
     description: 'Everything you need to start selling gas today.',
     items: [
-      '1x 47kg Brand New Cylinder (N270k)',
-      '1x Digital Weighing Scale (N80k)',
-      '1x High-Pressure Gas Hose 3m (N15k)',
-      '1x Regulator Valve Set (N12k)',
-      '1x Safety Fire Extinguisher (N18k)',
-      'OGas Branded Apron & Cap - FREE',
-      'Business Registration Guide - FREE',
+      '1x 47kg Brand New Cylinder',
+      '1x Digital Weighing Scale',
+      '1x High-Pressure Gas Hose 3m',
+      '1x Regulator Valve Set',
+      '1x Safety Fire Extinguisher',
+      'OGas Branded Apron and Cap FREE',
+      'Business Registration Guide FREE',
     ],
     savings: 50000,
     color: 'from-orange-500 to-red-600',
@@ -37,15 +37,15 @@ const packages = [
     badgeColor: 'bg-amber-500',
     description: 'Double your capacity. For serious builders.',
     items: [
-      '2x 47kg Brand New Cylinders (N540k)',
-      '1x Industrial Digital Scale (N120k)',
-      '2x High-Pressure Gas Hose 5m (N25k)',
-      '2x Regulator Valve Set (N24k)',
-      '1x Safety Fire Extinguisher (N18k)',
-      '1x Gas Leak Detector (N25k)',
-      'OGas Branded Uniform Set (2) - FREE',
-      'Marketing Banner & Flyers - FREE',
-      'WhatsApp Business Setup Guide - FREE',
+      '2x 47kg Brand New Cylinders',
+      '1x Industrial Digital Scale',
+      '2x High-Pressure Gas Hose 5m',
+      '2x Regulator Valve Set',
+      '1x Safety Fire Extinguisher',
+      '1x Gas Leak Detector',
+      'OGas Branded Uniform Set 2 FREE',
+      'Marketing Banner and Flyers FREE',
+      'WhatsApp Business Setup Guide FREE',
     ],
     savings: 100000,
     color: 'from-amber-500 to-orange-600',
@@ -61,17 +61,17 @@ const packages = [
     badgeColor: 'bg-red-600',
     description: 'The ultimate package for market leaders.',
     items: [
-      '4x 47kg Brand New Cylinders (N1.08M)',
-      '1x Heavy-Duty Industrial Scale (N150k)',
-      '4x High-Pressure Gas Hose 5m (N50k)',
-      '4x Premium Regulator Valve Set (N48k)',
-      '2x Safety Fire Extinguisher (N36k)',
-      '1x Smart Gas Leak Detector (N45k)',
-      '1x Cylinder Transport Trolley (N35k)',
-      'OGas Full Branding Package - FREE',
-      'Social Media Marketing Kit - FREE',
-      'Priority Customer Support - FREE',
-      'DSON Gas Safety Certificate - FREE',
+      '4x 47kg Brand New Cylinders',
+      '1x Heavy-Duty Industrial Scale',
+      '4x High-Pressure Gas Hose 5m',
+      '4x Premium Regulator Valve Set',
+      '2x Safety Fire Extinguisher',
+      '1x Smart Gas Leak Detector',
+      '1x Cylinder Transport Trolley',
+      'OGas Full Branding Package FREE',
+      'Social Media Marketing Kit FREE',
+      'Priority Customer Support FREE',
+      'DSON Gas Safety Certificate FREE',
     ],
     savings: 250000,
     color: 'from-red-600 to-rose-700',
@@ -80,16 +80,16 @@ const packages = [
 ];
 
 const whyChooseUs = [
-  { icon: Shield, title: 'Certified Equipment', desc: 'DSON-approved & 
-safety-tested' },
+  { icon: Shield, title: 'Certified Equipment', desc: 'DSON approved and 
+safety tested' },
   { icon: Truck, title: 'Free Delivery', desc: 'Delivered to your 
 doorstep' },
-  { icon: TrendingUp, title: 'High Margins', desc: 'N500-N1,000 profit per 
-kg' },
+  { icon: TrendingUp, title: 'High Margins', desc: '500 to 1000 naira 
+profit per kg' },
   { icon: Star, title: 'OGas Brand', desc: 'Trusted brand from day one' },
 ];
 
-function formatPrice(price: number) {
+function formatPrice(price) {
   return 'N' + price.toLocaleString();
 }
 
@@ -175,7 +175,7 @@ mb-6">{pkg.description}</p>
                       <div key={j} className="flex items-start gap-3">
                         <div className="w-6 h-6 rounded-full bg-slate-700 
 flex items-center justify-center text-sm shrink-0">
-                          {item.includes('FREE') ? '*' : '✓'}
+                          {item.includes('FREE') ? '*' : 'v'}
                         </div>
                         <span className={`text-sm ${item.includes('FREE') 
 ? 'text-orange-300' : 'text-slate-300'}`}>{item}</span>
@@ -231,12 +231,12 @@ Works</h2>
             {[
               { step: '1', title: 'Choose Package', desc: 'Pick the kit 
 that matches your budget.' },
-              { step: '2', title: 'Pay Securely', desc: 'Via Paystack 
-(card, transfer, USSD).' },
-              { step: '3', title: 'We Deliver', desc: 'Team delivers & 
+              { step: '2', title: 'Pay Securely', desc: 'Via Paystack card 
+transfer or USSD.' },
+              { step: '3', title: 'We Deliver', desc: 'Team delivers and 
 helps with setup.' },
               { step: '4', title: 'Start Selling', desc: 'Use app to 
-manage & grow business.' },
+manage and grow business.' },
             ].map((item) => (
               <div key={item.step} className="flex items-start gap-4 
 bg-slate-800/30 border border-slate-700/30 rounded-2xl p-6">
