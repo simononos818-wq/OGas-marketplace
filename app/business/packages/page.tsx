@@ -1,129 +1,13 @@
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {packages.map((pkg) => (
-              <div key={pkg.id} className={`relative bg-slate-800/60 
-border-2 ${pkg.borderColor} rounded-3xl overflow-hidden`}>
-                <div className={`absolute top-4 right-4 ${pkg.badgeColor} 
-text-white text-xs font-bold px-3 py-1 rounded-full`}>
-                  {pkg.badge}
-                </div>
-                <div className="p-8">
-                  <h3 className="text-2xl font-bold mb-1">{pkg.name}</h3>
-                  <p className="text-orange-400 text-sm 
-mb-4">{pkg.tagline}</p>
-                  
-                  <div className="mb-4">
-                    <span className="text-4xl 
-font-bold">{formatPrice(pkg.price)}</span>
-                    <span className="text-lg text-slate-500 line-through 
-ml-2">{formatPrice(pkg.originalPrice)}</span>
-                  </div>
-                  <div className="inline-flex items-center gap-1 
-bg-green-500/20 text-green-400 text-sm px-3 py-1 rounded-full mb-4">
-                    <TrendingUp className="w-4 h-4" /> Save 
-{formatPrice(pkg.savings)}
-                  </div>
-
-                  <p className="text-slate-400 text-sm 
-mb-6">{pkg.description}</p>
-
-                  <div className="space-y-2 mb-8">
-                    {pkg.items.map((item, j) => (
-                      <div key={j} className="flex items-start gap-3">
-                        <div className="w-6 h-6 rounded-full bg-slate-700 
-flex items-center justify-center text-sm shrink-0">
-                          {item.includes('FREE') ? '🎁' : '✓'}
-                        </div>
-                        <span className={`text-sm ${item.includes('FREE') 
-? 'text-orange-300' : 'text-slate-300'}`}>{item}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <Link href={`/buyer/checkout?package=${pkg.id}`} 
-className={`w-full block text-center bg-gradient-to-r ${pkg.color} 
-text-white font-bold py-4 rounded-xl flex items-center justify-center 
-gap-2`}>
-                    <ShoppingCart className="w-5 h-5" /> Get This Package 
-<ArrowRight className="w-5 h-5" />
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Stats */}
-      <section className="py-16 px-4 bg-slate-900/50">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-8">Why Entrepreneurs Trust 
-OGas</h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-slate-800/50 rounded-2xl p-6">
-              <div className="text-4xl font-bold text-orange-400 
-mb-2">500+</div>
-              <div className="text-slate-400">Active Retailers</div>
-            </div>
-            <div className="bg-slate-800/50 rounded-2xl p-6">
-              <div className="text-4xl font-bold text-orange-400 
-mb-2">36</div>
-              <div className="text-slate-400">States Covered</div>
-            </div>
-            <div className="bg-slate-800/50 rounded-2xl p-6">
-              <div className="text-4xl font-bold text-orange-400 
-mb-2">98%</div>
-              <div className="text-slate-400">Satisfaction</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="py-16 px-4">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12">How It 
-Works</h2>
-          <div className="space-y-6">
-            {[
-              { step: '1', title: 'Choose Package', desc: 'Pick the kit 
-that matches your budget.' },
-              { step: '2', title: 'Pay Securely', desc: 'Via Paystack 
-(card, transfer, USSD).' },
-              { step: '3', title: 'We Deliver', desc: 'Team delivers & 
-helps with setup.' },
-              { step: '4', title: 'Start Selling', desc: 'Use app to 
-manage & grow business.' },
-            ].map((item) => (
-              <div key={item.step} className="flex items-start gap-4 
-bg-slate-800/30 border border-slate-700/30 rounded-2xl p-6">
-                <div className="w-12 h-12 bg-gradient-to-r from-orange-500 
-to-red-600 rounded-xl flex items-center justify-center text-xl font-bold 
-shrink-0">{item.step}</div>
-                <div>
-                  <h3 className="text-lg font-semibold 
-mb-1">{item.title}</h3>
-                  <p className="text-slate-400">{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
 'use client';
 
-import { motion } from 'framer-motion';
-import { Flame, ShoppingCart, Check, ArrowRight, Star, TrendingUp, Shield, 
-Truck } from 'lucide-react';
+import { Flame, ShoppingCart, ArrowRight, Star, TrendingUp, Shield, Truck 
+} from 'lucide-react';
 import Link from 'next/link';
 
 const packages = [
   {
     id: 'starter',
-    name: '🔥 Starter Spark',
+    name: 'Starter Spark',
     tagline: 'Begin Your LPG Journey',
     price: 350000,
     originalPrice: 400000,
@@ -131,13 +15,13 @@ const packages = [
     badgeColor: 'bg-orange-500',
     description: 'Everything you need to start selling gas today.',
     items: [
-      '1× 47kg Brand New Cylinder (₦270k)',
-      '1× Digital Weighing Scale (₦80k)',
-      '1× High-Pressure Gas Hose 3m (₦15k)',
-      '1× Regulator Valve Set (₦12k)',
-      '1× Safety Fire Extinguisher (₦18k)',
-      '🎁 OGas Branded Apron & Cap - FREE',
-      '🎁 Business Registration Guide - FREE',
+      '1x 47kg Brand New Cylinder (N270k)',
+      '1x Digital Weighing Scale (N80k)',
+      '1x High-Pressure Gas Hose 3m (N15k)',
+      '1x Regulator Valve Set (N12k)',
+      '1x Safety Fire Extinguisher (N18k)',
+      'OGas Branded Apron & Cap - FREE',
+      'Business Registration Guide - FREE',
     ],
     savings: 50000,
     color: 'from-orange-500 to-red-600',
@@ -145,7 +29,7 @@ const packages = [
   },
   {
     id: 'pro',
-    name: '⚡ Pro Dealer',
+    name: 'Pro Dealer',
     tagline: 'Scale Your Business Fast',
     price: 650000,
     originalPrice: 750000,
@@ -153,15 +37,15 @@ const packages = [
     badgeColor: 'bg-amber-500',
     description: 'Double your capacity. For serious builders.',
     items: [
-      '2× 47kg Brand New Cylinders (₦540k)',
-      '1× Industrial Digital Scale (₦120k)',
-      '2× High-Pressure Gas Hose 5m (₦25k)',
-      '2× Regulator Valve Set (₦24k)',
-      '1× Safety Fire Extinguisher (₦18k)',
-      '1× Gas Leak Detector (₦25k)',
-      '🎁 OGas Branded Uniform Set (2) - FREE',
-      '🎁 Marketing Banner & Flyers - FREE',
-      '🎁 WhatsApp Business Setup Guide - FREE',
+      '2x 47kg Brand New Cylinders (N540k)',
+      '1x Industrial Digital Scale (N120k)',
+      '2x High-Pressure Gas Hose 5m (N25k)',
+      '2x Regulator Valve Set (N24k)',
+      '1x Safety Fire Extinguisher (N18k)',
+      '1x Gas Leak Detector (N25k)',
+      'OGas Branded Uniform Set (2) - FREE',
+      'Marketing Banner & Flyers - FREE',
+      'WhatsApp Business Setup Guide - FREE',
     ],
     savings: 100000,
     color: 'from-amber-500 to-orange-600',
@@ -169,7 +53,7 @@ const packages = [
   },
   {
     id: 'enterprise',
-    name: '👑 OGas Enterprise',
+    name: 'OGas Enterprise',
     tagline: 'Dominate Your Market',
     price: 1200000,
     originalPrice: 1450000,
@@ -177,17 +61,17 @@ const packages = [
     badgeColor: 'bg-red-600',
     description: 'The ultimate package for market leaders.',
     items: [
-      '4× 47kg Brand New Cylinders (₦1.08M)',
-      '1× Heavy-Duty Industrial Scale (₦150k)',
-      '4× High-Pressure Gas Hose 5m (₦50k)',
-      '4× Premium Regulator Valve Set (₦48k)',
-      '2× Safety Fire Extinguisher (₦36k)',
-      '1× Smart Gas Leak Detector (₦45k)',
-      '1× Cylinder Transport Trolley (₦35k)',
-      '🎁 OGas Full Branding Package - FREE',
-      '🎁 Social Media Marketing Kit - FREE',
-      '🎁 Priority Customer Support - FREE',
-      '🎁 DSON Gas Safety Certificate - FREE',
+      '4x 47kg Brand New Cylinders (N1.08M)',
+      '1x Heavy-Duty Industrial Scale (N150k)',
+      '4x High-Pressure Gas Hose 5m (N50k)',
+      '4x Premium Regulator Valve Set (N48k)',
+      '2x Safety Fire Extinguisher (N36k)',
+      '1x Smart Gas Leak Detector (N45k)',
+      '1x Cylinder Transport Trolley (N35k)',
+      'OGas Full Branding Package - FREE',
+      'Social Media Marketing Kit - FREE',
+      'Priority Customer Support - FREE',
+      'DSON Gas Safety Certificate - FREE',
     ],
     savings: 250000,
     color: 'from-red-600 to-rose-700',
@@ -200,20 +84,19 @@ const whyChooseUs = [
 safety-tested' },
   { icon: Truck, title: 'Free Delivery', desc: 'Delivered to your 
 doorstep' },
-  { icon: TrendingUp, title: 'High Margins', desc: '₦500-₦1,000 profit per 
+  { icon: TrendingUp, title: 'High Margins', desc: 'N500-N1,000 profit per 
 kg' },
   { icon: Star, title: 'OGas Brand', desc: 'Trusted brand from day one' },
 ];
 
 function formatPrice(price: number) {
-  return '₦' + price.toLocaleString();
+  return 'N' + price.toLocaleString();
 }
 
 export default function BusinessPackagesPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 
 via-slate-900 to-slate-950 text-white">
-      {/* Hero */}
       <section className="py-20 px-4 text-center">
         <div className="max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-orange-500/20 
@@ -234,7 +117,6 @@ in Nigeria.
         </div>
       </section>
 
-      {/* Why Choose Us */}
       <section className="py-12 px-4">
         <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 
 gap-6">
@@ -251,7 +133,6 @@ mb-1">{item.title}</h3>
         </div>
       </section>
 
-      {/* Packages */}
       <section className="py-16 px-4">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
@@ -294,7 +175,7 @@ mb-6">{pkg.description}</p>
                       <div key={j} className="flex items-start gap-3">
                         <div className="w-6 h-6 rounded-full bg-slate-700 
 flex items-center justify-center text-sm shrink-0">
-                          {item.includes('FREE') ? '🎁' : '✓'}
+                          {item.includes('FREE') ? '*' : '✓'}
                         </div>
                         <span className={`text-sm ${item.includes('FREE') 
 ? 'text-orange-300' : 'text-slate-300'}`}>{item}</span>
@@ -304,10 +185,12 @@ flex items-center justify-center text-sm shrink-0">
 
                   <Link href={`/buyer/checkout?package=${pkg.id}`} 
 className={`w-full block text-center bg-gradient-to-r ${pkg.color} 
-text-white font-bold py-4 rounded-xl flex items-center justify-center 
-gap-2`}>
-                    <ShoppingCart className="w-5 h-5" /> Get This Package 
-<ArrowRight className="w-5 h-5" />
+text-white font-bold py-4 rounded-xl`}>
+                    <span className="flex items-center justify-center 
+gap-2">
+                      <ShoppingCart className="w-5 h-5" /> Get This 
+Package <ArrowRight className="w-5 h-5" />
+                    </span>
                   </Link>
                 </div>
               </div>
@@ -316,7 +199,6 @@ gap-2`}>
         </div>
       </section>
 
-      {/* Stats */}
       <section className="py-16 px-4 bg-slate-900/50">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl font-bold mb-8">Why Entrepreneurs Trust 
@@ -341,7 +223,6 @@ mb-2">98%</div>
         </div>
       </section>
 
-      {/* How It Works */}
       <section className="py-16 px-4">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-12">How It 
