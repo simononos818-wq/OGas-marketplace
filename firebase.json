@@ -1,24 +1,14 @@
 {
-  "functions": {
-    "source": "functions"
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   },
   "hosting": {
     "public": "out",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      {
-        "source": "/api/payment/verify/**",
-        "run": { "serviceId": "paymentverify", "region": "us-central1" }
-      },
-      {
-        "source": "/api/payment/webhook/**",
-        "run": { "serviceId": "paymentwebhook", "region": "us-central1" }
-      },
-      {
-        "source": "/api/paystack/resolve-bank/**",
-        "run": { "serviceId": "resolvebank", "region": "us-central1" }
-      },
-      { "source": "**", "destination": "/index.html" }
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
     ]
   }
 }
