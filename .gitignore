@@ -30,3 +30,7 @@ Thumbs.db
 # Misc
 .vercel
 *.tsbuildinfo
+.env.local
+.env
+*.log
+deploy.zip
