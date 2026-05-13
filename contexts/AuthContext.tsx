@@ -2,42 +2,40 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
-  onAuthStateChanged, 
-  signInWithPhoneNumber, 
-  PhoneAuthProvider, 
-  signInWithCredential, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
   User, 
-  RecaptchaVerifier 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged,
+  signInWithPhoneNumber,
+  PhoneAuthProvider,
+  signInWithCredential,
+  RecaptchaVerifier,
+  updateProfile
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { auth } from '@/app/lib/firebase';
 
-interface AuthContextType {
+export interface AuthContextType {
   user: User | null;
   userRole: string | null;
   loading: boolean;
+  loginWithEmail: (email: string, password: string) => Promise<any>;
+  registerWithEmail: (email: string, password: string) => Promise<any>;
   loginWithPhone: (phone: string, verifier: RecaptchaVerifier) => Promise<any>;
-  verifyOTP: (verificationId: string, otp: string) => Promise<void>;
-  loginWithEmail: (email: string, password: string) => Promise<void>;
-  registerWithEmail: (email: string, password: string, role: string) => Promise<void>;
+  verifyOTP: (verificationId: string, otp: string) => Promise<any>;
   logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<<AuthContextType>({
+const AuthContext = createContext<AuthContextType>({
   user: null,
   userRole: null,
   loading: true,
-  loginWithPhone: async () => { throw new Error('Auth not initialized'); },
-  verifyOTP: async () => { throw new Error('Auth not initialized'); },
   loginWithEmail: async () => { throw new Error('Auth not initialized'); },
   registerWithEmail: async () => { throw new Error('Auth not initialized'); },
+  loginWithPhone: async () => { throw new Error('Auth not initialized'); },
+  verifyOTP: async () => { throw new Error('Auth not initialized'); },
   logout: async () => { throw new Error('Auth not initialized'); },
 });
-
-export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -45,16 +43,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) setUserRole(userDoc.data().role);
-      }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  const loginWithEmail = async (email: string, password: string) => {
+    return await signInWithEmailAndPassword(auth, email, password);
+  };
+
+  const registerWithEmail = async (email: string, password: string) => {
+    return await createUserWithEmailAndPassword(auth, email, password);
+  };
 
   const loginWithPhone = async (phoneNumber: string, appVerifier: RecaptchaVerifier) => {
     return await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
@@ -62,36 +64,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyOTP = async (verificationId: string, otp: string) => {
     const credential = PhoneAuthProvider.credential(verificationId, otp);
-    await signInWithCredential(auth, credential);
+    return await signInWithCredential(auth, credential);
   };
 
-  const loginWithEmail = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+  const logout = async () => {
+    await signOut(auth);
+    setUser(null);
+    setUserRole(null);
   };
-
-  const registerWithEmail = async (email: string, password: string, role: string) => {
-    const { user } = await createUserWithEmailAndPassword(auth, email, password);
-    await setDoc(doc(db, 'users', user.uid), { 
-      email, 
-      role, 
-      createdAt: new Date().toISOString() 
-    });
-  };
-
-  const logout = async () => await signOut(auth);
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      userRole, 
-      loading, 
-      loginWithPhone, 
-      verifyOTP, 
-      loginWithEmail, 
-      registerWithEmail, 
-      logout 
+    <AuthContext.Provider value={{
+      user,
+      userRole,
+      loading,
+      loginWithEmail,
+      registerWithEmail,
+      loginWithPhone,
+      verifyOTP,
+      logout
     }}>
       {children}
     </AuthContext.Provider>
   );
 }
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
