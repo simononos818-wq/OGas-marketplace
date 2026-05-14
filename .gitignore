@@ -34,3 +34,5 @@ Thumbs.db
 .env
 *.log
 deploy.zip
+serviceAccountKey.json
+.env.local
