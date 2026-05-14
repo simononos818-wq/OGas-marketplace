@@ -3,199 +3,196 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { findNearbyVendors } from '@/lib/vendorService';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import Link from 'next/link';
-import { MapPin, Flame, Star, ArrowLeft, SlidersHorizontal, Search, Navigation } from 'lucide-react';
+import { MapPin, Flame, Star, Phone, ArrowLeft, ShoppingCart } from 'lucide-react';
+
+interface Product {
+  id: string;
+  size: string;
+  price: number;
+  stock: number;
+  brand: string;
+}
+
+interface Seller {
+  id: string;
+  businessName: string;
+  address: string;
+  phone: string;
+  hasDelivery: boolean;
+  deliveryFee?: number;
+  isOnline: boolean;
+  rating: number;
+  reviewCount: number;
+  products: Product[];
+}
 
 export default function BuyClient() {
-  const { user } = useAuth();
   const router = useRouter();
-  const [vendors, setVendors] = useState<any[]>([]);
+  const { user } = useAuth();
+  const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedType, setSelectedType] = useState('all');
-  const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [locationName, setLocationName] = useState('Detecting...');
-  const [sortBy, setSortBy] = useState<'distance' | 'price' | 'rating'>('distance');
-  const [showFilters, setShowFilters] = useState(false);
-  const [isClient, setIsClient] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'delivery' | 'pickup'>('all');
 
-  const gasTypes = ['all', '3kg', '5kg', '6kg', '12.5kg', '25kg', '50kg'];
+  const fetchSellers = useCallback(async () => {
+    try {
+      const q = query(collection(db, 'vendors'), where('isVerified', '==', true));
+      const snap = await getDocs(q);
+      const results: Seller[] = [];
 
-  useEffect(() => {
-    setIsClient(true);
-    if (typeof window !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          setLocationName('Your Location');
-        },
-        () => {
-          setLocationName('Lagos (default)');
-          setLocation({ lat: 6.5244, lng: 3.3792 });
+      for (const docSnap of snap.docs) {
+        const vendor = { id: docSnap.id, ...docSnap.data() } as Seller;
+        const invSnap = await getDocs(collection(db, 'vendors', docSnap.id, 'inventory'));
+        const products = invSnap.docs.map(d => ({
+          id: d.id,
+          ...d.data(),
+        })).filter((p: any) => p.quantity > 0) as Product[];
+
+        if (products.length > 0) {
+          results.push({ ...vendor, products });
         }
-      );
-    } else {
-      setLocation({ lat: 6.5244, lng: 3.3792 });
-      setLocationName('Lagos (default)');
+      }
+      setSellers(results);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  const loadVendors = useCallback(async () => {
-    if (!location) return;
-    setLoading(true);
-    try {
-      const nearby = await findNearbyVendors(location.lat, location.lng, 20, { isOpen: true });
-      let sorted = nearby;
-      if (sortBy === 'price') sorted = nearby.sort((a, b) => (a.inventory[0]?.price || Infinity) - (b.inventory[0]?.price || Infinity));
-      else if (sortBy === 'rating') sorted = nearby.sort((a, b) => b.rating - a.rating);
-      setVendors(sorted);
-    } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
-  }, [location, sortBy]);
+  useEffect(() => {
+    fetchSellers();
+  }, [fetchSellers]);
 
-  useEffect(() => { 
-    if (isClient && location) loadVendors(); 
-  }, [isClient, location, loadVendors]);
-
-  const handleOrder = (vendor: any, item: any, mode: string) => {
-    if (!user) { router.push('/auth/login'); return; }
-    if (item.quantity < 1) { alert('Out of stock'); return; }
-    const params = new URLSearchParams({ vendor: vendor.id, item: item.id, mode, type: item.gasType, price: item.price.toString() });
+  const handleCheckout = (seller: Seller, product: Product, type: 'pickup' | 'delivery') => {
+    const params = new URLSearchParams({
+      sellerId: seller.id,
+      productId: product.id,
+      size: product.size,
+      brand: product.brand,
+      price: product.price.toString(),
+      qty: '1',
+      type,
+      fee: (seller.deliveryFee || 0).toString(),
+    });
     router.push(`/buyer/checkout?${params.toString()}`);
   };
 
-  if (!isClient) {
-    return (
-      <div className="min-h-screen w-full bg-zinc-950 flex items-center justify-center">
-        <Flame className="w-8 h-8 text-orange-500 animate-pulse" />
-      </div>
-    );
-  }
+  const filtered = sellers.filter(s => {
+    if (filter === 'delivery') return s.hasDelivery;
+    if (filter === 'pickup') return !s.hasDelivery;
+    return true;
+  });
 
   return (
-    <div className="min-h-screen w-full bg-zinc-950 pb-20">
-      <div className="bg-gradient-to-r from-orange-600 to-amber-600 sticky top-0 z-10">
-        <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition">
-              <ArrowLeft className="w-5 h-5 text-white" />
-            </Link>
-            <div>
-              <h1 className="text-lg font-bold text-white flex items-center gap-2">
-                <Flame className="w-5 h-5" /> Buy Gas
-              </h1>
-              <p className="text-[10px] text-orange-100 flex items-center gap-1">
-                <Navigation className="w-3 h-3" /> {locationName}
-              </p>
-            </div>
-          </div>
-          <button onClick={() => setShowFilters(!showFilters)} className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition">
-            <SlidersHorizontal className="w-5 h-5 text-white" />
-          </button>
+    <div className="min-h-screen bg-zinc-950 text-white pb-20">
+      {/* Header */}
+      <div className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
+        <div className="max-w-md mx-auto px-4 h-14 flex items-center">
+          <Link href="/" className="p-2 -ml-2">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="ml-2 font-bold text-lg">Buy Gas</h1>
         </div>
       </div>
 
-      {showFilters && (
-        <div className="bg-zinc-900 border-b border-zinc-800">
-          <div className="max-w-xl mx-auto px-4 py-3">
-            <label className="text-xs text-zinc-400 mb-2 block">Sort by</label>
-            <div className="flex gap-2">
-              {(['distance', 'price', 'rating'] as const).map((sort) => (
-                <button key={sort} onClick={() => setSortBy(sort)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition ${sortBy === sort ? 'bg-orange-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
-                  {sort}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="max-w-xl mx-auto px-4 py-4">
-        <div className="flex gap-2 overflow-x-auto pb-3 mb-3 scrollbar-hide">
-          {gasTypes.map((size) => (
-            <button key={size} onClick={() => setSelectedType(size)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${selectedType === size ? 'bg-orange-600 text-white' : 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700'}`}>
-              {size === 'all' ? 'All' : size}
+      <div className="max-w-md mx-auto px-4 py-4">
+        {/* Filters */}
+        <div className="flex gap-2 mb-4">
+          {(['all', 'delivery', 'pickup'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-2 rounded-full text-xs font-medium transition ${
+                filter === f
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+              }`}
+            >
+              {f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
         </div>
 
-        {!loading && vendors.length > 0 && (
-          <p className="text-zinc-400 text-xs mb-3">Found <span className="text-orange-400 font-bold">{vendors.length}</span> seller{vendors.length !== 1 ? 's' : ''}</p>
-        )}
-
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 animate-pulse">
-                <div className="h-5 bg-zinc-800 rounded w-2/3 mb-2"></div>
-                <div className="h-3 bg-zinc-800 rounded w-1/2"></div>
-              </div>
-            ))}
+          <div className="flex justify-center py-20">
+            <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : vendors.length === 0 ? (
-          <div className="text-center py-10 bg-zinc-900 rounded-xl border border-zinc-800">
-            <Search className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
-            <p className="text-zinc-400 text-sm mb-1">No sellers found nearby</p>
-            <p className="text-zinc-500 text-xs mb-3">Check back soon</p>
-            <button onClick={() => setSelectedType('all')} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 transition">Show all</button>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-20">
+            <Flame className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
+            <p className="text-zinc-500">No sellers found</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {vendors.map((vendor) => (
-              <div key={vendor.id} className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
-                <div className="p-4 border-b border-zinc-800">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-sm text-white flex items-center gap-2 truncate">
-                        {vendor.businessName}
-                        {vendor.isVerified && <span className="text-green-500 text-[10px] bg-green-500/10 px-1.5 py-0.5 rounded-full flex-shrink-0">✓</span>}
-                      </h3>
-                      <p className="text-xs text-zinc-400 flex items-center gap-1 mt-1 truncate">
-                        <MapPin className="w-3 h-3 flex-shrink-0" /> {vendor.address}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2 text-xs">
-                        <span className="text-orange-400 font-medium bg-orange-400/10 px-2 py-0.5 rounded">{vendor.distance?.toFixed(1) || '?'} km</span>
-                        <span className="flex items-center gap-0.5 text-zinc-300">
-                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> {vendor.rating > 0 ? vendor.rating.toFixed(1) : 'New'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${vendor.isOpen ? 'bg-green-500' : 'bg-red-500'}`} />
-                  </div>
-                </div>
-                <div className="divide-y divide-zinc-800">
-                  {vendor.inventory?.filter((item: any) => selectedType === 'all' || item.gasType === selectedType).map((item: any) => (
-                    <div key={item.id} className="p-3 flex items-center justify-between hover:bg-zinc-800/50 transition">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-white flex items-center gap-1.5 truncate">
-                          <Flame className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" /> {item.brand} {item.gasType}
-                        </p>
-                        <p className={`text-xs mt-0.5 ${item.quantity < 5 ? 'text-red-400' : 'text-zinc-500'}`}>
-                          {item.quantity} left{item.quantity < 5 && ' - Low!'}
-                        </p>
-                      </div>
-                      <div className="text-right flex-shrink-0 ml-3">
-                        <p className="text-lg font-bold text-orange-400">₦{item.price?.toLocaleString()}</p>
-                        <div className="flex gap-1.5 mt-1">
-                          <button onClick={() => handleOrder(vendor, item, 'pickup')} disabled={item.quantity < 1}
-                            className="px-2.5 py-1 text-xs border border-orange-500/50 text-orange-400 rounded-md hover:bg-orange-500/10 transition disabled:opacity-40">Pickup</button>
-                          {vendor.hasDelivery && (
-                            <button onClick={() => handleOrder(vendor, item, 'delivery')} disabled={item.quantity < 1}
-                              className="px-2.5 py-1 text-xs bg-orange-600 text-white rounded-md hover:bg-orange-700 transition disabled:opacity-40">Delivery</button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          <div className="space-y-4">
+            {filtered.map(seller => (
+              <SellerCard key={seller.id} seller={seller} onCheckout={handleCheckout} />
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function SellerCard({ seller, onCheckout }: { seller: Seller; onCheckout: (s: Seller, p: Product, t: 'pickup' | 'delivery') => void }) {
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+      {/* Seller Header */}
+      <div className="p-4 border-b border-zinc-800">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="font-bold text-white">{seller.businessName}</h3>
+            <div className="flex items-center gap-1 mt-1">
+              <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+              <span className="text-amber-400 text-sm font-medium">{seller.rating || 4.5}</span>
+              <span className="text-zinc-500 text-sm">({seller.reviewCount || 0})</span>
+            </div>
+            <div className="flex items-center gap-1 mt-1 text-zinc-400 text-xs">
+              <MapPin className="w-3 h-3" />
+              {seller.address}
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full font-medium">Open</span>
+            {seller.hasDelivery && (
+              <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded-full font-medium">Delivery</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Products */}
+      <div className="p-4 space-y-3">
+        {seller.products.map(product => (
+          <div key={product.id} className="flex justify-between items-center py-2 border-b border-zinc-800 last:border-0">
+            <div>
+              <p className="font-semibold text-sm">{product.size} Cylinder</p>
+              <p className="text-zinc-400 text-xs">{product.brand} - {product.stock} in stock</p>
+            </div>
+            <div className="text-right">
+              <p className="text-orange-400 font-bold">₦{product.price.toLocaleString()}</p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => onCheckout(seller, product, 'pickup')}
+                  className="px-3 py-1.5 text-xs bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition"
+                >
+                  Pickup
+                </button>
+                {seller.hasDelivery && (
+                  <button
+                    onClick={() => onCheckout(seller, product, 'delivery')}
+                    className="px-3 py-1.5 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-500 transition"
+                  >
+                    Delivery
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
