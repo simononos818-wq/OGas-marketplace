@@ -39,3 +39,7 @@ serviceAccountKey.json
 serviceAccountKey.json
 .env.local
 *.pem
+serviceAccountKey.json
+.env.local
+*.pem
+.next/
