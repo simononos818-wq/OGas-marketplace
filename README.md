@@ -28,3 +28,4 @@ git push -u origin main
 ### 2. Set up Firebase App Hosting
 
 Continue to [Get started with Firebase App Hosting](https://firebase.google.com/docs/app-hosting/get-started#step-1:).
+// OGas Marketplace - Ready for launch
