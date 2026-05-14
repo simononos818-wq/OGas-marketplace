@@ -155,7 +155,7 @@ function RegisterForm() {
 
             <button type="submit" disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 transition-all text-sm">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Create Account<<ArrowRight className="w-4 h-4" /></>}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Create Account <ArrowRight className="w-4 h-4 inline" /></span>}
             </button>
           </form>
         </div>
