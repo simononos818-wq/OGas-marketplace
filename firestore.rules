@@ -1,43 +1,35 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Users: own profile only
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function isAuthenticated() {
+      return request.auth != null;
     }
-    
-    // Sellers: public read, own write
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+    }
     match /sellers/{sellerId} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == sellerId;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
     }
-    
-    // Orders: create if auth, read/update if involved party
-    match /orders/{orderId} {
-      allow create: if request.auth != null;
-      allow read, update: if request.auth != null && 
-        (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
-    }
-    
-    // Products: public read, verified sellers write
     match /products/{productId} {
       allow read: if true;
-      allow write: if request.auth != null && 
-        exists(/databases/$(database)/documents/sellers/$(request.auth.uid));
+      allow create, update, delete: if isAuthenticated();
     }
-    
-    // Business package orders: buyer only
-    match /businessOrders/{orderId} {
-      allow create: if request.auth != null;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && 
+        (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.buyerId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+        (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
     }
-    
-    // Reviews: public read, verified buyers write
-    match /reviews/{reviewId} {
-      allow read: if true;
-      allow create: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    match /carts/{userId} {
+      allow read, write: if isOwner(userId);
     }
   }
 }
