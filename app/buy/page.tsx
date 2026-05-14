@@ -7,6 +7,8 @@ import { findNearbyVendors } from '@/lib/vendorService';
 import Link from 'next/link';
 import { MapPin, Flame, Star, ArrowLeft, SlidersHorizontal, Search, Navigation } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function BuyGas() {
   const { user } = useAuth();
   const router = useRouter();
