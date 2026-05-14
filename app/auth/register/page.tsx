@@ -1,19 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { Flame, Loader2, Eye, EyeOff, Mail, Lock, User, ArrowRight, Phone, MapPin } from 'lucide-react';
+import { Flame, Loader2, Eye, EyeOff, Mail, Lock, User, Phone, ArrowRight, Gift } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
+type UserType = 'buyer' | 'seller';
+
 export default function RegisterPage() {
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [userType, setUserType] = useState<UserType>('buyer');
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -21,7 +23,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefillRef = searchParams.get('ref') || '';
-  
+
   const { registerWithEmail } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,38 +32,56 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      await registerWithEmail(email, password, role);
+      // Register with Firebase Auth
+      await registerWithEmail(email, password, userType);
       
-      // Generate referral code for this user
-      const myReferralCode = 'OG' + Math.random().toString(36).substring(2, 8).toUpperCase();
-      
-      // Save user profile
-      const userDoc = {
-        name,
+      // Get current user UID (should be set after registerWithEmail)
+      const { auth } = await import('@/lib/firebase');
+      const uid = auth.currentUser?.uid;
+      if (!uid) throw new Error('Registration failed');
+
+      // Generate unique referral code
+      const myCode = 'OG' + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      // Save user profile to Firestore
+      await setDoc(doc(db, 'users', uid), {
+        uid,
+        name: fullName,
         email,
         phone,
-        userType: role,
-        referralCode: myReferralCode,
+        userType,
+        referralCode: myCode,
         referrals: 0,
         referralEarnings: 0,
-        createdAt: new Date().toISOString(),
-      };
-      
-      // If they used someone else's referral code
-      if (referralCode || prefillRef) {
-        const refCode = referralCode || prefillRef;
-        const q = await getDoc(doc(db, 'referralCodes', refCode));
-        if (q.exists()) {
-          const referrerId = q.data().userId;
-          await setDoc(doc(db, 'users', referrerId, 'referrals', myReferralCode), {
-            referredUser: email,
-            date: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+      });
+
+      // Save referral code mapping
+      await setDoc(doc(db, 'referralCodes', myCode), {
+        userId: uid,
+        email,
+        createdAt: serverTimestamp(),
+      });
+
+      // If user came with a referral code, credit the referrer
+      const usedCode = referralCode || prefillRef;
+      if (usedCode) {
+        const refDoc = await getDoc(doc(db, 'referralCodes', usedCode));
+        if (refDoc.exists()) {
+          const referrerId = refDoc.data().userId;
+          // Add to referrer's pending referrals
+          await setDoc(doc(db, 'users', referrerId, 'referrals', uid), {
+            referredUserId: uid,
+            referredName: fullName,
+            referredEmail: email,
             status: 'pending',
+            createdAt: serverTimestamp(),
           });
         }
       }
-      
-      router.push(role === 'seller' ? '/seller-dashboard' : '/buy');
+
+      // Redirect based on role
+      router.push(userType === 'seller' ? '/seller-dashboard' : '/buy');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -71,137 +91,99 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen w-full bg-zinc-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 mb-3">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 mb-3 shadow-lg shadow-orange-500/25">
             <Flame className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-1">Join OGas</h1>
-          <p className="text-zinc-400 text-sm">Start buying or selling gas</p>
+          <h1 className="text-xl font-bold text-white mb-1">Join OGas</h1>
+          <p className="text-zinc-400 text-xs">Buy or sell gas across Nigeria</p>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl mb-4 text-sm">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-3 py-2 rounded-lg mb-3 text-xs">
             {error}
           </div>
         )}
 
-        <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 rounded-3xl p-6 space-y-5">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
           {/* Role Toggle */}
-          <div className="flex gap-2 p-1 bg-zinc-800 rounded-xl">
-            <button
-              onClick={() => setRole('buyer')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-                role === 'buyer' ? 'bg-orange-600 text-white' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              I Want to Buy Gas
+          <div className="flex gap-1 p-1 bg-zinc-800 rounded-lg">
+            <button onClick={() => setUserType('buyer')}
+              className={`flex-1 py-2 rounded-md text-xs font-medium transition ${userType === 'buyer' ? 'bg-orange-600 text-white' : 'text-zinc-400 hover:text-white'}`}>
+              I Buy Gas
             </button>
-            <button
-              onClick={() => setRole('seller')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-                role === 'seller' ? 'bg-orange-600 text-white' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              I Want to Sell Gas
+            <button onClick={() => setUserType('seller')}
+              className={`flex-1 py-2 rounded-md text-xs font-medium transition ${userType === 'seller' ? 'bg-orange-600 text-white' : 'text-zinc-400 hover:text-white'}`}>
+              I Sell Gas
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">Full Name</label>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Full Name</label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-                <input 
-                  type="text" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all" 
-                  required 
-                />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2.5 pl-9 pr-3 text-sm text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                  placeholder="John Doe" required />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">Email</label>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-                <input 
-                  type="email" 
-                  value={email} 
-                  onChange={(e) => setEmail(e.target.value)} 
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all" 
-                  required 
-                />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2.5 pl-9 pr-3 text-sm text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                  placeholder="you@email.com" required />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">Phone Number</label>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Phone</label>
               <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-                <input 
-                  type="tel" 
-                  value={phone} 
-                  onChange={(e) => setPhone(e.target.value)} 
-                  placeholder="+234..."
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all" 
-                  required 
-                />
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2.5 pl-9 pr-3 text-sm text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                  placeholder="+234 801 234 5678" required />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">Password</label>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-                <input 
-                  type={showPassword ? 'text' : 'password'} 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)} 
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-12 text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all" 
-                  required 
-                />
-                <button 
-                  type="button" 
-                  onClick={() => setShowPassword(!showPassword)} 
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2.5 pl-9 pr-10 text-sm text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                  placeholder="Min 6 characters" required minLength={6} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">Referral Code (optional)</label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-                <input 
-                  type="text" 
-                  value={referralCode || prefillRef} 
-                  onChange={(e) => setReferralCode(e.target.value)} 
-                  placeholder="Enter friend's code"
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all" 
-                />
-              </div>
-              <p className="text-xs text-zinc-500 mt-1">Have a friend's code? Enter it to give them credit.</p>
+              <label className="block text-xs font-medium text-zinc-400 mb-1 flex items-center gap-1">
+                <Gift className="w-3 h-3 text-orange-400" />
+                Referral Code (optional)
+              </label>
+              <input type="text" value={referralCode || prefillRef} onChange={(e) => setReferralCode(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                placeholder="Friend's code (e.g. OGABC123)" />
             </div>
 
-            <button 
-              type="submit" 
-              disabled={loading} 
-              className="w-full py-3.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 hover:from-orange-600 hover:to-amber-600 transition-all"
-            >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Create Account<ArrowRight className="w-5 h-5" /></>}
+            <button type="submit" disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 transition-all text-sm">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Create Account<ArrowRight className="w-4 h-4" /></>}
             </button>
           </form>
         </div>
 
-        <p className="text-center mt-6 text-zinc-500 text-sm">
+        <p className="text-center mt-4 text-zinc-500 text-xs">
           Already have an account?{' '}
-          <Link href="/auth/login" className="text-orange-400 hover:text-orange-300 transition-colors font-medium">
-            Sign in
-          </Link>
+          <Link href="/auth/login" className="text-orange-400 hover:text-orange-300 transition-colors font-medium">Sign in</Link>
         </p>
       </div>
     </div>
