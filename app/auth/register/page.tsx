@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { Flame, Loader2, Eye, EyeOff, Mail, Lock, User, Phone, ArrowRight, Gift } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -10,7 +10,7 @@ import { db } from '@/lib/firebase';
 
 type UserType = 'buyer' | 'seller';
 
-export default function RegisterPage() {
+function RegisterForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -32,55 +32,35 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      // Register with Firebase Auth
       await registerWithEmail(email, password, userType);
-      
-      // Get current user UID (should be set after registerWithEmail)
       const { auth } = await import('@/lib/firebase');
       const uid = auth.currentUser?.uid;
       if (!uid) throw new Error('Registration failed');
 
-      // Generate unique referral code
       const myCode = 'OG' + Math.random().toString(36).substring(2, 8).toUpperCase();
 
-      // Save user profile to Firestore
       await setDoc(doc(db, 'users', uid), {
-        uid,
-        name: fullName,
-        email,
-        phone,
-        userType,
-        referralCode: myCode,
-        referrals: 0,
-        referralEarnings: 0,
+        uid, name: fullName, email, phone, userType,
+        referralCode: myCode, referrals: 0, referralEarnings: 0,
         createdAt: serverTimestamp(),
       });
 
-      // Save referral code mapping
       await setDoc(doc(db, 'referralCodes', myCode), {
-        userId: uid,
-        email,
-        createdAt: serverTimestamp(),
+        userId: uid, email, createdAt: serverTimestamp(),
       });
 
-      // If user came with a referral code, credit the referrer
       const usedCode = referralCode || prefillRef;
       if (usedCode) {
         const refDoc = await getDoc(doc(db, 'referralCodes', usedCode));
         if (refDoc.exists()) {
           const referrerId = refDoc.data().userId;
-          // Add to referrer's pending referrals
           await setDoc(doc(db, 'users', referrerId, 'referrals', uid), {
-            referredUserId: uid,
-            referredName: fullName,
-            referredEmail: email,
-            status: 'pending',
-            createdAt: serverTimestamp(),
+            referredUserId: uid, referredName: fullName, referredEmail: email,
+            status: 'pending', createdAt: serverTimestamp(),
           });
         }
       }
 
-      // Redirect based on role
       router.push(userType === 'seller' ? '/seller-dashboard' : '/buy');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
@@ -107,7 +87,6 @@ export default function RegisterPage() {
         )}
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
-          {/* Role Toggle */}
           <div className="flex gap-1 p-1 bg-zinc-800 rounded-lg">
             <button onClick={() => setUserType('buyer')}
               className={`flex-1 py-2 rounded-md text-xs font-medium transition ${userType === 'buyer' ? 'bg-orange-600 text-white' : 'text-zinc-400 hover:text-white'}`}>
@@ -187,5 +166,24 @@ export default function RegisterPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function RegisterLoading() {
+  return (
+    <div className="min-h-screen w-full bg-zinc-950 flex items-center justify-center">
+      <div className="text-center">
+        <Flame className="w-8 h-8 text-orange-500 animate-pulse mx-auto mb-2" />
+        <p className="text-zinc-400 text-sm">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<RegisterLoading />}>
+      <RegisterForm />
+    </Suspense>
   );
 }

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { findNearbyVendors } from '@/lib/vendorService';
 import Link from 'next/link';
-import { MapPin, Flame, Star, Phone, ArrowLeft, SlidersHorizontal, Search, Navigation } from 'lucide-react';
+import { MapPin, Flame, Star, ArrowLeft, SlidersHorizontal, Search, Navigation } from 'lucide-react';
 
 export default function BuyGas() {
   const { user } = useAuth();
@@ -17,11 +17,13 @@ export default function BuyGas() {
   const [locationName, setLocationName] = useState('Detecting...');
   const [sortBy, setSortBy] = useState<'distance' | 'price' | 'rating'>('distance');
   const [showFilters, setShowFilters] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   const gasTypes = ['all', '3kg', '5kg', '6kg', '12.5kg', '25kg', '50kg'];
 
   useEffect(() => {
-    if (navigator.geolocation) {
+    setIsClient(true);
+    if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
@@ -53,7 +55,9 @@ export default function BuyGas() {
     setLoading(false);
   }, [location, sortBy]);
 
-  useEffect(() => { loadVendors(); }, [loadVendors]);
+  useEffect(() => { 
+    if (isClient && location) loadVendors(); 
+  }, [isClient, location, loadVendors]);
 
   const handleOrder = (vendor: any, item: any, mode: string) => {
     if (!user) { router.push('/auth/login'); return; }
@@ -62,9 +66,16 @@ export default function BuyGas() {
     router.push(`/buyer/checkout?${params.toString()}`);
   };
 
+  if (!isClient) {
+    return (
+      <div className="min-h-screen w-full bg-zinc-950 flex items-center justify-center">
+        <Flame className="w-8 h-8 text-orange-500 animate-pulse" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full bg-zinc-950 pb-20">
-      {/* Header */}
       <div className="bg-gradient-to-r from-orange-600 to-amber-600 sticky top-0 z-10">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -73,12 +84,10 @@ export default function BuyGas() {
             </Link>
             <div>
               <h1 className="text-lg font-bold text-white flex items-center gap-2">
-                <Flame className="w-5 h-5" />
-                Buy Gas
+                <Flame className="w-5 h-5" /> Buy Gas
               </h1>
               <p className="text-[10px] text-orange-100 flex items-center gap-1">
-                <Navigation className="w-3 h-3" />
-                {locationName}
+                <Navigation className="w-3 h-3" /> {locationName}
               </p>
             </div>
           </div>
@@ -88,7 +97,6 @@ export default function BuyGas() {
         </div>
       </div>
 
-      {/* Filters */}
       {showFilters && (
         <div className="bg-zinc-900 border-b border-zinc-800">
           <div className="max-w-xl mx-auto px-4 py-3">
@@ -106,7 +114,6 @@ export default function BuyGas() {
       )}
 
       <div className="max-w-xl mx-auto px-4 py-4">
-        {/* Size Filter */}
         <div className="flex gap-2 overflow-x-auto pb-3 mb-3 scrollbar-hide">
           {gasTypes.map((size) => (
             <button key={size} onClick={() => setSelectedType(size)}
@@ -133,14 +140,13 @@ export default function BuyGas() {
           <div className="text-center py-10 bg-zinc-900 rounded-xl border border-zinc-800">
             <Search className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
             <p className="text-zinc-400 text-sm mb-1">No sellers found nearby</p>
-            <p className="text-zinc-500 text-xs mb-3">Check back soon or try a wider search</p>
+            <p className="text-zinc-500 text-xs mb-3">Check back soon</p>
             <button onClick={() => setSelectedType('all')} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 transition">Show all</button>
           </div>
         ) : (
           <div className="space-y-3">
             {vendors.map((vendor) => (
               <div key={vendor.id} className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
-                {/* Vendor Header */}
                 <div className="p-4 border-b border-zinc-800">
                   <div className="flex justify-between items-start">
                     <div className="flex-1 min-w-0">
@@ -149,29 +155,24 @@ export default function BuyGas() {
                         {vendor.isVerified && <span className="text-green-500 text-[10px] bg-green-500/10 px-1.5 py-0.5 rounded-full flex-shrink-0">✓</span>}
                       </h3>
                       <p className="text-xs text-zinc-400 flex items-center gap-1 mt-1 truncate">
-                        <MapPin className="w-3 h-3 flex-shrink-0" />
-                        {vendor.address}
+                        <MapPin className="w-3 h-3 flex-shrink-0" /> {vendor.address}
                       </p>
                       <div className="flex items-center gap-2 mt-2 text-xs">
                         <span className="text-orange-400 font-medium bg-orange-400/10 px-2 py-0.5 rounded">{vendor.distance?.toFixed(1) || '?'} km</span>
                         <span className="flex items-center gap-0.5 text-zinc-300">
-                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                          {vendor.rating > 0 ? vendor.rating.toFixed(1) : 'New'}
+                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> {vendor.rating > 0 ? vendor.rating.toFixed(1) : 'New'}
                         </span>
                       </div>
                     </div>
                     <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${vendor.isOpen ? 'bg-green-500' : 'bg-red-500'}`} />
                   </div>
                 </div>
-
-                {/* Inventory */}
                 <div className="divide-y divide-zinc-800">
                   {vendor.inventory?.filter((item: any) => selectedType === 'all' || item.gasType === selectedType).map((item: any) => (
                     <div key={item.id} className="p-3 flex items-center justify-between hover:bg-zinc-800/50 transition">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-white flex items-center gap-1.5 truncate">
-                          <Flame className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
-                          {item.brand} {item.gasType}
+                          <Flame className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" /> {item.brand} {item.gasType}
                         </p>
                         <p className={`text-xs mt-0.5 ${item.quantity < 5 ? 'text-red-400' : 'text-zinc-500'}`}>
                           {item.quantity} left{item.quantity < 5 && ' - Low!'}
