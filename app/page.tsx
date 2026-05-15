@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Flame, MapPin, Truck, Phone, Navigation, Star, ChevronRight } from 'lucide-react';
 import BottomNav from '@/app/components/MobileNav';
+import SupportButton from '@/app/components/SupportButton';
 import Fab from '@/app/components/Fab';
 
 export default function Home() {
@@ -106,7 +107,7 @@ export default function Home() {
       </section>
 
       <Fab />
-      <BottomNav />
+      <SupportButton />\n      <BottomNav />
     </main>
   );
 }

@@ -144,10 +144,15 @@ export default function BuyClient() {
         {loading ? (
           <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
         ) : filteredSellers.length === 0 ? (
-          <div className="text-center py-20">
-            <Flame className="w-16 h-16 text-zinc-800 mx-auto mb-4" />
-            <p className="text-zinc-500 font-medium">No sellers found</p>
-            <p className="text-zinc-600 text-sm mt-1">Try adjusting your filters</p>
+          <div className="text-center py-16 px-4">
+            <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Flame className="w-10 h-10 text-orange-500" />
+            </div>
+            <p className="text-white font-bold text-lg mb-2">No sellers nearby yet</p>
+            <p className="text-zinc-500 text-sm mb-6">Be the first to sell gas in your area and earn instantly</p>
+            <a href="/auth/register" className="inline-block px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold rounded-xl hover:scale-105 transition-transform">
+              Become a Seller →
+            </a>
           </div>
         ) : (
           <>
