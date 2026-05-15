@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import Link from 'next/link';
-import { MapPin, Flame, Star, Phone, ArrowLeft, ShoppingCart } from 'lucide-react';
+import { Search, SlidersHorizontal, Flame } from 'lucide-react';
+import BottomNav from '@/app/components/MobileNav';
+import SellerCard from '@/app/components/SellerCard';
+import { SkeletonCard } from '@/app/components/Skeleton';
 
 interface Product {
   id: string;
@@ -30,33 +30,47 @@ interface Seller {
 }
 
 export default function BuyClient() {
-  const router = useRouter();
-  const { user } = useAuth();
   const [sellers, setSellers] = useState<Seller[]>([]);
+  const [filteredSellers, setFilteredSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'delivery' | 'pickup'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterDelivery, setFilterDelivery] = useState(false);
+  const [filterOnline, setFilterOnline] = useState(false);
 
   const fetchSellers = useCallback(async () => {
     try {
-      const q = query(collection(db, 'vendors'), where('isVerified', '==', true));
-      const snap = await getDocs(q);
-      const results: Seller[] = [];
-
-      for (const docSnap of snap.docs) {
-        const vendor = { id: docSnap.id, ...docSnap.data() } as Seller;
-        const invSnap = await getDocs(collection(db, 'vendors', docSnap.id, 'inventory'));
-        const products = invSnap.docs.map(d => ({
-          id: d.id,
-          ...d.data(),
-        })).filter((p: any) => p.quantity > 0) as Product[];
-
-        if (products.length > 0) {
-          results.push({ ...vendor, products });
-        }
+      const q = query(
+        collection(db, 'vendors'),
+        where('isVerified', '==', true),
+        orderBy('rating', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      const sellersData: Seller[] = [];
+      
+      for (const doc of snapshot.docs) {
+        const vendor = doc.data();
+        const invSnap = await getDocs(collection(db, 'vendors', doc.id, 'inventory'));
+        const products = invSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+        
+        sellersData.push({
+          id: doc.id,
+          businessName: vendor.businessName || 'Unknown Vendor',
+          address: vendor.address || 'Nigeria',
+          phone: vendor.phone || '',
+          hasDelivery: vendor.hasDelivery || false,
+          deliveryFee: vendor.deliveryFee,
+          isOnline: vendor.isOnline || false,
+          rating: vendor.rating || 4.0,
+          reviewCount: vendor.reviewCount || 0,
+          products: products.filter(p => p.stock > 0),
+        });
       }
-      setSellers(results);
-    } catch (err) {
-      console.error(err);
+      
+      setSellers(sellersData);
+      setFilteredSellers(sellersData);
+    } catch (error) {
+      console.error('Error fetching sellers:', error);
     } finally {
       setLoading(false);
     }
@@ -66,134 +80,88 @@ export default function BuyClient() {
     fetchSellers();
   }, [fetchSellers]);
 
-  const handleCheckout = (seller: Seller, product: Product, type: 'pickup' | 'delivery') => {
-    const params = new URLSearchParams({
-      sellerId: seller.id,
-      productId: product.id,
-      size: product.size,
-      brand: product.brand,
-      price: product.price.toString(),
-      qty: '1',
-      type,
-      fee: (seller.deliveryFee || 0).toString(),
-    });
-    router.push(`/buyer/checkout?${params.toString()}`);
-  };
-
-  const filtered = sellers.filter(s => {
-    if (filter === 'delivery') return s.hasDelivery;
-    if (filter === 'pickup') return !s.hasDelivery;
-    return true;
-  });
+  useEffect(() => {
+    let filtered = sellers;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(s => 
+        s.businessName.toLowerCase().includes(q) ||
+        s.address.toLowerCase().includes(q) ||
+        s.products.some(p => p.brand.toLowerCase().includes(q))
+      );
+    }
+    if (filterDelivery) filtered = filtered.filter(s => s.hasDelivery);
+    if (filterOnline) filtered = filtered.filter(s => s.isOnline);
+    setFilteredSellers(filtered);
+  }, [searchQuery, filterDelivery, filterOnline, sellers]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pb-20">
-      {/* Header */}
-      <div className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
-        <div className="max-w-md mx-auto px-4 h-14 flex items-center">
-          <Link href="/" className="p-2 -ml-2">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <h1 className="ml-2 font-bold text-lg">Buy Gas</h1>
-        </div>
-      </div>
-
-      <div className="max-w-md mx-auto px-4 py-4">
-        {/* Filters */}
-        <div className="flex gap-2 mb-4">
-          {(['all', 'delivery', 'pickup'] as const).map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-full text-xs font-medium transition ${
-                filter === f
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
-              }`}
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
+    <main className="min-h-screen bg-zinc-950 pb-24">
+      <header className="fixed top-0 left-0 right-0 bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-800 z-40 pt-safe">
+        <div className="max-w-md mx-auto px-4 py-3 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search sellers, brands..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
+              />
+            </div>
+            <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                showFilters ? 'bg-orange-500 text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-400'
+              }`}>
+              <SlidersHorizontal className="w-5 h-5" />
             </button>
-          ))}
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : filtered.length === 0 ? (
+          
+          {showFilters && (
+            <div className="flex gap-2 pb-1">
+              <button
+                onClick={() => setFilterDelivery(!filterDelivery)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  filterDelivery ? 'bg-orange-500 text-white' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                }`}>
+                Delivery Only
+              </button>
+              <button
+                onClick={() => setFilterOnline(!filterOnline)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  filterOnline ? 'bg-orange-500 text-white' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                }`}>
+                Online Now
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div className="pt-24 px-4 space-y-4">
+        {loading ? (
+          <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
+        ) : filteredSellers.length === 0 ? (
           <div className="text-center py-20">
-            <Flame className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
-            <p className="text-zinc-500">No sellers found</p>
+            <Flame className="w-16 h-16 text-zinc-800 mx-auto mb-4" />
+            <p className="text-zinc-500 font-medium">No sellers found</p>
+            <p className="text-zinc-600 text-sm mt-1">Try adjusting your filters</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filtered.map(seller => (
-              <SellerCard key={seller.id} seller={seller} onCheckout={handleCheckout} />
+          <>
+            <p className="text-xs text-zinc-500 font-medium">
+              {filteredSellers.length} seller{filteredSellers.length !== 1 ? 's' : ''} found
+            </p>
+            {filteredSellers.map(seller => (
+              <SellerCard key={seller.id} seller={seller} />
             ))}
-          </div>
+          </>
         )}
       </div>
-    </div>
-  );
-}
 
-function SellerCard({ seller, onCheckout }: { seller: Seller; onCheckout: (s: Seller, p: Product, t: 'pickup' | 'delivery') => void }) {
-  return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-      {/* Seller Header */}
-      <div className="p-4 border-b border-zinc-800">
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="font-bold text-white">{seller.businessName}</h3>
-            <div className="flex items-center gap-1 mt-1">
-              <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span className="text-amber-400 text-sm font-medium">{seller.rating || 4.5}</span>
-              <span className="text-zinc-500 text-sm">({seller.reviewCount || 0})</span>
-            </div>
-            <div className="flex items-center gap-1 mt-1 text-zinc-400 text-xs">
-              <MapPin className="w-3 h-3" />
-              {seller.address}
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full font-medium">Open</span>
-            {seller.hasDelivery && (
-              <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded-full font-medium">Delivery</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Products */}
-      <div className="p-4 space-y-3">
-        {seller.products.map(product => (
-          <div key={product.id} className="flex justify-between items-center py-2 border-b border-zinc-800 last:border-0">
-            <div>
-              <p className="font-semibold text-sm">{product.size} Cylinder</p>
-              <p className="text-zinc-400 text-xs">{product.brand} - {product.stock} in stock</p>
-            </div>
-            <div className="text-right">
-              <p className="text-orange-400 font-bold">₦{product.price.toLocaleString()}</p>
-              <div className="flex gap-2 mt-2">
-                <button
-                  onClick={() => onCheckout(seller, product, 'pickup')}
-                  className="px-3 py-1.5 text-xs bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition"
-                >
-                  Pickup
-                </button>
-                {seller.hasDelivery && (
-                  <button
-                    onClick={() => onCheckout(seller, product, 'delivery')}
-                    className="px-3 py-1.5 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-500 transition"
-                  >
-                    Delivery
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+      <BottomNav />
+    </main>
   );
 }

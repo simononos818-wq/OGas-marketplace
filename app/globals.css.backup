@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+body {
+  background: #09090b;
+  color: white;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@layer components {
+  .app-container {
+    @apply max-w-md mx-auto min-h-screen bg-zinc-950 relative;
+  }
+  
+  .bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800 z-50;
+    padding-bottom: var(--safe-bottom);
+  }
+  
+  .page-content {
+    @apply pb-24 pt-14;
+  }
+  
+  .sticky-header {
+    @apply fixed top-0 left-0 right-0 bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-800 z-40;
+    padding-top: var(--safe-top);
+  }
+}

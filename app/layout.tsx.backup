@@ -6,8 +6,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "OGas - Cooking Gas Marketplace",
-  description: "Quality cooking gas delivered fast. Find verified sellers near you.",
+  title: "OGas - LPG Marketplace Nigeria",
+  description: "Buy and refill cooking gas anywhere in Nigeria. Find nearest verified sellers, order delivery or pickup. Smart calculator, business packages, secure Paystack payments.",
 };
 
 export const viewport: Viewport = {
@@ -15,7 +15,6 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#09090b",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -23,9 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${inter.className} min-h-screen w-full bg-zinc-950 text-white antialiased`}>
         <AuthProvider>
-          <div className="max-w-md mx-auto min-h-screen bg-zinc-950 relative shadow-2xl shadow-black">
-            {children}
-          </div>
+          {children}
         </AuthProvider>
       </body>
     </html>
