@@ -100,7 +100,7 @@ function CheckoutContent() {
         { display_name: 'Seller', variable_name: 'seller', value: seller?.businessName || '' },
       ],
     },
-    publicKey: 'pk_live_b73e1e169529e05ae4ba2272fb7f7937d226be3c',
+    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || 'pk_live_b73e1e169529e05ae4ba2272fb7f7937d226be3c',
     text: `Pay ₦${total.toLocaleString()}`,
     onSuccess: handleSuccess,
     onClose: handleClose,
