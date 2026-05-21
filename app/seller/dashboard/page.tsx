@@ -1,277 +1,205 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { 
-  collection, query, where, getDocs, doc, updateDoc, 
-  onSnapshot, orderBy, Timestamp 
+import {
+  collection, query, where, getDocs, doc, getDoc, updateDoc,
+  onSnapshot, orderBy, Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { Phone, MapPin, Package, DollarSign, Star, CheckCircle, XCircle, Truck, User } from 'lucide-react';
+import Link from 'next/link';
 
-interface Order {
-  id: string;
-  buyerName: string;
-  buyerPhone: string;
-  buyerAddress: string;
-  gasSize: string;
-  quantity: number;
-  totalAmount: number;
-  status: string;
-  paymentStatus: string;
-  paymentMethod: string;
-  createdAt: Timestamp;
-}
-
-interface SellerProfile {
-  id: string;
-  businessName: string;
-  phone: string;
-  address: string;
-  isAvailable: boolean;
-  totalOrders: number;
-  totalEarnings: number;
-}
-
-export default function SellerDashboard() {
+function DashboardContent() {
   const searchParams = useSearchParams();
-  const sellerId = searchParams.get('id') || 'demo-seller';
-  
-  const [profile, setProfile] = useState<SellerProfile | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [activeTab, setActiveTab] = useState<'orders' | 'profile' | 'earnings'>('orders');
+  const [orders, setOrders] = useState<any[]>([]);
+  const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [isAvailable, setIsAvailable] = useState(true);
+  const [activeTab, setActiveTab] = useState('orders');
+  const sellerId = searchParams.get('sellerId') || 'seller_simon_001';
 
   useEffect(() => {
-    loadSellerData();
-    const unsub = subscribeToOrders();
-    return () => unsub();
-  }, [sellerId]);
+    if (!sellerId) return;
+    
+    // Fetch seller profile
+    const unsubProfile = onSnapshot(doc(db, 'sellers', sellerId), (snap) => {
+      if (snap.exists()) setProfile(snap.data());
+    });
 
-  const loadSellerData = async () => {
-    try {
-      const ref = doc(db, 'vendors', sellerId);
-      const snap = await getDoc(ref);
-      if (snap.exists()) {
-        const data = snap.data() as SellerProfile;
-        setProfile({ ...data, id: snap.id });
-        setIsAvailable(data.isAvailable !== false);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const subscribeToOrders = () => {
+    // Fetch orders
     const q = query(
       collection(db, 'orders'),
       where('sellerId', '==', sellerId),
       orderBy('createdAt', 'desc')
     );
     
-    return onSnapshot(q, (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Order));
+    const unsubOrders = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setOrders(data);
-      
-      // Update earnings in profile
-      const earnings = data
-        .filter(o => o.paymentStatus === 'paid' || o.paymentMethod === 'cash')
-        .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-      
-      if (profile) {
-        setProfile(prev => prev ? { ...prev, totalOrders: data.length, totalEarnings: earnings } : null);
-      }
+      setLoading(false);
     });
-  };
 
-  const toggleAvailability = async () => {
-    try {
-      const newStatus = !isAvailable;
-      await updateDoc(doc(db, 'vendors', sellerId), { isAvailable: newStatus });
-      setIsAvailable(newStatus);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+    return () => {
+      unsubProfile();
+      unsubOrders();
+    };
+  }, [sellerId]);
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    try {
-      await updateDoc(doc(db, 'orders', orderId), { status: newStatus });
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'text-yellow-400';
-      case 'confirmed': return 'text-blue-400';
-      case 'out_for_delivery': return 'text-purple-400';
-      case 'delivered': return 'text-green-400';
-      case 'cancelled': return 'text-red-400';
-      default: return 'text-gray-400';
-    }
+  const updateStatus = async (orderId: string, status: string) => {
+    await updateDoc(doc(db, 'orders', orderId), {
+      status,
+      updatedAt: Timestamp.now()
+    });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-gray-900 text-white p-4">
+        <div className="animate-pulse space-y-4">
+          <div className="h-16 bg-gray-800 rounded-xl" />
+          <div className="h-32 bg-gray-800 rounded-xl" />
+          <div className="space-y-3">
+            {[1,2,3].map(i => (
+              <div key={i} className="h-24 bg-gray-800 rounded-xl" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
 
-  const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'pending_payment');
-  const todayOrders = orders.filter(o => {
-    const orderDate = o.createdAt?.toDate();
-    const today = new Date();
-    return orderDate && orderDate.toDateString() === today.toDateString();
-  });
-
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
-      <div className="sticky top-0 z-50 bg-gray-900/95 border-b border-gray-800 backdrop-blur">
-        <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
-          <h1 className="font-bold text-lg">Seller Dashboard</h1>
+      <div className="bg-gradient-to-r from-orange-600 to-red-600 p-4 pb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-black">OGas Seller</h1>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">{isAvailable ? '🟢 Online' : '🔴 Offline'}</span>
-            <button
-              onClick={toggleAvailability}
-              className={`w-12 h-6 rounded-full transition-colors ${isAvailable ? 'bg-green-500' : 'bg-gray-600'}`}
-            >
-              <div className={`w-5 h-5 bg-white rounded-full transition-transform ${isAvailable ? 'translate-x-6' : 'translate-x-0.5'}`} />
-            </button>
+            <div className={`w-3 h-3 rounded-full ${profile?.isAvailable ? 'bg-green-400' : 'bg-red-400'}`} />
+            <span className="text-sm">{profile?.isAvailable ? 'Online' : 'Offline'}</span>
           </div>
         </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="max-w-md mx-auto px-4 py-4 grid grid-cols-3 gap-3">
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-orange-400">{todayOrders.length}</p>
-          <p className="text-xs text-gray-400">Today</p>
-        </div>
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-orange-400">{pendingOrders.length}</p>
-          <p className="text-xs text-gray-400">Pending</p>
-        </div>
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-green-400">₦{(profile?.totalEarnings || 0).toLocaleString()}</p>
-          <p className="text-xs text-gray-400">Earnings</p>
+        
+        <div className="bg-white/10 backdrop-blur rounded-xl p-4">
+          <h2 className="text-lg font-bold">{profile?.businessName || 'Your Business'}</h2>
+          <p className="text-sm text-white/70">{profile?.ownerName}</p>
+          <div className="flex items-center gap-4 mt-2 text-sm">
+            <span className="flex items-center gap-1">
+              <Star className="w-4 h-4 text-yellow-400" />
+              {profile?.rating || 5.0}
+            </span>
+            <span className="flex items-center gap-1">
+              <Package className="w-4 h-4" />
+              {profile?.totalOrders || 0} orders
+            </span>
+            <span className="flex items-center gap-1">
+              <DollarSign className="w-4 h-4 text-green-400" />
+              ₦{(profile?.totalEarnings || 0).toLocaleString()}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="max-w-md mx-auto px-4 flex gap-2 mb-4">
-        {(['orders', 'profile', 'earnings'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2 rounded-lg font-semibold text-sm capitalize transition-colors ${
-              activeTab === tab ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-400'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+      <div className="px-4 -mt-4">
+        <div className="bg-gray-800 rounded-xl p-1 flex">
+          {['orders', 'earnings'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg capitalize ${
+                activeTab === tab ? 'bg-orange-500 text-white' : 'text-gray-400'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Tab Content */}
-      <div className="max-w-md mx-auto px-4 pb-8">
+      {/* Content */}
+      <div className="p-4 space-y-3">
         {activeTab === 'orders' && (
           <div className="space-y-3">
-            {orders.length === 0 ? (
+            {orders.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-gray-400">No orders yet.</p>
-                <p className="text-sm text-gray-500 mt-2">Orders will appear here when buyers place them.</p>
+                <Package className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">No orders yet</p>
+                <p className="text-sm text-gray-500 mt-1">Orders will appear here when customers buy</p>
               </div>
-            ) : (
-              orders.map(order => (
-                <div key={order.id} className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="font-bold">{order.buyerName}</p>
-                      <p className="text-sm text-gray-400">📞 {order.buyerPhone}</p>
-                      <p className="text-sm text-gray-400">📍 {order.buyerAddress}</p>
-                    </div>
-                    <span className={`text-xs font-semibold ${getStatusColor(order.status)}`}>
-                      {order.status.replace(/_/g, ' ').toUpperCase()}
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-gray-400">{order.quantity}x {order.gasSize}kg</span>
-                    <span className="font-bold">₦{order.totalAmount?.toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex gap-2 mt-3">
-                    {order.status === 'pending' && (
-                      <>
-                        <button
-                          onClick={() => updateOrderStatus(order.id, 'confirmed')}
-                          className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-semibold"
-                        >
-                          Accept
-                        </button>
-                        <button
-                          onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                          className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-semibold"
-                        >
-                          Reject
-                        </button>
-                      </>
-                    )}
-                    {order.status === 'confirmed' && (
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'out_for_delivery')}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold"
-                      >
-                        Mark Out for Delivery
-                      </button>
-                    )}
-                    {order.status === 'out_for_delivery' && (
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'delivered')}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-semibold"
-                      >
-                        Mark Delivered
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))
             )}
-          </div>
-        )}
+            
+            {orders.map(order => (
+              <div key={order.id} className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">#{order.id.slice(-6)}</span>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    order.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                    order.status === 'accepted' ? 'bg-blue-500/20 text-blue-400' :
+                    order.status === 'delivered' ? 'bg-green-500/20 text-green-400' :
+                    'bg-red-500/20 text-red-400'
+                  }`}>
+                    {order.status}
+                  </span>
+                </div>
+                
+                <div className="space-y-1 text-sm text-gray-300 mb-3">
+                  <p className="flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    {order.buyerName}
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <Phone className="w-4 h-4" />
+                    {order.buyerPhone}
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
+                    {order.location?.address || 'No address'}
+                  </p>
+                </div>
 
-        {activeTab === 'profile' && (
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-4">
-            <div>
-              <label className="text-sm text-gray-400">Business Name</label>
-              <p className="font-bold text-lg">{profile?.businessName}</p>
-            </div>
-            <div>
-              <label className="text-sm text-gray-400">Phone</label>
-              <p className="font-bold">{profile?.phone}</p>
-            </div>
-            <div>
-              <label className="text-sm text-gray-400">Address</label>
-              <p className="font-bold">{profile?.address}</p>
-            </div>
-            <div>
-              <label className="text-sm text-gray-400">Availability</label>
-              <button
-                onClick={toggleAvailability}
-                className={`mt-2 w-full py-3 rounded-xl font-bold transition-colors ${
-                  isAvailable ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'
-                }`}
-              >
-                {isAvailable ? '🟢 Currently Accepting Orders' : '🔴 Temporarily Closed'}
-              </button>
-            </div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    {order.items?.map((item: any, i: number) => (
+                      <p key={i} className="text-sm text-gray-400">
+                        {item.quantity}x {item.size}kg @ ₦{item.pricePerUnit?.toLocaleString()}
+                      </p>
+                    ))}
+                  </div>
+                  <p className="text-lg font-bold text-orange-400">₦{order.totalAmount?.toLocaleString()}</p>
+                </div>
+
+                {order.status === 'pending' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => updateStatus(order.id, 'accepted')}
+                      className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => updateStatus(order.id, 'rejected')}
+                      className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Reject
+                    </button>
+                  </div>
+                )}
+
+                {order.status === 'accepted' && (
+                  <button
+                    onClick={() => updateStatus(order.id, 'delivered')}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1"
+                  >
+                    <Truck className="w-4 h-4" />
+                    Mark Delivered
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
@@ -295,5 +223,13 @@ export default function SellerDashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SellerDashboard() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-900 text-white flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500" /></div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
