@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+dist/
+.env
+.env.local
+*.backup
+*.bak
+app_backup_*/
+.firebase/
+firebase-debug.log
+.DS_Store
+.vercel

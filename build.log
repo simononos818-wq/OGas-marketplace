@@ -1,0 +1,23 @@
+
+> ogas-marketplace@1.0.0 build
+> next build
+
+   ▲ Next.js 15.0.5
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+ ⨯ ESLint: Failed to load plugin '@typescript-eslint' declared in '../../../../.eslintrc.cjs': Cannot find module '@typescript-eslint/eslint-plugin' Require stack: - /Users/mac/OGasmarketplace/__placeholder__.js Referenced from: /Users/mac/OGasmarketplace/.eslintrc.cjs
+Failed to compile.
+
+./app/auth/login/page.tsx:28:36
+Type error: Parameter 'e' implicitly has an 'any' type.
+
+[0m [90m 26 |[39m   }[0m
+[0m [90m 27 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 28 |[39m   [36mconst[39m handlePhoneSubmit [33m=[39m [36masync[39m (e) [33m=>[39m {[0m
+[0m [90m    |[39m                                    [31m[1m^[22m[39m[0m
+[0m [90m 29 |[39m     e[33m.[39mpreventDefault()[33m;[39m[0m
+[0m [90m 30 |[39m     [36mtry[39m {[0m
+[0m [90m 31 |[39m       [36mconst[39m formattedPhone [33m=[39m phoneNumber[33m.[39mstartsWith([32m'+'[39m) [33m?[39m phoneNumber [33m:[39m [32m'+234'[39m [33m+[39m phoneNumber[33m.[39mreplace([35m/^0/[39m[33m,[39m [32m''[39m)[33m;[39m[0m
