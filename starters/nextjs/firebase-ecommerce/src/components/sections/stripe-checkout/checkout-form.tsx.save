@@ -1,0 +1,58 @@
+'use client'
+
+import { useState } from 'react'
+import Button from '@/components/ui/button'
+
+export default function CheckoutForm() {
+  const [errorMessage, setErrorMessage] = useState('')
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  const handlePaystackCheckout = async () => {
+    try {
+      setIsProcessing(true)
+
+      const res = await fetch('/api/paystack/initialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: 5000, // test amount in kobo
+          email: 'customer@example.com',
+          metadata: {
+            orderId: 'test-order-123',
+            userId: 'test-user-123',
+            items: ['Test item']
+          }
+        })
+      })
+
+      const data = await res.json()
+
+      if (data?.authorization_url) {
+        window.location.href = data.authorization_url
+      } else {
+        setErrorMessage('Failed to initialize payment.')
+      }
+    } catch (err) {
+      setErrorMessage('An unexpected error occurred.')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  return (
+    <div className="w-full space-y-6">
+      <Button
+        disabled={isProcessing}
+        className="w-full"
+        onClick={handlePaystackCheckout}
+      >
+        {isProcessing ? 'Processing...' : 'Pay with Paystack'}
+      </Button>
+
+      {errorMessage && (
+        <div className="text-red-500 text-sm">{errorMessage}</div>
+      )}
+    </div>
+  )
+}
+

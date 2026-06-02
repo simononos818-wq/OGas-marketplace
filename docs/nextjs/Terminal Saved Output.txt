@@ -1,0 +1,24 @@
+'use                                                       
+
+        
+  return (
+    <div className="w-full space-y-6">
+      <Button
+        disabled={isProcessing}
+        className="w-full"
+        onClick={handlePaystackCheckout}
+      >
+        {isProcessing ? 'Processing...' : 'Pay with Paystack'}
+      </Button>
+        
+      {errorMessage && (
+        <div className="text-red-500 text-sm">{errorMessage}</div>
+      )}
+    </div>
+  )     
+}       
+       
+        
+
+
+
