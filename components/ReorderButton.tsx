@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createOrder } from '@/lib/orderService';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { showToast } from './Toast';
 import { RotateCcw } from 'lucide-react';
 
