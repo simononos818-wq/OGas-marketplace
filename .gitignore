@@ -11,3 +11,4 @@ app_backup_*/
 firebase-debug.log
 .DS_Store
 .vercel
+mobile/*.apk
