@@ -5,16 +5,31 @@ import Link from 'next/link';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
+interface Product {
+  name: string;
+  price: number;
+  productId: string;
+  stock: number;
+  unit: string;
+}
+
 interface Seller {
   id: string;
   businessName: string;
   phone: string;
   address: string;
-  gasSizes: string[];
-  prices: Record<string, number>;
+  city: string;
+  state: string;
+  area: string;
+  ownerName: string;
+  products: Product[];
   deliveryFee: number;
   isAvailable: boolean;
+  isActive: boolean;
+  isVerified: boolean;
   rating?: number;
+  reviewCount?: number;
+  totalOrders?: number;
 }
 
 export default function BuyPage() {
@@ -28,12 +43,25 @@ export default function BuyPage() {
 
   const loadSellers = async () => {
     try {
-      const q = query(collection(db, 'vendors'), where('isApproved', '==', true));
+      const q = query(
+        collection(db, 'sellers'), 
+        where('isAvailable', '==', true),
+        where('isActive', '==', true)
+      );
       const snap = await getDocs(q);
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Seller));
-      setSellers(data.filter(s => s.isAvailable !== false));
+      setSellers(data);
     } catch (e) {
-      console.error(e);
+      console.error('Error loading sellers:', e);
+      // Fallback: try without composite index
+      try {
+        const q2 = query(collection(db, 'sellers'), where('isAvailable', '==', true));
+        const snap2 = await getDocs(q2);
+        const data2 = snap2.docs.map(d => ({ id: d.id, ...d.data() } as Seller));
+        setSellers(data2.filter(s => s.isActive !== false));
+      } catch (e2) {
+        console.error('Fallback also failed:', e2);
+      }
     } finally {
       setLoading(false);
     }
@@ -71,25 +99,40 @@ export default function BuyPage() {
                 className="block bg-gray-800 border border-gray-700 rounded-xl p-4 hover:border-orange-500 transition-colors"
               >
                 <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-bold text-white">{seller.businessName}</h3>
-                    <p className="text-sm text-gray-400 mt-1">📍 {seller.address}</p>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-white truncate">{seller.businessName}</h3>
+                    <p className="text-sm text-gray-400 mt-1">📍 {seller.address}, {seller.city}</p>
                     <p className="text-sm text-gray-400">📞 {seller.phone}</p>
+                    {seller.isVerified && (
+                      <span className="inline-block mt-1 text-xs bg-green-900/50 text-green-400 px-2 py-0.5 rounded">
+                        ✓ Verified
+                      </span>
+                    )}
                   </div>
-                  <div className="text-right">
-                    <div className="text-orange-400 font-bold">
-                      {seller.gasSizes?.map(size => (
-                        <span key={size} className="block text-sm">₦{seller.prices?.[size]?.toLocaleString() || '0'}</span>
-                      ))}
+                  <div className="text-right ml-3 shrink-0">
+                    {seller.rating && (
+                      <div className="text-yellow-400 text-sm">⭐ {seller.rating}</div>
+                    )}
+                    <div className="text-gray-500 text-xs mt-1">
+                      {seller.totalOrders || 0} orders
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-between mt-3">
-                  <div className="flex gap-2">
-                    {seller.gasSizes?.slice(0, 3).map(size => (
-                      <span key={size} className="text-xs bg-gray-700 px-2 py-1 rounded-md">{size}kg</span>
+
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <div className="flex flex-wrap gap-2">
+                    {seller.products?.slice(0, 3).map(product => (
+                      <span key={product.productId} className="text-xs bg-gray-700 px-2 py-1 rounded-md">
+                        {product.name}: ₦{product.price?.toLocaleString()}
+                      </span>
                     ))}
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-gray-400 text-xs">
+                    {seller.deliveryFee > 0 ? `Delivery: ₦${seller.deliveryFee}` : 'Free delivery'}
+                  </span>
                   <span className="text-orange-400 font-bold text-sm">Order Now →</span>
                 </div>
               </Link>
