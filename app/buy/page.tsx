@@ -1,145 +1,116 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useLocation } from '../hooks/useLocation';
+import { useSellers } from '../hooks/useSellers';
 import Link from 'next/link';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-
-interface Product {
-  name: string;
-  price: number;
-  productId: string;
-  stock: number;
-  unit: string;
-}
-
-interface Seller {
-  id: string;
-  businessName: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  area: string;
-  ownerName: string;
-  products: Product[];
-  deliveryFee: number;
-  isAvailable: boolean;
-  isActive: boolean;
-  isVerified: boolean;
-  rating?: number;
-  reviewCount?: number;
-  totalOrders?: number;
-}
+import { useState } from 'react';
 
 export default function BuyPage() {
-  const [sellers, setSellers] = useState<Seller[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [location, setLocation] = useState('Oteri Ughelli');
+  const { location, loading: locLoading } = useLocation();
+  const { sellers, loading: sellersLoading } = useSellers(location?.lat, location?.lng);
+  const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    loadSellers();
-  }, []);
+  const filtered = sellers.filter(s => 
+    s.businessName.toLowerCase().includes(search.toLowerCase()) ||
+    s.address.toLowerCase().includes(search.toLowerCase())
+  );
 
-  const loadSellers = async () => {
-    try {
-      const q = query(
-        collection(db, 'sellers'), 
-        where('isAvailable', '==', true),
-        where('isActive', '==', true)
-      );
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Seller));
-      setSellers(data);
-    } catch (e) {
-      console.error('Error loading sellers:', e);
-      // Fallback: try without composite index
-      try {
-        const q2 = query(collection(db, 'sellers'), where('isAvailable', '==', true));
-        const snap2 = await getDocs(q2);
-        const data2 = snap2.docs.map(d => ({ id: d.id, ...d.data() } as Seller));
-        setSellers(data2.filter(s => s.isActive !== false));
-      } catch (e2) {
-        console.error('Fallback also failed:', e2);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (locLoading || sellersLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-orange-500 animate-pulse">Finding gas sellers near you...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="sticky top-0 z-50 bg-gray-900/95 border-b border-gray-800 backdrop-blur">
-        <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
-          <h1 className="font-bold text-lg">Order Gas</h1>
-          <span className="text-xs text-gray-400">📍 {location}</span>
-        </div>
+    <div className="min-h-screen bg-black pb-24">
+      {/* Search Header */}
+      <div className="bg-gradient-to-b from-orange-900/30 to-black px-4 pt-4 pb-4 sticky top-14 z-40">
+        <input
+          type="text"
+          placeholder="Search gas sellers near you..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+        />
+        {location && !location.error && (
+          <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/>
+            GPS Active • {sellers.length} sellers nearby
+          </p>
+        )}
+        {location?.error && (
+          <p className="text-xs text-red-400 mt-2">Location unavailable - showing all sellers</p>
+        )}
       </div>
 
-      <div className="max-w-md mx-auto px-4 py-4">
-        {sellers.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-400">No sellers available in your area yet.</p>
-            <p className="text-sm text-gray-500 mt-2">Be the first to sell on OGas!</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {sellers.map(seller => (
-              <Link
-                key={seller.id}
-                href={`/buy/${seller.id}/`}
-                className="block bg-gray-800 border border-gray-700 rounded-xl p-4 hover:border-orange-500 transition-colors"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-white truncate">{seller.businessName}</h3>
-                    <p className="text-sm text-gray-400 mt-1">📍 {seller.address}, {seller.city}</p>
-                    <p className="text-sm text-gray-400">📞 {seller.phone}</p>
-                    {seller.isVerified && (
-                      <span className="inline-block mt-1 text-xs bg-green-900/50 text-green-400 px-2 py-0.5 rounded">
-                        ✓ Verified
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-right ml-3 shrink-0">
-                    {seller.rating && (
-                      <div className="text-yellow-400 text-sm">⭐ {seller.rating}</div>
-                    )}
-                    <div className="text-gray-500 text-xs mt-1">
-                      {seller.totalOrders || 0} orders
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 pt-3 border-t border-gray-700">
-                  <div className="flex flex-wrap gap-2">
-                    {seller.products?.slice(0, 3).map(product => (
-                      <span key={product.productId} className="text-xs bg-gray-700 px-2 py-1 rounded-md">
-                        {product.name}: ₦{product.price?.toLocaleString()}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between mt-3">
-                  <span className="text-gray-400 text-xs">
-                    {seller.deliveryFee > 0 ? `Delivery: ₦${seller.deliveryFee}` : 'Free delivery'}
-                  </span>
-                  <span className="text-orange-400 font-bold text-sm">Order Now →</span>
-                </div>
-              </Link>
-            ))}
+      {/* Seller List */}
+      <div className="px-4 space-y-4 mt-2">
+        {filtered.length === 0 && (
+          <div className="text-center text-gray-500 py-12">
+            <p className="text-lg">No sellers found</p>
+            <p className="text-sm">Be the first to register as a seller!</p>
+            <Link href="/seller/register" className="text-orange-400 underline mt-2 inline-block">Register as Seller</Link>
           </div>
         )}
+
+        {filtered.map((seller, index) => (
+          <Link 
+            key={seller.id} 
+            href={`/buy/${seller.id}`}
+            className="block bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-orange-500/50 transition-all"
+          >
+            <div className="flex items-start gap-3">
+              {/* Rank */}
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0
+                ${index === 0 ? 'bg-orange-500 text-black' : 
+                  index === 1 ? 'bg-gray-600 text-white' : 
+                  index === 2 ? 'bg-amber-700 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                {index + 1}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-white font-bold text-lg truncate">{seller.businessName}</h3>
+                  {seller.isOnline && <span className="w-2 h-2 bg-green-500 rounded-full"/>}
+                </div>
+                <p className="text-gray-400 text-sm truncate">{seller.address}</p>
+                
+                <div className="flex items-center gap-3 mt-2 flex-wrap">
+                  <span className="text-orange-400 font-bold">₦{seller.pricePerKg?.toLocaleString()}/kg</span>
+                  <span className="text-gray-500 text-xs bg-gray-800 px-2 py-1 rounded">{seller.availableSizes?.join(', ')}</span>
+                </div>
+
+                <div className="flex items-center gap-3 mt-2 text-xs">
+                  {location && seller.location && (
+                    <span className="text-green-400 flex items-center gap-1">
+                      📍 {(getDistance(location.lat, location.lng, seller.location.lat, seller.location.lng)).toFixed(1)} km away
+                    </span>
+                  )}
+                  {seller.deliveryFee > 0 ? (
+                    <span className="text-blue-400">🚚 Delivery ₦{seller.deliveryFee}</span>
+                  ) : (
+                    <span className="text-gray-500">🏪 Pickup only</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-orange-500 text-black font-bold px-4 py-2 rounded-xl text-sm shrink-0 self-center">
+                Order
+              </div>
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   );
+}
+
+function getDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }

@@ -1,5 +1,5 @@
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
 import { defineString } from 'firebase-functions/params';
 import { getFirestore } from 'firebase-admin/firestore';
 import { initializeApp } from 'firebase-admin/app';
@@ -180,4 +180,40 @@ export const processWeeklyPayouts = onCall({
     });
   }
   return { success: true, processed: Object.keys(sellerEarnings).length, totalPayouts: Object.values(sellerEarnings).reduce((sum, e) => sum + e.total, 0) };
+});
+
+// PAYSTACK WEBHOOK - Verify payments from Paystack callbacks
+export const paystackWebhook = onRequest({
+  region: 'us-central1',
+  cors: true,
+}, async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method Not Allowed');
+    return;
+  }
+
+  try {
+    const event = req.body;
+    
+    if (event.event === 'charge.success') {
+      const { reference, metadata } = event.data;
+      const orderId = metadata?.orderId;
+      
+      if (orderId) {
+        await db.collection('orders').doc(orderId).update({
+          status: 'paid',
+          paymentStatus: 'paid',
+          paystackRef: reference,
+          paidAt: new Date(),
+          webhookVerified: true,
+        });
+        console.log(`Order ${orderId} marked as paid via webhook`);
+      }
+    }
+    
+    res.status(200).send({ received: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).send({ error: 'Webhook processing failed' });
+  }
 });
