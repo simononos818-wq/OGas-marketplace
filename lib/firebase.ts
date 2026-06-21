@@ -1,6 +1,6 @@
-import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'dummy-key-for-build',
@@ -11,34 +11,8 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
 };
 
-let app: FirebaseApp | undefined;
-let auth: Auth | undefined;
-let db: Firestore | undefined;
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-function getFirebaseApp() {
-  if (!app) {
-    if (getApps().length === 0) {
-      app = initializeApp(firebaseConfig);
-    } else {
-      app = getApps()[0];
-    }
-  }
-  return app;
-}
-
-export function getAuthInstance() {
-  if (!auth) {
-    auth = getAuth(getFirebaseApp());
-  }
-  return auth;
-}
-
-export function getDbInstance() {
-  if (!db) {
-    db = getFirestore(getFirebaseApp());
-  }
-  return db;
-}
-
-// Backward compatibility
-export { getAuthInstance as auth, getDbInstance as db };
+export { app, auth, db };

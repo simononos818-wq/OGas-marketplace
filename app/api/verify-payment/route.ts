@@ -10,7 +10,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Not configured' }, { status: 500 });
     }
 
-    // Verify with Paystack
     const res = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
       headers: { Authorization: `Bearer ${secretKey}` },
     });
@@ -18,15 +17,26 @@ export async function POST(req: NextRequest) {
     const data = await res.json();
     
     if (data.status && data.data?.status === 'success') {
-      // Update order in Firestore
-      await adminDb.collection('orders').doc(orderId).update({
+      const resolvedOrderId = orderId || data.data?.metadata?.orderId;
+      
+      if (!resolvedOrderId) {
+        console.warn('Payment verified but no orderId found. Ref:', reference);
+        return NextResponse.json({ success: true, message: 'Payment verified but order not linked' });
+      }
+
+      await adminDb.collection('orders').doc(resolvedOrderId).update({
         status: 'paid',
         paymentStatus: 'paid',
         paystackRef: reference,
+        paystackAmount: data.data.amount,
+        customerEmail: data.data.customer?.email || null,
         paidAt: new Date(),
         verifiedAt: new Date(),
+        verifiedViaApi: true,
       });
-      return NextResponse.json({ success: true, message: 'Payment verified' });
+      
+      console.log(`Order ${resolvedOrderId} verified and marked paid ✅`);
+      return NextResponse.json({ success: true, message: 'Payment verified', orderId: resolvedOrderId });
     }
     
     return NextResponse.json({ success: false, message: 'Payment not verified' }, { status: 400 });

@@ -12,3 +12,9 @@ firebase-debug.log
 .DS_Store
 .vercel
 mobile/*.apk
+lib/serviceAccountKey.json
+functions/src/*.backup.*
+functions/lib/
+functions/.env
+*.zip
+*.pkg

@@ -1,13 +1,19 @@
 'use client';
 
-import { useLocation } from '../hooks/useLocation';
 import { useSellers } from '../hooks/useSellers';
+import { useLocation } from '../hooks/useLocation';
 import Link from 'next/link';
 import { useState } from 'react';
+import { MapPin, Search } from 'lucide-react';
 
 export default function BuyPage() {
   const { location, loading: locLoading } = useLocation();
-  const { sellers, loading: sellersLoading } = useSellers(location?.lat, location?.lng);
+  // FIX: Only pass location if no error and valid coords
+  const hasValidLocation = location && !location.error && location.lat !== 0 && location.lng !== 0;
+  const { sellers, loading: sellersLoading } = useSellers(
+    hasValidLocation ? location.lat : undefined,
+    hasValidLocation ? location.lng : undefined
+  );
   const [search, setSearch] = useState('');
 
   const filtered = sellers.filter(s => 
@@ -26,21 +32,25 @@ export default function BuyPage() {
   return (
     <div className="min-h-screen bg-black pb-24">
       {/* Search Header */}
-      <div className="bg-gradient-to-b from-orange-900/30 to-black px-4 pt-4 pb-4 sticky top-14 z-40">
-        <input
-          type="text"
-          placeholder="Search gas sellers near you..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
-        />
-        {location && !location.error && (
+      <div className="bg-gradient-to-b from-orange-900/30 to-black px-4 pt-4 pb-4 sticky top-0 z-40">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search sellers..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-gray-900 border border-gray-800 rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+          />
+        </div>
+        
+        {hasValidLocation && (
           <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/>
             GPS Active • {sellers.length} sellers nearby
           </p>
         )}
-        {location?.error && (
+        {(!hasValidLocation && location) && (
           <p className="text-xs text-red-400 mt-2">Location unavailable - showing all sellers</p>
         )}
       </div>
@@ -55,35 +65,22 @@ export default function BuyPage() {
           </div>
         )}
 
-        {filtered.map((seller, index) => (
+        {filtered.map((seller) => (
           <Link 
             key={seller.id} 
             href={`/buy/${seller.id}`}
             className="block bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-orange-500/50 transition-all"
           >
             <div className="flex items-start gap-3">
-              {/* Rank */}
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0
-                ${index === 0 ? 'bg-orange-500 text-black' : 
-                  index === 1 ? 'bg-gray-600 text-white' : 
-                  index === 2 ? 'bg-amber-700 text-white' : 'bg-gray-800 text-gray-400'}`}>
-                {index + 1}
+              <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center shrink-0">
+                <MapPin className="text-orange-500 w-5 h-5" />
               </div>
-
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-white font-bold text-lg truncate">{seller.businessName}</h3>
-                  {seller.isOnline && <span className="w-2 h-2 bg-green-500 rounded-full"/>}
-                </div>
-                <p className="text-gray-400 text-sm truncate">{seller.address}</p>
-                
-                <div className="flex items-center gap-3 mt-2 flex-wrap">
-                  <span className="text-orange-400 font-bold">₦{seller.pricePerKg?.toLocaleString()}/kg</span>
-                  <span className="text-gray-500 text-xs bg-gray-800 px-2 py-1 rounded">{seller.availableSizes?.join(', ')}</span>
-                </div>
-
-                <div className="flex items-center gap-3 mt-2 text-xs">
-                  {location && seller.location && (
+                <h3 className="font-bold text-white truncate">{seller.businessName}</h3>
+                <p className="text-sm text-gray-400 truncate">{seller.address}</p>
+                <div className="flex items-center gap-3 mt-1 text-xs">
+                  <span className="text-orange-400 font-medium">₦{seller.pricePerKg?.toLocaleString()}/kg</span>
+                  {hasValidLocation && seller.location && (
                     <span className="text-green-400 flex items-center gap-1">
                       📍 {(getDistance(location.lat, location.lng, seller.location.lat, seller.location.lng)).toFixed(1)} km away
                     </span>

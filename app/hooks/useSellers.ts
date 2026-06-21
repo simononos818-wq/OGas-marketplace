@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { getDbInstance } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 
 export interface Seller {
   id: string;
@@ -14,6 +14,7 @@ export interface Seller {
   pricePerKg: number;
   availableSizes: string[];
   deliveryFee: number;
+  prices?: Record<string, number>;
   rating?: number;
   isOnline: boolean;
   image?: string;
@@ -32,9 +33,7 @@ export function useSellers(userLat?: number, userLng?: number) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const db = getDbInstance();
     const q = query(collection(db, 'sellers'), where('isApproved', '==', true));
-    
     const unsub = onSnapshot(q, (snapshot) => {
       let data = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -52,7 +51,6 @@ export function useSellers(userLat?: number, userLng?: number) {
       setSellers(data);
       setLoading(false);
     });
-
     return () => unsub();
   }, [userLat, userLng]);
 

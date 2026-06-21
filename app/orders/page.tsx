@@ -2,14 +2,16 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 import Link from 'next/link';
+import { CheckCircle, Phone } from 'lucide-react';
 
 interface Order {
   id: string;
   sellerName: string;
+  sellerPhone?: string;
   items: { size: string; quantity: number; unitPrice: number }[];
   totalAmount: number;
   deliveryFee: number;
@@ -25,6 +27,7 @@ function OrdersContent() {
   const success = searchParams.get('success');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -47,22 +50,41 @@ function OrdersContent() {
     return () => unsubscribe();
   }, [user]);
 
+  const confirmDelivery = async (orderId: string) => {
+    if (!confirm('Have you received your gas? This will release payment to the seller.')) return;
+    setConfirming(orderId);
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        status: 'delivered',
+        deliveredAt: new Date(),
+        buyerConfirmed: true,
+      });
+      alert('✅ Delivery confirmed! Seller has been paid.');
+    } catch (e) {
+      alert('Error confirming delivery. Please try again.');
+    } finally {
+      setConfirming(null);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'paid': return 'bg-green-500/20 text-green-400 border-green-500';
       case 'pending_payment': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500';
       case 'pending_cash': return 'bg-orange-500/20 text-orange-400 border-orange-500';
-      case 'delivered': return 'bg-blue-500/20 text-blue-400 border-blue-500';
+      case 'out_for_delivery': return 'bg-blue-500/20 text-blue-400 border-blue-500';
+      case 'delivered': return 'bg-purple-500/20 text-purple-400 border-purple-500';
       default: return 'bg-gray-500/20 text-gray-400 border-gray-500';
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'paid': return '✅ Paid';
+      case 'paid': return '✅ Paid - Preparing';
       case 'pending_payment': return '⏳ Awaiting Payment';
       case 'pending_cash': return '💵 Cash on Delivery';
-      case 'delivered': return '📦 Delivered';
+      case 'out_for_delivery': return '🚚 Out for Delivery';
+      case 'delivered': return '✅ Delivered';
       default: return status;
     }
   };
@@ -128,10 +150,31 @@ function OrdersContent() {
                   </div>
                 </div>
 
-                <div className="border-t border-gray-800 pt-3 flex justify-between items-center">
+                <div className="border-t border-gray-800 pt-3 flex justify-between items-center mb-3">
                   <span className="text-gray-400 text-sm">Total</span>
                   <span className="font-bold text-xl text-orange-500">₦{order.totalAmount?.toLocaleString()}</span>
                 </div>
+
+                {order.status === 'out_for_delivery' && (
+                  <button
+                    onClick={() => confirmDelivery(order.id)}
+                    disabled={confirming === order.id}
+                    className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition"
+                  >
+                    <CheckCircle size={18} />
+                    {confirming === order.id ? 'Confirming...' : 'I Have Received My Gas'}
+                  </button>
+                )}
+
+                {order.status === 'paid' && order.sellerPhone && (
+                  <a
+                    href={`tel:${order.sellerPhone}`}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition mt-2"
+                  >
+                    <Phone size={18} />
+                    Call Seller
+                  </a>
+                )}
 
                 {order.paymentReference && (
                   <p className="text-xs text-gray-500 mt-2">Ref: {order.paymentReference}</p>
