@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useLocation } from '@/hooks/useLocation';
 import { NIGERIAN_CITIES } from '@/lib/gasCalculator';
-import { User, MapPin, ChevronRight, Flame, HelpCircle, Shield } from 'lucide-react';
+import { User, MapPin, ChevronRight, Flame, HelpCircle, Shield, FileText, MessageCircle, Mail, Phone } from 'lucide-react';
 
 export default function ProfilePage() {
   const { city, state, setManualLocation } = useLocation();
@@ -105,29 +105,72 @@ export default function ProfilePage() {
           <ChevronRight className="w-4 h-4 text-gray-500" />
         </Link>
 
-        <div className="flex items-center gap-3 bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4">
-          <HelpCircle className="w-5 h-5 text-blue-500" />
-          <div className="flex-1">
-            <p className="text-white text-sm font-medium">Help & Support</p>
-            <p className="text-gray-500 text-xs">Contact us for help</p>
+        {/* Support Section */}
+        <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 mt-4">
+          <p className="text-white text-sm font-medium mb-3">Need Help?</p>
+          <div className="space-y-2">
+            <a href="https://t.me/ogaslpg" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-lg bg-[#1a1a2e] hover:bg-orange-500/10 transition-colors">
+              <MessageCircle className="w-5 h-5 text-orange-500" />
+              <div>
+                <p className="text-white text-sm">Telegram Support</p>
+                <p className="text-gray-500 text-xs">@ogaslpg</p>
+              </div>
+            </a>
+            <a href="https://wa.me/234XXXXXXXXXX" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-lg bg-[#1a1a2e] hover:bg-orange-500/10 transition-colors">
+              <Phone className="w-5 h-5 text-green-500" />
+              <div>
+                <p className="text-white text-sm">WhatsApp</p>
+                <p className="text-gray-500 text-xs">Chat with us</p>
+              </div>
+            </a>
+            <a href="mailto:support@ogaslpgmarketplace.com" className="flex items-center gap-3 p-3 rounded-lg bg-[#1a1a2e] hover:bg-orange-500/10 transition-colors">
+              <Mail className="w-5 h-5 text-blue-500" />
+              <div>
+                <p className="text-white text-sm">Email Support</p>
+                <p className="text-gray-500 text-xs">support@ogaslpgmarketplace.com</p>
+              </div>
+            </a>
           </div>
-          <ChevronRight className="w-4 h-4 text-gray-500" />
+          <p className="text-gray-600 text-xs text-center mt-3">We typically respond within 2 hours</p>
         </div>
 
-        <div className="flex items-center gap-3 bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4">
-          <Shield className="w-5 h-5 text-green-500" />
-          <div className="flex-1">
-            <p className="text-white text-sm font-medium">Privacy & Terms</p>
-            <p className="text-gray-500 text-xs">Read our policies</p>
+        {/* Legal Section */}
+        <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 mt-4">
+          <p className="text-white text-sm font-medium mb-3">Legal</p>
+          <div className="space-y-2">
+            <Link href="/terms" className="flex items-center gap-3 p-3 rounded-lg bg-[#1a1a2e] hover:bg-orange-500/10 transition-colors">
+              <FileText className="w-5 h-5 text-orange-500" />
+              <div className="flex-1">
+                <p className="text-white text-sm">Terms of Service</p>
+                <p className="text-gray-500 text-xs">Read our terms and conditions</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-500" />
+            </Link>
+            <Link href="/privacy" className="flex items-center gap-3 p-3 rounded-lg bg-[#1a1a2e] hover:bg-orange-500/10 transition-colors">
+              <Shield className="w-5 h-5 text-green-500" />
+              <div className="flex-1">
+                <p className="text-white text-sm">Privacy Policy</p>
+                <p className="text-gray-500 text-xs">How we handle your data</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-500" />
+            </Link>
           </div>
-          <ChevronRight className="w-4 h-4 text-gray-500" />
         </div>
       </div>
 
-      {/* App Info */}
+      {/* App Info & Legal Footer */}
       <div className="px-4 mt-8 text-center">
         <p className="text-gray-600 text-xs">OGas Marketplace v1.0</p>
         <p className="text-gray-700 text-xs">Built for Nigeria</p>
+        <div className="mt-4 pt-4 border-t border-gray-800">
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <Link href="/terms" className="text-orange-500 text-xs hover:underline">Terms of Service</Link>
+            <span className="text-gray-700">•</span>
+            <Link href="/privacy" className="text-orange-500 text-xs hover:underline">Privacy Policy</Link>
+          </div>
+          <p className="text-gray-600 text-xs">© 2026 OGas LPG Marketplace. All rights reserved.</p>
+          <p className="text-gray-700 text-xs mt-1">Operated by Simon Onos</p>
+        </div>
       </div>
 
       {/* Bottom Nav */}
