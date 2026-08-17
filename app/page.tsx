@@ -86,25 +86,18 @@ export default function HomePage() {
   useEffect(() => {
     const fetchSellers = async () => {
       try {
-        // Simple query: only isActive + isApproved. NO orderBy (avoids index issues).
-        const q = query(
-          collection(db, 'sellers'),
-          where('isActive', '==', true),
-          where('isApproved', '==', true)
-        );
-        const snap = await getDocs(q);
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Seller));
-        setSellers(data);
-        console.log('Loaded', data.length, 'sellers');
-      } catch (err) {
-        console.error('Query failed:', err);
-        // Fallback: fetch all, filter client-side
+        // Fetch ALL sellers that are not explicitly inactive
+        // (pending + approved both appear; we control display client-side)
         const snap = await getDocs(collection(db, 'sellers'));
         const data = snap.docs
           .map((d) => ({ id: d.id, ...d.data() } as Seller))
-          .filter(s => s.isApproved === true && s.isActive !== false);
+          .filter((s) => s.isActive !== false); // only hide fully disabled ones
+
         setSellers(data);
-        console.log('Fallback loaded', data.length, 'sellers');
+        console.log('Loaded', data.length, 'sellers (including pending)');
+      } catch (err) {
+        console.error('Query failed:', err);
+        setSellers([]);
       } finally {
         setLoading(false);
       }
@@ -219,7 +212,7 @@ export default function HomePage() {
             const price = getSellerPrice(seller);
             const discountPrice = price - 50;
             const isPreRegistered = seller.sellerStatus === 'pre-registered';
-            const isPending = seller.sellerStatus === 'pending';
+            const isPending = seller.sellerStatus === 'pending' || seller.isApproved === false;
             let distanceText = '';
             if (userLocation && seller.location) {
               const dist = getDistance(userLocation.lat, userLocation.lng, seller.location.latitude, seller.location.longitude);
@@ -229,9 +222,9 @@ export default function HomePage() {
             return (
               <Link
                 key={seller.id}
-                href={isPreRegistered ? '#' : `/buy/${seller.id}`}
-                onClick={(e) => { if (isPreRegistered) { e.preventDefault(); alert('This seller is coming soon! They are not accepting orders yet.'); } }}
-                className={`block bg-gray-900 rounded-2xl p-4 hover:bg-gray-800 transition group ${isPreRegistered ? 'opacity-75 border border-dashed border-gray-700' : ''}`}
+                href={(isPreRegistered || isPending) ? '#' : `/buy/${seller.id}`}
+                onClick={(e) => { if (isPreRegistered || isPending) { e.preventDefault(); alert(isPreRegistered ? 'This seller is coming soon! They are not accepting orders yet.' : 'This seller is still pending approval and cannot take orders yet.'); } }}
+                className={`block bg-gray-900 rounded-2xl p-4 hover:bg-gray-800 transition group ${(isPreRegistered || isPending) ? 'opacity-75 border border-dashed border-gray-700' : ''}`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">

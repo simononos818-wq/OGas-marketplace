@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "ogasapp-5a003"
-  }
+    "default": "ogasapp-5a003",
+    "production": "ogasapp-5a003"
+  },
+  "targets": {},
+  "etags": {}
 }

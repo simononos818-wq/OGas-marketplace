@@ -41,41 +41,34 @@ function OrdersContent() {
   const [callbackState, setCallbackState] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
   const [callbackMessage, setCallbackMessage] = useState('');
 
-  // Handle Paystack callback: poll Firestore for webhook confirmation
+  // Handle Paystack callback: verify then confirm via API
   useEffect(() => {
-    if (statusParam === 'paid' && refParam && callbackState === 'idle') {
+    const reference = searchParams.get('reference') || searchParams.get('trxref');
+    if (reference && callbackState === 'idle') {
       setCallbackState('verifying');
-      setCallbackMessage('Confirming payment with your bank...');
-      
-      let attempts = 0;
-      const maxAttempts = 10;
-      const interval = setInterval(async () => {
-        attempts++;
-        try {
-          const orderDoc = await getDoc(doc(db, 'orders', refParam));
-          if (orderDoc.exists()) {
-            const data = orderDoc.data();
-            if (data.status === 'paid' || data.paymentStatus === 'paid') {
-              clearInterval(interval);
-              setCallbackState('success');
-              setCallbackMessage('Payment successful! Your order has been placed.');
-              return;
-            }
+      setCallbackMessage('Confirming your payment...');
+
+      fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setCallbackState('success');
+            setCallbackMessage('Payment successful! Your order has been placed.');
+          } else {
+            setCallbackState('error');
+            setCallbackMessage(data.message || 'We could not confirm this payment. Contact support if you were charged.');
           }
-        } catch (e) {
-          console.error('Payment poll error:', e);
-        }
-        
-        if (attempts >= maxAttempts) {
-          clearInterval(interval);
-          setCallbackState('success');
-          setCallbackMessage('Payment received. Processing your order...');
-        }
-      }, 3000);
-      
-      return () => clearInterval(interval);
+        })
+        .catch(() => {
+          setCallbackState('error');
+          setCallbackMessage('Network error confirming payment. Contact support if you were charged.');
+        });
     }
-  }, [statusParam, refParam, callbackState]);
+  }, [searchParams, callbackState]);
 
   useEffect(() => {
     if (!user) return;

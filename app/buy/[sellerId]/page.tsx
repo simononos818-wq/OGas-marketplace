@@ -20,6 +20,7 @@ interface Seller {
   rating?: number;
   totalOrders?: number;
   isOnline?: boolean;
+  isApproved?: boolean;
   location?: {
     latitude: number;
     longitude: number;
@@ -101,7 +102,8 @@ export default function BuyPage() {
   const deliveryFee = deliveryType === 'pickup' ? 0 : (seller.deliveryFee || 500);
   const totalAmount = gasCost + deliveryFee;
   const totalDiscount = OGAS_DISCOUNT_PER_KG * kg;
-  const isValid = kg >= 1 && kg <= 50;
+  const isPendingApproval = seller.isApproved === false;
+  const isValid = kg >= 1 && kg <= 50 && !isPendingApproval;
 
   const placeOrder = async () => {
     if (!user || !isValid) return;
@@ -187,6 +189,11 @@ export default function BuyPage() {
       </div>
 
       <div className="p-4 space-y-6">
+        {isPendingApproval && (
+          <div className="bg-yellow-500/20 border border-yellow-500 rounded-2xl p-3 text-center text-yellow-400 text-sm">
+            ⏳ This store is pending verification and can't take orders yet.
+          </div>
+        )}
         {/* Seller Info */}
         <div className="bg-gray-900 rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
