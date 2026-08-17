@@ -1,390 +1,404 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
-import { useAuth } from '../../hooks/useAuth';
-import { Flame, MapPin, Star, Phone, Truck, ChevronLeft, Minus, Plus } from 'lucide-react';
+import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getApp } from 'firebase/app';
+import { db } from '@/lib/firebase';
+import { useAuthContext } from '../../context/AuthContext';
+import { MapPin, Phone, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Flame, Calculator, Tag, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 
 interface Seller {
   id: string;
   businessName: string;
-  phone: string;
   address: string;
-  prices: Record<string, number>;
+  phone: string;
+  pricePerKg: number;
   deliveryFee: number;
-  location?: { lat: number; lng: number };
+  rating?: number;
+  totalOrders?: number;
+  isOnline?: boolean;
+  location?: {
+    latitude: number;
+    longitude: number;
+    address: string;
+  };
 }
 
-const loadPaystackScript = (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if ((window as any).PaystackPop) {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://js.paystack.co/v1/inline.js';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Paystack'));
-    document.body.appendChild(script);
-  });
-};
+const OGAS_DISCOUNT_PER_KG = 50;
 
-export default function SellerOrderPage() {
-  const params = useParams();
+// Must match the region your Cloud Functions are actually deployed to (us-central1)
+const functions = getFunctions(getApp(), 'us-central1');
+
+export default function BuyPage() {
+  const { sellerId } = useParams();
   const router = useRouter();
-  const { user } = useAuth();
-  const sellerId = params.sellerId as string;
+  const { user } = useAuthContext();
 
   const [seller, setSeller] = useState<Seller | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedSize, setSelectedSize] = useState<string>('');
-  const [quantity, setQuantity] = useState(1);
+  const [kg, setKg] = useState(12);
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
-  const [orderStatus, setOrderStatus] = useState<'idle' | 'creating' | 'paying' | 'verifying' | 'success' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [paystackLoaded, setPaystackLoaded] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'cash'>('paystack');
+  const [placingOrder, setPlacingOrder] = useState(false);
+  const [buyerLocation, setBuyerLocation] = useState('');
+  const [showCalculator, setShowCalculator] = useState(false);
 
   useEffect(() => {
-    loadPaystackScript()
-      .then(() => setPaystackLoaded(true))
-      .catch(err => {
-        console.error('Paystack load error:', err);
-        setErrorMsg('Payment system unavailable. Please refresh.');
-      });
-  }, []);
-
-  useEffect(() => {
-    loadSeller();
+    if (!sellerId) return;
+    getDoc(doc(db, 'sellers', sellerId as string)).then((snap) => {
+      if (snap.exists()) {
+        setSeller({ id: snap.id, ...snap.data() } as Seller);
+      }
+      setLoading(false);
+    });
   }, [sellerId]);
 
-  const loadSeller = async () => {
-    try {
-      const docRef = doc(db, 'sellers', sellerId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const prices = data.prices || {};
-        const sizes = Object.keys(prices).sort((a, b) => parseFloat(a) - parseFloat(b));
-        
-        setSeller({
-          id: docSnap.id,
-          businessName: data.businessName || 'Unknown',
-          phone: data.phone || '',
-          address: data.address || '',
-          prices: prices,
-          deliveryFee: data.deliveryFee || 500,
-          location: data.location,
-        } as Seller);
-        
-        if (sizes.length > 0) {
-          setSelectedSize(sizes[0]);
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setBuyerLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        },
+        () => {
+          setBuyerLocation('Location access denied');
         }
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+      );
     }
-  };
+  }, []);
 
-  const unitPrice = selectedSize && seller?.prices?.[selectedSize] ? seller.prices[selectedSize] : 0;
-  const deliveryFee = deliveryType === 'delivery' ? (seller?.deliveryFee || 500) : 0;
-  const subtotal = unitPrice * quantity;
-  const total = subtotal + deliveryFee;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+      </div>
+    );
+  }
 
-  const createOrder = async (paymentMethod: string, reference?: string, status: string = 'pending') => {
-    if (!user || !seller || !selectedSize) return null;
-    
-    const orderRef = await addDoc(collection(db, 'orders'), {
-      buyerId: user.uid,
-      buyerPhone: customerPhone,
-      buyerAddress: customerAddress,
-      buyerEmail: user.email,
-      sellerId: seller.id,
-      sellerName: seller.businessName,
-      sellerPhone: seller.phone,
-      items: [{ size: selectedSize, quantity, price: unitPrice }],
-      deliveryType,
-      deliveryFee,
-      totalAmount: total,
-      paymentMethod,
-      paystackRef: reference || null,
-      status,
-      paymentStatus: status === 'paid' ? 'paid' : 'pending',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+  if (!seller) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-gray-500">
+        Seller not found
+      </div>
+    );
+  }
 
-    return orderRef.id;
-  };
+  if (!seller.pricePerKg) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-gray-500 px-4 text-center gap-3">
+        <p>This seller hasn't set a price yet.</p>
+        <Link href="/buy" className="text-orange-400 underline">Browse other sellers</Link>
+      </div>
+    );
+  }
 
-  const handlePaystackSuccess = useCallback(async (reference: string) => {
-    setOrderStatus('verifying');
+  const originalPrice = seller.pricePerKg;
+  const discountedPrice = originalPrice - OGAS_DISCOUNT_PER_KG;
+  const gasCost = discountedPrice * kg;
+  const deliveryFee = deliveryType === 'pickup' ? 0 : (seller.deliveryFee || 500);
+  const totalAmount = gasCost + deliveryFee;
+  const totalDiscount = OGAS_DISCOUNT_PER_KG * kg;
+  const isValid = kg >= 1 && kg <= 50;
+
+  const placeOrder = async () => {
+    if (!user || !isValid) return;
+    setPlacingOrder(true);
+
     try {
-      const res = await fetch('/api/verify-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference }),
-      });
+      // 1. Write order directly to Firestore (bypass broken Cloud Functions)
+      const orderData = {
+        buyerId: user.uid,
+        buyerName: user.displayName || user.name || '',
+        buyerPhone: user.phoneNumber || '',
+        buyerEmail: user.email || '',
+        sellerId: seller.id,
+        sellerName: seller.businessName || 'Unknown Seller',
+        sellerPhone: seller.phone || '',
+        items: [{ size: String(kg), quantity: 1, unitPrice: discountedPrice }],
+        gasSize: String(kg),
+        quantity: 1,
+        pricePerKg: discountedPrice,
+        deliveryFee,
+        total: totalAmount,
+        totalAmount,
+        totalPrice: totalAmount,
+        status: paymentMethod === 'cash' ? 'pending_cash' : 'pending',
+        paymentMethod,
+        createdAt: serverTimestamp(),
+      };
 
-      const data = await res.json();
-      
-      if (data.success) {
-        setOrderStatus('success');
-        setTimeout(() => router.push('/orders'), 2000);
+      const orderRef = await addDoc(collection(db, 'orders'), orderData);
+      const orderId = orderRef.id;
+
+      if (paymentMethod === 'paystack') {
+        // 2. Initialize Paystack via Next.js API route
+        const res = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId,
+            amount: totalAmount,
+            email: user.email || '',
+            name: user.displayName || '',
+          }),
+        });
+        const data = await res.json();
+        if (data.success && data.authorization_url) {
+          window.location.href = data.authorization_url;
+        } else {
+          throw new Error(data.message || 'Payment initialization failed');
+        }
       } else {
-        throw new Error(data.message || 'Verification failed');
+        // Cash on pickup/delivery
+        router.push('/orders');
       }
     } catch (err: any) {
       console.error(err);
-      setOrderStatus('error');
-      setErrorMsg(err.message || 'Payment verification failed');
-    }
-  }, [router]);
-
-  const handlePlaceOrder = async () => {
-    if (!paystackLoaded) {
-      setErrorMsg('Payment system still loading. Please wait and try again.');
-      return;
-    }
-    
-    if (!selectedSize) {
-      setErrorMsg('Please select a cylinder size');
-      return;
-    }
-    
-    if (!customerPhone) {
-      setErrorMsg('Please enter your phone number');
-      return;
-    }
-    if (deliveryType === 'delivery' && !customerAddress) {
-      setErrorMsg('Please enter delivery address');
-      return;
-    }
-
-    setOrderStatus('creating');
-    setErrorMsg('');
-
-    try {
-      const orderId = await createOrder('paystack', undefined, 'pending_payment');
-      if (!orderId) throw new Error('Failed to create order');
-
-      setOrderStatus('paying');
-      
-      const paystack = (window as any).PaystackPop;
-      if (!paystack) {
-        throw new Error('Paystack not loaded. Please refresh the page.');
-      }
-      
-      const handler = paystack.setup({
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || 'pk_live_b73e1e169529e05ae4ba2272fb7f7937d226be3c',
-        email: user?.email || customerPhone + '@ogas.ng',
-        amount: total * 100,
-        ref: `OGAS_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        metadata: {
-          orderId: orderId,
-          sellerId: sellerId,
-          customerPhone: customerPhone,
-          custom_fields: [
-            { display_name: 'Order ID', variable_name: 'order_id', value: orderId },
-            { display_name: 'Seller', variable_name: 'seller_name', value: seller?.businessName || '' },
-            { display_name: 'Size', variable_name: 'cylinder_size', value: selectedSize },
-          ]
-        },
-        callback: function(response: any) {
-          handlePaystackSuccess(response.reference);
-        },
-        onClose: function() {
-          setOrderStatus('idle');
-        }
-      });
-      
-      handler.openIframe();
-    } catch (err: any) {
-      console.error(err);
-      setOrderStatus('error');
-      setErrorMsg(err.message || 'Failed to place order');
+      alert(err.message || 'Failed to place order');
+    } finally {
+      setPlacingOrder(false);
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-orange-500">Loading...</div>;
-  if (!seller) return <div className="min-h-screen bg-black flex items-center justify-center text-red-500">Seller not found</div>;
-
-  const sizes = Object.keys(seller.prices || {}).sort((a, b) => parseFloat(a) - parseFloat(b));
 
   return (
-    <div className="min-h-screen bg-black text-white pb-24">
-      <div className="sticky top-0 bg-black/95 backdrop-blur-lg border-b border-gray-800 z-40 px-4 py-3 flex items-center gap-3">
-        <Link href="/buy" className="p-2 -ml-2 hover:bg-gray-900 rounded-lg transition">
-          <ChevronLeft size={20} />
+    <div className="min-h-screen bg-black text-white">
+      {/* Promo Banner */}
+      <div className="bg-orange-500 text-black px-4 py-2 text-center text-sm font-bold flex items-center justify-center gap-2">
+        <Tag className="w-4 h-4" />
+        OGas Promo: You save ₦{totalDiscount.toLocaleString()} on this order!
+      </div>
+
+      {/* Header */}
+      <div className="sticky top-0 z-50 bg-black/90 backdrop-blur border-b border-gray-800 px-4 py-3 flex items-center gap-3">
+        <Link href="/" className="p-2 hover:bg-gray-800 rounded-full">
+          <ChevronLeft className="w-5 h-5" />
         </Link>
-        <div className="flex-1 min-w-0">
-          <h1 className="font-bold truncate">{seller.businessName}</h1>
-          <p className="text-xs text-gray-400 flex items-center gap-1">
-            <MapPin size={10} /> {seller.address}
-          </p>
+        <div>
+          <h1 className="font-bold">{seller.businessName}</h1>
+          <div className="flex items-center gap-1 text-xs text-gray-400">
+            <MapPin className="w-3 h-3" />
+            {seller.address}
+          </div>
         </div>
       </div>
 
-      <div className="px-4 py-4 space-y-4 max-w-md mx-auto">
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center">
-              <Flame size={24} className="text-orange-500" />
+      <div className="p-4 space-y-6">
+        {/* Seller Info */}
+        <div className="bg-gray-900 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${seller.isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+              <span className="text-sm">{seller.isOnline ? 'Online' : 'Offline'}</span>
             </div>
-            <div>
-              <h2 className="font-bold">{seller.businessName}</h2>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <Star size={12} className="text-yellow-500" fill="currentColor" /> 5.0
-                <span>•</span>
-                <Phone size={12} /> {seller.phone}
-              </div>
+            <div className="flex items-center gap-1">
+              <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+              <span className="text-sm">{seller.rating || 4.5}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-800/50 rounded-lg p-2">
-            <Truck size={14} className="text-orange-500" />
-            Delivery: N{seller.deliveryFee} • Pickup available
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <Phone className="w-4 h-4" />
+            {seller.phone}
+          </div>
+          <div className="text-xs text-gray-500">
+            Your Location: {buyerLocation || 'Detecting...'}
           </div>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-          <h3 className="font-bold mb-3">Select Cylinder Size</h3>
-          {sizes.length === 0 ? (
-            <p className="text-gray-500 text-sm">No prices available for this seller.</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {sizes.map(size => (
-                <button
-                  key={size}
-                  onClick={() => setSelectedSize(size)}
-                  className={`p-3 rounded-xl text-sm font-medium transition ${
-                    selectedSize === size 
-                      ? 'bg-orange-500 text-black' 
-                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                  }`}
-                >
-                  <div className="text-lg font-bold">{size}</div>
-                  <div className="text-xs opacity-70">N{seller.prices[size].toLocaleString()}</div>
-                </button>
-              ))}
+        {/* Price Display with Discount */}
+        <div className="bg-gradient-to-r from-orange-900/50 to-gray-900 rounded-2xl p-4 border border-orange-800">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-gray-400">Original Price</div>
+              <div className="text-lg line-through text-gray-500">₦{originalPrice.toLocaleString()}/kg</div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm text-orange-400 font-medium flex items-center gap-1">
+                <Tag className="w-3 h-3" />
+                OGas Price
+              </div>
+              <div className="text-2xl font-bold text-orange-400">₦{discountedPrice.toLocaleString()}/kg</div>
+            </div>
+          </div>
+          <div className="mt-2 flex items-center gap-1 text-xs text-green-400">
+            <CheckCircle className="w-3 h-3" />
+            You save ₦{OGAS_DISCOUNT_PER_KG} per kg with OGas
+          </div>
+        </div>
+
+        {/* KG Selector */}
+        <div className="bg-gray-900 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Flame className="w-5 h-5 text-orange-500" />
+              <span className="font-bold">Gas Quantity</span>
+            </div>
+            <button
+              onClick={() => setShowCalculator(!showCalculator)}
+              className="flex items-center gap-1 text-orange-400 text-sm"
+            >
+              <Calculator className="w-4 h-4" />
+              Calculator
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setKg(Math.max(1, kg - 1))}
+              className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-xl font-bold hover:bg-gray-700"
+            >
+              -
+            </button>
+            <div className="flex-1 text-center">
+              <div className="text-3xl font-bold">{kg} <span className="text-lg text-gray-400">kg</span></div>
+              <div className="text-sm text-orange-400">₦{discountedPrice}/kg (was ₦{originalPrice})</div>
+            </div>
+            <button
+              onClick={() => setKg(Math.min(50, kg + 1))}
+              className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-xl font-bold hover:bg-gray-700"
+            >
+              +
+            </button>
+          </div>
+
+          {showCalculator && (
+            <div className="mt-3 p-3 bg-gray-800 rounded-xl">
+              <p className="text-xs text-gray-400 mb-2">Quick Select:</p>
+              <div className="flex gap-2 flex-wrap">
+                {[3, 5, 6, 12.5, 25, 50].map((size) => (
+                  <button
+                    key={size}
+                    onClick={() => setKg(size)}
+                    className="px-3 py-1 bg-gray-700 rounded-lg text-sm hover:bg-orange-500 hover:text-black transition"
+                  >
+                    {size}kg
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-          <h3 className="font-bold mb-3">Quantity</h3>
-          <div className="flex items-center justify-center gap-4">
-            <button 
-              onClick={() => setQuantity(Math.max(1, quantity - 1))}
-              className="w-12 h-12 bg-gray-800 rounded-xl flex items-center justify-center hover:bg-gray-700 transition"
-            >
-              <Minus size={20} />
-            </button>
-            <span className="text-2xl font-bold w-12 text-center">{quantity}</span>
-            <button 
-              onClick={() => setQuantity(quantity + 1)}
-              className="w-12 h-12 bg-gray-800 rounded-xl flex items-center justify-center hover:bg-gray-700 transition"
-            >
-              <Plus size={20} />
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-          <h3 className="font-bold mb-3">Delivery Option</h3>
-          <div className="grid grid-cols-2 gap-2">
+        {/* Delivery Type */}
+        <div className="bg-gray-900 rounded-2xl p-4">
+          <h3 className="font-bold mb-3 flex items-center gap-2">
+            <Truck className="w-5 h-5 text-orange-500" />
+            Delivery Method
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setDeliveryType('delivery')}
-              className={`p-3 rounded-xl text-sm font-medium transition ${
-                deliveryType === 'delivery' 
-                  ? 'bg-orange-500 text-black' 
-                  : 'bg-gray-800 text-gray-400'
+              className={`p-3 rounded-xl border-2 transition ${
+                deliveryType === 'delivery'
+                  ? 'border-orange-500 bg-orange-500/10'
+                  : 'border-gray-700 bg-gray-800'
               }`}
             >
-              <Truck size={18} className="mx-auto mb-1" />
-              Home Delivery
-              <div className="text-xs opacity-70">+N{seller.deliveryFee}</div>
+              <Truck className="w-6 h-6 mx-auto mb-1" />
+              <div className="text-sm font-bold">Delivery</div>
+              <div className="text-xs text-gray-400">₦{seller.deliveryFee || 500}</div>
             </button>
             <button
               onClick={() => setDeliveryType('pickup')}
-              className={`p-3 rounded-xl text-sm font-medium transition ${
-                deliveryType === 'pickup' 
-                  ? 'bg-orange-500 text-black' 
-                  : 'bg-gray-800 text-gray-400'
+              className={`p-3 rounded-xl border-2 transition ${
+                deliveryType === 'pickup'
+                  ? 'border-orange-500 bg-orange-500/10'
+                  : 'border-gray-700 bg-gray-800'
               }`}
             >
-              <MapPin size={18} className="mx-auto mb-1" />
-              Pickup
-              <div className="text-xs opacity-70">Free</div>
+              <Store className="w-6 h-6 mx-auto mb-1" />
+              <div className="text-sm font-bold">Pickup</div>
+              <div className="text-xs text-gray-400">FREE</div>
             </button>
           </div>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
-          <h3 className="font-bold">Your Details</h3>
-          <input
-            type="tel"
-            placeholder="Phone number (e.g. 08012345678)"
-            value={customerPhone}
-            onChange={e => setCustomerPhone(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
-          />
-          {deliveryType === 'delivery' && (
-            <input
-              placeholder="Delivery address"
-              value={customerAddress}
-              onChange={e => setCustomerAddress(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
-            />
-          )}
+        {/* Payment Method */}
+        <div className="bg-gray-900 rounded-2xl p-4">
+          <h3 className="font-bold mb-3">Payment Method</h3>
+          <div className="space-y-2">
+            <button
+              onClick={() => setPaymentMethod('paystack')}
+              className={`w-full p-3 rounded-xl border-2 flex items-center gap-3 transition ${
+                paymentMethod === 'paystack'
+                  ? 'border-orange-500 bg-orange-500/10'
+                  : 'border-gray-700 bg-gray-800'
+              }`}
+            >
+              <CreditCard className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-bold">Pay Online</div>
+                <div className="text-xs text-gray-400">Card, Bank Transfer, USSD</div>
+              </div>
+            </button>
+            <button
+              onClick={() => setPaymentMethod('cash')}
+              className={`w-full p-3 rounded-xl border-2 flex items-center gap-3 transition ${
+                paymentMethod === 'cash'
+                  ? 'border-orange-500 bg-orange-500/10'
+                  : 'border-gray-700 bg-gray-800'
+              }`}
+            >
+              <Banknote className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-bold">Cash on {deliveryType === 'pickup' ? 'Pickup' : 'Delivery'}</div>
+                <div className="text-xs text-gray-400">Pay when you receive gas</div>
+              </div>
+            </button>
+          </div>
         </div>
 
-        {errorMsg && (
-          <div className="bg-red-900/30 border border-red-500 rounded-xl p-3 text-red-400 text-sm text-center">
-            {errorMsg}
-          </div>
-        )}
-
-        <div className="bg-gradient-to-b from-orange-900/20 to-gray-900 border border-orange-500/30 rounded-2xl p-4">
-          <h3 className="font-bold mb-3 text-orange-400">Order Summary</h3>
+        {/* Order Summary with Discount */}
+        <div className="bg-gray-900 rounded-2xl p-4">
+          <h3 className="font-bold mb-3">Order Summary</h3>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-400">{selectedSize || 'Select size'} x {quantity}</span>
-              <span>N{subtotal.toLocaleString()}</span>
+            <div className="flex justify-between text-gray-400">
+              <span>Original ({kg}kg × ₦{originalPrice})</span>
+              <span className="line-through">₦{(originalPrice * kg).toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-green-400">
+              <span className="flex items-center gap-1"><Tag className="w-3 h-3" /> OGas Discount</span>
+              <span>-₦{totalDiscount.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-400">Delivery</span>
-              <span>{deliveryType === 'delivery' ? `N${deliveryFee.toLocaleString()}` : 'Free'}</span>
+              <span>{kg}kg × ₦{discountedPrice}</span>
+              <span>₦{gasCost.toLocaleString()}</span>
             </div>
-            <div className="border-t border-gray-700 pt-2 flex justify-between font-bold text-lg">
-              <span>Total</span>
-              <span className="text-orange-500">N{total.toLocaleString()}</span>
+            <div className="flex justify-between text-gray-400">
+              <span>Delivery</span>
+              <span>{deliveryType === 'pickup' ? 'FREE' : `₦${deliveryFee.toLocaleString()}`}</span>
+            </div>
+            <div className="border-t border-gray-800 pt-2 flex justify-between font-bold text-lg">
+              <span>Total to Pay</span>
+              <span className="text-orange-400">₦{totalAmount.toLocaleString()}</span>
+            </div>
+            <div className="text-xs text-green-400 text-right">
+              You saved ₦{totalDiscount.toLocaleString()} with OGas!
             </div>
           </div>
         </div>
+      </div>
 
-        {orderStatus === 'success' ? (
-          <div className="bg-green-900/30 border border-green-500 rounded-2xl p-4 text-center">
-            <div className="text-green-500 font-bold text-lg mb-1">Order Placed!</div>
-            <p className="text-green-400 text-sm">Redirecting to orders...</p>
-          </div>
-        ) : (
-          <button
-            onClick={handlePlaceOrder}
-            disabled={orderStatus === 'creating' || orderStatus === 'paying' || orderStatus === 'verifying' || !paystackLoaded}
-            className="w-full bg-orange-500 text-black font-bold py-4 rounded-2xl hover:bg-orange-400 transition disabled:opacity-50 text-lg"
-          >
-            {!paystackLoaded ? 'Loading Payment...' :
-             orderStatus === 'creating' ? 'Creating Order...' : 
-             orderStatus === 'paying' ? 'Opening Paystack...' : 
-             orderStatus === 'verifying' ? 'Verifying...' : 
-             `Pay N${total.toLocaleString()}`}
-          </button>
+      <div className="px-4 pb-8">
+        <button
+          onClick={placeOrder}
+          disabled={placingOrder || !isValid}
+          className={`w-full py-4 rounded-2xl font-bold text-lg transition ${
+            isValid && !placingOrder
+              ? 'bg-orange-500 text-black hover:bg-orange-400'
+              : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+          }`}
+        >
+          {placingOrder ? 'Processing...' : `Place Order - ₦${totalAmount.toLocaleString()}`}
+        </button>
+
+        {deliveryType === 'pickup' && paymentMethod === 'cash' && (
+          <p className="text-center text-xs text-gray-500 mt-2">
+            You will pay ₦{totalAmount.toLocaleString()} when you pick up at the store
+          </p>
         )}
       </div>
     </div>

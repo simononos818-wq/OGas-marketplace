@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, updateDoc, getDocs } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { Flame, Package, Phone, MapPin, Clock, CheckCircle, Truck, Star, LogOut, ChevronRight, RefreshCw } from 'lucide-react';
+import { Flame, Package, Phone, MapPin, Clock, CheckCircle, Truck, Star, LogOut, ChevronRight, RefreshCw, Banknote } from 'lucide-react';
 import Link from 'next/link';
 
 interface Order {
@@ -183,9 +183,7 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
       <div className="bg-gradient-to-b from-orange-900/30 to-black px-4 pt-4 pb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center">
-              <Flame size={20} className="text-black" />
-            </div>
+            <img src="/ogas-logo.svg" alt="OGas" className="h-10 w-auto" />
             <div>
               <h1 className="text-lg font-bold">{sellerData?.businessName || 'My Store'}</h1>
               <p className="text-xs text-gray-400">{sellerData?.address || ''}</p>
@@ -208,7 +206,14 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
         </div>
       </div>
 
-      {/* Tabs */}
+
+      {/* Payout */}
+      <div className="px-4 mt-3">
+        <Link href="/seller/bank" className="flex items-center justify-center gap-2 w-full py-2.5 bg-green-600/20 border border-green-500/30 text-green-400 rounded-lg text-sm font-medium hover:bg-green-600/30 transition">
+          <Banknote size={16} />
+          Set Payout Account
+        </Link>
+      </div>      {/* Tabs */}
       <div className="px-4 mb-4">
         <div className="flex gap-2 bg-gray-900 rounded-xl p-1">
           {(['new', 'active', 'completed'] as const).map(tab => (

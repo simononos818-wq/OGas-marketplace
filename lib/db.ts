@@ -16,7 +16,10 @@ export type Seller = {
   cylinderSizes: string[];
   prices: Record<string, number>;
   isActive: boolean;
+  isApproved: boolean;
   verified: boolean;
+  sellerStatus?: string;
+  statusBadge?: string;
   rating: number;
   totalOrders: number;
   createdAt: Timestamp;
@@ -44,6 +47,7 @@ export async function getActiveSellers(state?: string): Promise<Seller[]> {
   const q = query(
     collection(db, 'sellers'),
     where('isActive', '==', true),
+    where('isApproved', '==', true),
     where('verified', '==', true),
     orderBy('rating', 'desc')
   );
@@ -67,10 +71,15 @@ export async function getSellerByEmail(email: string): Promise<Seller | null> {
   return { id: d.id, ...d.data() } as Seller;
 }
 
-export async function registerSeller(data: Omit<Seller, 'id' | 'createdAt' | 'rating' | 'totalOrders' | 'verified'>): Promise<string> {
+export async function registerSeller(data: Omit<Seller, 'id' | 'createdAt' | 'rating' | 'totalOrders' | 'verified' | 'isApproved'>): Promise<string> {
   const ref = await addDoc(collection(db, 'sellers'), {
     ...data,
+    isApproved: false,
+    sellerStatus: "pending",
+    statusBadge: "Pending Approval",
     verified: false,
+    sellerStatus: 'pending',
+    statusBadge: 'Pending Approval',
     rating: 0,
     totalOrders: 0,
     createdAt: serverTimestamp(),
@@ -87,21 +96,13 @@ export async function createOrder(data: Omit<Order, 'id' | 'createdAt'>): Promis
 }
 
 export async function getOrdersByPhone(phone: string): Promise<Order[]> {
-  const q = query(
-    collection(db, 'orders'),
-    where('buyerPhone', '==', phone),
-    orderBy('createdAt', 'desc')
-  );
+  const q = query(collection(db, 'orders'), where('buyerPhone', '==', phone), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as Order));
 }
 
 export async function getOrdersBySeller(sellerId: string): Promise<Order[]> {
-  const q = query(
-    collection(db, 'orders'),
-    where('sellerId', '==', sellerId),
-    orderBy('createdAt', 'desc')
-  );
+  const q = query(collection(db, 'orders'), where('sellerId', '==', sellerId), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as Order));
 }

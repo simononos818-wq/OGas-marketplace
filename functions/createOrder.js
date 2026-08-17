@@ -1,36 +1,48 @@
 const { onRequest } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
-const db = admin.apps.length ? admin.firestore() : (admin.initializeApp(), admin.firestore());
+const { getFirestore } = require('firebase-admin/firestore');
+
+const db = getFirestore();
 
 exports.createOrder = onRequest(
-  { region: 'us-central1', cors: true },
+  { cors: true, region: 'us-central1' },
   async (req, res) => {
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
     try {
-      if (req.method === 'OPTIONS') {
-        res.set('Access-Control-Allow-Origin', '*');
-        res.set('Access-Control-Allow-Methods', 'POST');
-        res.set('Access-Control-Allow-Headers', 'Content-Type');
-        return res.status(204).send('');
+      const { buyerId, sellerId, items, deliveryAddress, deliveryFee, subtotal, total, notes, delivery } = req.body;
+
+      if (!buyerId || !sellerId || !Array.isArray(items) || items.length === 0 || total == null) {
+        res.status(400).json({ error: 'Missing required fields: buyerId, sellerId, items, total' });
+        return;
       }
 
-      const { buyerName, buyerPhone, buyerAddress, sellerId, sellerName, size, quantity, pricePerUnit, deliveryFee, total, paymentMethod, notes } = req.body;
-
-      if (!buyerName || !buyerPhone || !sellerId || !size || !quantity) {
-        return res.status(400).json({ error: 'Missing required fields' });
-      }
+      const firstItem = items[0];
+      const userDoc = await db.collection('users').doc(buyerId).get();
+      const userData = userDoc.exists ? userDoc.data() : {};
 
       const orderData = {
-        buyerName: buyerName.trim(),
-        buyerPhone: buyerPhone.trim(),
-        buyerAddress: buyerAddress || '',
+        buyerId,
+        buyerName: userData?.displayName || userData?.name || '',
+        buyerPhone: userData?.phone || '',
+        buyerAddress: deliveryAddress || '',
         sellerId,
-        sellerName: sellerName || '',
-        size,
-        quantity: Number(quantity),
-        pricePerUnit: Number(pricePerUnit) || 0,
+        items,
+        size: firstItem?.kg ?? firstItem?.size ?? null,
+        quantity: firstItem?.quantity ?? 1,
+        pricePerUnit: firstItem?.price ?? 0,
+        delivery: !!delivery,
         deliveryFee: Number(deliveryFee) || 0,
+        subtotal: Number(subtotal) || 0,
         total: Number(total) || 0,
-        paymentMethod: paymentMethod || 'cash_on_delivery',
         notes: notes || '',
         status: 'pending',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -39,20 +51,20 @@ exports.createOrder = onRequest(
 
       const docRef = await db.collection('orders').add(orderData);
 
-      // Increment seller totalOrders
-      await db.collection('vendors').doc(sellerId).update({
+      await db.collection('sellers').doc(sellerId).update({
         totalOrders: admin.firestore.FieldValue.increment(1),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      res.json({ 
-        success: true, 
+      res.status(200).json({
+        success: true,
         message: 'Order placed successfully!',
-        orderId: docRef.id 
+        orderId: docRef.id,
       });
+
     } catch (error) {
-      console.error('Create order error:', error);
-      res.status(500).json({ error: error.message });
+      console.error('createOrder error:', error);
+      res.status(500).json({ error: error.message || 'Internal server error' });
     }
   }
 );

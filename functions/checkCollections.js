@@ -6,7 +6,7 @@ exports.checkCollections = onRequest(
   { region: 'us-central1', cors: true },
   async (req, res) => {
     try {
-      const vendorsSnap = await db.collection('vendors').get();
+      const vendorsSnap = await db.collection('sellers').get();
       const vendors = vendorsSnap.docs.map(d => {
         const data = d.data();
         return {

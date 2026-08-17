@@ -6,7 +6,7 @@ exports.getVendors = onRequest(
   { region: 'us-central1', cors: true },
   async (req, res) => {
     try {
-      const snap = await db.collection('vendors').get();
+      const snap = await db.collection('sellers').get();
       const vendors = snap.docs.map(d => ({
         id: d.id,
         ...d.data()

@@ -8,6 +8,7 @@ const db = admin.firestore();
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET || '';
 const TERMII_API_KEY = process.env.TERMII_API_KEY || '';
 const TERMII_SENDER_ID = 'N-Alert';
+const OGAS_COMMISSION_PERCENT = 10;
 
 async function sendSMS(to: string, message: string) {
   try {
@@ -15,7 +16,7 @@ async function sendSMS(to: string, message: string) {
     if (phone.startsWith('0')) phone = '234' + phone.substring(1);
     if (phone.startsWith('+')) phone = phone.substring(1);
 
-    const response = await axios.post('https://v3.api.termii.com/api/sms/send', {
+    await axios.post('https://v3.api.termii.com/api/sms/send', {
       to: [phone],
       from: TERMII_SENDER_ID,
       sms: message,
@@ -23,8 +24,6 @@ async function sendSMS(to: string, message: string) {
       api_key: TERMII_API_KEY,
       channel: 'dnd',
     });
-    
-    console.log('SMS sent to', phone, 'Response:', response.data);
   } catch (error: any) {
     console.error('SMS failed:', error.response?.data || error.message);
   }
@@ -56,7 +55,7 @@ export const paystackWebhook = functions.https.onRequest(async (req, res) => {
         if (order) {
           await sendSMS(
             order.buyerPhone,
-            'OGas: Payment confirmed! Order #' + orderId.slice(-6) + ' is being processed. You will receive updates via SMS.'
+            `OGas: Payment confirmed! Order #${orderId.slice(-6)} is being processed.`
           );
           
           const sellerDoc = await db.collection('sellers').doc(order.sellerId).get();
@@ -64,7 +63,7 @@ export const paystackWebhook = functions.https.onRequest(async (req, res) => {
           if (seller?.phone) {
             await sendSMS(
               seller.phone,
-              'OGas: New order #' + orderId.slice(-6) + ' from ' + order.buyerName + '. Amount: N' + order.totalAmount + '. Check your dashboard.'
+              `OGas: New order #${orderId.slice(-6)} from ${order.buyerName}. Amount: N${order.totalAmount}.`
             );
           }
         }
@@ -75,22 +74,6 @@ export const paystackWebhook = functions.https.onRequest(async (req, res) => {
         console.error('Webhook error:', e);
         res.status(500).send('Error');
         return;
-      }
-    }
-  }
-  
-  if (event.event === 'transfer.success') {
-    const transferCode = event.data?.transfer_code;
-    if (transferCode) {
-      const payouts = await db.collection('payouts')
-        .where('paystackTransferCode', '==', transferCode)
-        .get();
-      
-      for (const doc of payouts.docs) {
-        await doc.ref.update({
-          status: 'completed',
-          completedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
       }
     }
   }
@@ -126,7 +109,7 @@ export const createChatOnOrder = functions.region('europe-west3').firestore
     const messagesRef = chatRef.collection('messages');
     await messagesRef.add({
       senderId: 'system',
-      text: 'Order #' + orderId.slice(-6) + ' created. Chat with your seller about delivery details.',
+      text: `Order #${orderId.slice(-6)} created. Chat with your seller about delivery details.`,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       read: false,
     });
@@ -135,8 +118,26 @@ export const createChatOnOrder = functions.region('europe-west3').firestore
     
     await sendSMS(
       order.buyerPhone,
-      'OGas: Order #' + orderId.slice(-6) + ' placed! Total: N' + order.totalAmount + '. Status: ' + (order.paymentMethod === 'cash' ? 'Cash on Delivery' : 'Awaiting Payment') + '.'
+      `OGas: Order #${orderId.slice(-6)} placed! Total: N${order.totalAmount}.`
     );
+  });
+
+export const notifySellerNewOrder = functions.region('europe-west3').firestore
+  .document('orders/{orderId}')
+  .onCreate(async (snap, context) => {
+    const order = snap.data();
+    const orderId = context.params.orderId;
+    
+    const sellerDoc = await db.collection('sellers').doc(order.sellerId).get();
+    const seller = sellerDoc.data();
+    
+    if (seller?.phone) {
+      const items = order.items?.map((i: any) => `${i.quantity}x${i.size}kg`).join(', ');
+      await sendSMS(
+        seller.phone,
+        `OGas NEW ORDER #${orderId.slice(-6)}: ${items}. Total: N${order.totalAmount}. Call: ${order.buyerPhone}`
+      );
+    }
   });
 
 export const notifyOrderStatusUpdate = functions.region('europe-west3').firestore
@@ -152,47 +153,95 @@ export const notifyOrderStatusUpdate = functions.region('europe-west3').firestor
       paid: 'Payment confirmed! Your order is being processed.',
       preparing: 'Your order is being prepared for delivery.',
       out_for_delivery: 'Your gas is on the way! Get ready to receive it.',
-      delivered: 'Your gas has been delivered. Thank you for using OGas!',
-      cancelled: 'Your order has been cancelled. Contact support if you need help.',
+      delivered: 'Your gas has been delivered. Please confirm receipt to complete the order.',
+      completed: 'Order completed! Thank you for using OGas.',
+      cancelled: 'Your order has been cancelled.',
     };
     
     const message = statusMessages[after.status];
     if (message) {
       await sendSMS(
         after.buyerPhone,
-        'OGas Order #' + orderId.slice(-6) + ': ' + message
+        `OGas Order #${orderId.slice(-6)}: ${message}`
       );
     }
     
-    if (after.status === 'out_for_delivery') {
-      const sellerDoc = await db.collection('sellers').doc(after.sellerId).get();
-      const seller = sellerDoc.data();
-      if (seller?.phone) {
-        await sendSMS(
-          seller.phone,
-          'OGas: Order #' + orderId.slice(-6) + ' is out for delivery. Make sure the gas reaches the customer.'
-        );
-      }
+    if (after.status === 'delivered' && before.status !== 'delivered') {
+      const confirmUrl = `https://www.ogaslpgmarketplace.com/orders/${orderId}/confirm`;
+      await sendSMS(
+        after.buyerPhone,
+        `OGas: Confirm you received your gas: ${confirmUrl} or reply YES.`
+      );
     }
   });
 
-export const notifySellerNewOrder = functions.region('europe-west3').firestore
-  .document('orders/{orderId}')
-  .onCreate(async (snap, context) => {
-    const order = snap.data();
-    const orderId = context.params.orderId;
-    
-    const sellerDoc = await db.collection('sellers').doc(order.sellerId).get();
-    const seller = sellerDoc.data();
-    
-    if (seller?.phone) {
-      const items = order.items?.map((i: any) => i.quantity + 'x' + i.size + 'kg').join(', ');
-      await sendSMS(
-        seller.phone,
-        'OGas NEW ORDER #' + orderId.slice(-6) + ': ' + items + '. Total: N' + order.totalAmount + '. Delivery: ' + order.buyerAddress + '. Call: ' + order.buyerPhone
-      );
-    }
+export const confirmDelivery = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+
+  const { orderId } = data;
+  const userId = context.auth.uid;
+
+  const orderRef = db.collection('orders').doc(orderId);
+  const orderDoc = await orderRef.get();
+
+  if (!orderDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Order not found');
+  }
+
+  const order = orderDoc.data()!;
+
+  if (order.buyerId !== userId) {
+    throw new functions.https.HttpsError('permission-denied', 'Only buyer can confirm');
+  }
+
+  if (order.status !== 'delivered') {
+    throw new functions.https.HttpsError('failed-precondition', 'Order not yet delivered');
+  }
+
+  const totalAmount = order.totalAmount || 0;
+  const commission = Math.round(totalAmount * (OGAS_COMMISSION_PERCENT / 100));
+  const sellerEarnings = totalAmount - commission;
+
+  await orderRef.update({
+    status: 'completed',
+    buyerConfirmedAt: admin.firestore.FieldValue.serverTimestamp(),
+    commission: commission,
+    sellerEarnings: sellerEarnings,
+    payoutStatus: 'pending',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+
+  const sellerRef = db.collection('sellers').doc(order.sellerId);
+  await sellerRef.update({
+    totalEarnings: admin.firestore.FieldValue.increment(sellerEarnings),
+    totalOrders: admin.firestore.FieldValue.increment(1),
+    totalCommissionPaid: admin.firestore.FieldValue.increment(commission),
+    pendingPayout: admin.firestore.FieldValue.increment(sellerEarnings),
+  });
+
+  await sendSMS(
+    order.buyerPhone,
+    `OGas: Order #${orderId.slice(-6)} completed! Thank you.`
+  );
+
+  const sellerDoc = await db.collection('sellers').doc(order.sellerId).get();
+  const seller = sellerDoc.data();
+  if (seller?.phone) {
+    await sendSMS(
+      seller.phone,
+      `OGas: Order #${orderId.slice(-6)} confirmed! N${sellerEarnings} ready for withdrawal.`
+    );
+  }
+
+  return {
+    success: true,
+    commission,
+    sellerEarnings,
+    message: 'Delivery confirmed. Seller can now withdraw earnings.',
+  };
+});
 
 export const sendMessageNotification = functions.region('europe-west3').firestore
   .document('chats/{chatId}/messages/{messageId}')
@@ -311,93 +360,6 @@ export const cleanupTypingStatus = functions.pubsub.schedule('every 5 minutes').
   }
 });
 
-export const autoPayoutOnDelivery = functions.region('europe-west3').firestore
-  .document('orders/{orderId}')
-  .onUpdate(async (change) => {
-    const before = change.before.data();
-    const after = change.after.data();
-    
-    if (before.status === 'delivered' || after.status !== 'delivered') return;
-    
-    const orderId = change.after.id;
-    const sellerId = after.sellerId;
-    const amount = after.totalAmount || 0;
-    
-    if (!sellerId || amount <= 0) return;
-    
-    const sellerDoc = await db.collection('sellers').doc(sellerId).get();
-    const seller = sellerDoc.data();
-    
-    if (!seller?.bankCode || !seller?.accountNumber) {
-      console.log('Seller ' + sellerId + ' has no bank details. Payout queued.');
-      await db.collection('payouts').add({
-        orderId,
-        sellerId,
-        amount,
-        status: 'pending_bank_details',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      return;
-    }
-    
-    try {
-      const transferRef = 'payout_' + orderId + '_' + Date.now();
-      
-      const response = await axios.post(
-        'https://api.paystack.co/transfer',
-        {
-          source: 'balance',
-          amount: amount * 100,
-          recipient: seller.paystackRecipientCode || '',
-          reason: 'OGas Order #' + orderId.slice(-6),
-          reference: transferRef,
-        },
-        {
-          headers: {
-            Authorization: 'Bearer ' + PAYSTACK_SECRET,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      if ((response.data as any).status) {
-        await db.collection('payouts').add({
-          orderId,
-          sellerId,
-          amount,
-          status: 'initiated',
-          paystackReference: transferRef,
-          paystackTransferCode: (response.data as any).data?.transfer_code,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        
-        await sellerDoc.ref.update({
-          totalEarnings: admin.firestore.FieldValue.increment(amount),
-          pendingPayouts: admin.firestore.FieldValue.increment(-amount),
-        });
-        
-        if (seller.phone) {
-          await sendSMS(
-            seller.phone,
-            'OGas: Payout of N' + amount + ' for Order #' + orderId.slice(-6) + ' has been initiated to your bank account.'
-          );
-        }
-        
-        console.log('Payout initiated for order ' + orderId + ': N' + amount);
-      }
-    } catch (error: any) {
-      console.error('Payout failed:', error.response?.data || error.message);
-      await db.collection('payouts').add({
-        orderId,
-        sellerId,
-        amount,
-        status: 'failed',
-        error: error.response?.data?.message || error.message,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
-  });
-
 export const getPaystackBanks = functions.https.onCall(async () => {
   try {
     const response = await axios.get('https://api.paystack.co/bank?country=nigeria', {
@@ -418,7 +380,7 @@ export const verifyBankAccount = functions.https.onCall(async (data) => {
   
   try {
     const response = await axios.get(
-      'https://api.paystack.co/bank/resolve?account_number=' + accountNumber + '&bank_code=' + bankCode,
+      `https://api.paystack.co/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
       { headers: { Authorization: 'Bearer ' + PAYSTACK_SECRET } }
     );
     
@@ -454,4 +416,76 @@ export const getSellerPayouts = functions.https.onCall(async (data, context) => 
   }));
   
   return { payouts };
+});
+
+// ==================== CREATE ORDER (HTTP with CORS) ====================
+export const createOrder = functions.https.onRequest(async (req, res) => {
+  // CORS headers — REQUIRED for browser fetch
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  // Handle browser preflight (OPTIONS)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const { buyerId, sellerId, items, deliveryAddress, deliveryFee, subtotal, total, notes, delivery } = req.body;
+
+    if (!buyerId || !sellerId || !Array.isArray(items) || items.length === 0 || total == null) {
+      res.status(400).json({ error: 'Missing required fields: buyerId, sellerId, items, total' });
+      return;
+    }
+
+    const firstItem = items[0];
+
+    // Pull buyer details from user profile
+    const userDoc = await db.collection('users').doc(buyerId).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+
+    const orderData = {
+      buyerId,
+      buyerName: userData?.displayName || userData?.name || '',
+      buyerPhone: userData?.phone || '',
+      buyerAddress: deliveryAddress || '',
+      sellerId,
+      items,
+      size: firstItem?.kg ?? firstItem?.size ?? null,
+      quantity: firstItem?.quantity ?? 1,
+      pricePerUnit: firstItem?.price ?? 0,
+      delivery: !!delivery,
+      deliveryFee: Number(deliveryFee) || 0,
+      subtotal: Number(subtotal) || 0,
+      total: Number(total) || 0,
+      notes: notes || '',
+      status: 'pending',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const docRef = await db.collection('orders').add(orderData);
+
+    // Increment seller order count
+    await db.collection('sellers').doc(sellerId).update({
+      totalOrders: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Order placed successfully!',
+      orderId: docRef.id,
+    });
+
+  } catch (error: any) {
+    console.error('createOrder error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
 });

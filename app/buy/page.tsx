@@ -79,7 +79,7 @@ export default function BuyPage() {
                 <h3 className="font-bold text-white truncate">{seller.businessName}</h3>
                 <p className="text-sm text-gray-400 truncate">{seller.address}</p>
                 <div className="flex items-center gap-3 mt-1 text-xs">
-                  <span className="text-orange-400 font-medium">₦{seller.pricePerKg?.toLocaleString()}/kg</span>
+                  <span className="text-orange-400 font-medium">₦{(seller.pricePerKg || 0).toLocaleString()}/kg</span>
                   {hasValidLocation && seller.location && (
                     <span className="text-green-400 flex items-center gap-1">
                       📍 {(getDistance(location.lat, location.lng, seller.location.lat, seller.location.lng)).toFixed(1)} km away
