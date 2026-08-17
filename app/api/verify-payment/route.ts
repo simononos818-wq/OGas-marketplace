@@ -36,35 +36,62 @@ export async function POST(req: NextRequest) {
     }
     const order = orderSnap.data()!;
 
-    // Prevent replaying a reference against a different order
+    // Already paid – idempotent
+    if (order.paymentStatus === 'paid' || order.status === 'paid') {
+      return NextResponse.json({ success: true, message: 'Order already marked paid', orderId: resolvedOrderId });
+    }
+
+    // Reference safety
     if (order.paystackRef && order.paystackRef !== reference) {
       console.error(`Reference mismatch for order ${resolvedOrderId}`);
       return NextResponse.json({ success: false, message: 'Reference mismatch' }, { status: 400 });
     }
-    if (order.status === 'paid') {
-      return NextResponse.json({ success: true, message: 'Order already marked paid', orderId: resolvedOrderId });
-    }
 
-    // CRITICAL: confirm the amount actually paid matches what the order expects
-    const expectedKobo = Math.round(((order.total || order.totalPrice || 0)) * 100);
+    // === SMART AMOUNT CHECK ===
+    // Look at every possible total field the app has used
+    const possibleTotals = [
+      order.total,
+      order.totalAmount,
+      order.totalPrice,
+      order.amount,
+      order.grandTotal,
+    ].filter((v) => typeof v === 'number' && !isNaN(v) && v > 0);
+
+    const expectedNaira = possibleTotals.length > 0 ? Math.max(...possibleTotals) : 0;
+    const expectedKobo = Math.round(expectedNaira * 100);
     const paidKobo = data.data.amount;
-    if (expectedKobo <= 0 || paidKobo !== expectedKobo) {
-      console.error(`Amount mismatch for order ${resolvedOrderId}: expected ${expectedKobo}, paid ${paidKobo}`);
-      return NextResponse.json({ success: false, message: 'Amount mismatch' }, { status: 400 });
+
+    // Allow ±2 naira tolerance for rounding / floating-point issues
+    const difference = Math.abs(paidKobo - expectedKobo);
+    const isMatch = expectedKobo > 0 && difference <= 200; // 200 kobo = ₦2
+
+    if (!isMatch) {
+      console.error(`Amount mismatch for order ${resolvedOrderId}:
+        expected fields: ${JSON.stringify(possibleTotals)}
+        expectedKobo: ${expectedKobo}
+        paidKobo: ${paidKobo}
+        difference: ${difference} kobo`);
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Amount mismatch',
+        debug: { expectedKobo, paidKobo, difference }
+      }, { status: 400 });
     }
 
+    // Mark paid
     await orderRef.update({
       status: 'paid',
       paymentStatus: 'paid',
       paystackRef: reference,
-      paystackAmount: data.data.amount,
+      paystackAmount: paidKobo,
       customerEmail: data.data.customer?.email || null,
       paidAt: new Date(),
       verifiedAt: new Date(),
       verifiedViaApi: true,
+      updatedAt: new Date(),
     });
 
-    console.log(`Order ${resolvedOrderId} verified and marked paid ✅`);
+    console.log(`✅ Order ${resolvedOrderId} verified and marked paid (paid ${paidKobo} kobo)`);
     return NextResponse.json({ success: true, message: 'Payment verified', orderId: resolvedOrderId });
   } catch (error) {
     console.error('Verify error:', error);
