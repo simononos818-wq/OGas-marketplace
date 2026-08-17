@@ -144,7 +144,8 @@ export default function BuyPage() {
             orderId,
             amount: totalAmount,
             email: user.email || '',
-            name: user.displayName || '',
+            name: user.displayName || user.name || '',
+            sellerId: seller.id,
           }),
         });
         const data = await res.json();
