@@ -9,13 +9,19 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'OGas - Gas Delivered to Your Door',
   description: 'Order cooking gas from trusted sellers near you. Fast delivery in Delta State, Nigeria.',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'OGas',
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#000000',
+  themeColor: '#f97316',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

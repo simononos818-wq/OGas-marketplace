@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
+
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -59,7 +59,8 @@ export default function LoginPage() {
         }
       }
     } catch (err: any) {
-      setError(err.message?.replace('Firebase:', '') || 'Authentication failed');
+      setError(err.message?.replace('Firebase: ', '') || 'Authentication failed');
+    } finally {
       setLoading(false);
     }
   };
@@ -68,8 +69,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Flame size={32} className="text-black" />
+          <div className="flex justify-center mb-4">
+            <img src="/ogas-logo.svg" alt="OGas" className="h-12 w-auto" />
           </div>
           <h1 className="text-3xl font-bold">OGas</h1>
           <p className="text-gray-400 mt-1">{isRegister ? 'Create your account' : 'Welcome back'}</p>

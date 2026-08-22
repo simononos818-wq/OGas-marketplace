@@ -169,11 +169,20 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
 
   const getNextAction = (status: string) => {
     switch (status) {
-      case 'paid': return { label: 'Confirm Order', next: 'confirmed', icon: CheckCircle };
-      case 'confirmed': return { label: 'Out for Delivery', next: 'out_for_delivery', icon: Truck };
-      case 'out_for_delivery': return { label: 'Mark Delivered', next: 'delivered', icon: CheckCircle };
-      case 'delivered': return { label: 'Complete Order', next: 'completed', icon: Star };
-      default: return null;
+      case 'pending':
+      case 'pending_payment':
+      case 'pending_cash':
+        return { label: 'Accept Order', next: 'confirmed', icon: CheckCircle };
+      case 'paid':
+        return { label: 'Confirm Order', next: 'confirmed', icon: CheckCircle };
+      case 'confirmed':
+        return { label: 'Out for Delivery', next: 'out_for_delivery', icon: Truck };
+      case 'out_for_delivery':
+        return { label: 'Mark Delivered', next: 'delivered', icon: CheckCircle };
+      case 'delivered':
+        return { label: 'Complete Order', next: 'completed', icon: Star };
+      default:
+        return null;
     }
   };
 
@@ -325,11 +334,11 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
       {/* Quick Links */}
       <div className="px-4 mt-6 space-y-2">
         <Link href="/profile" className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-gray-300 hover:border-orange-500/30 transition">
-          <span className="text-sm font-medium\">View Public Profile</span>
+          <span className="text-sm font-medium">View Public Profile</span>
           <ChevronRight size={16} className="text-gray-600" />
         </Link>
         <Link href="/buy" className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-gray-300 hover:border-orange-500/30 transition">
-          <span className="text-sm font-medium\">Preview Buyer App</span>
+          <span className="text-sm font-medium">Preview Buyer App</span>
           <ChevronRight size={16} className="text-gray-600" />
         </Link>
       </div>
@@ -341,7 +350,7 @@ function StatCard({ value, label, color }: { value: string | number; label: stri
   return (
     <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-3 text-center">
       <p className={`text-lg font-bold ${color}`}>{value}</p>
-      <p className="text-[10px] text-gray-500\">{label}</p>
+      <p className="text-[10px] text-gray-500">{label}</p>
     </div>
   );
 }

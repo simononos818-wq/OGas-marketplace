@@ -1,23 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Public read for approved/pre-registered sellers (client filters the rest)
-    match /sellers/{sellerId} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && (request.auth.uid == resource.data.uid || request.auth.token.admin == true);
-    }
-    match /products/{productId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    match /orders/{orderId} {
-      allow read: if request.auth != null && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || request.auth.token.admin == true);
-    }
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }
