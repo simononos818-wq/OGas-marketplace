@@ -2,53 +2,42 @@
 
 import { useRouter } from 'next/navigation';
 import { MessageSquare } from 'lucide-react';
+import { authHeaders } from '../lib/client-auth';
 
 interface ChatButtonProps {
   orderId: string;
   chatId?: string;
-  variant?: 'primary' | 'outline' | 'floating';
+  variant?: 'primary' | 'outline' | 'block';
+  label?: string;
 }
 
-export default function ChatButton({ orderId, chatId, variant = 'primary' 
-}: ChatButtonProps) {
+export default function ChatButton({ orderId, chatId, variant = 'primary', label = 'Message' }: ChatButtonProps) {
   const router = useRouter();
-  const targetChatId = chatId || orderId;
+  const target = chatId || orderId;
 
-  if (variant === 'floating') {
-    return (
-      <button
-        onClick={() => router.push(`/chat/${targetChatId}`)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-orange-500 
-rounded-full flex items-center justify-center shadow-lg 
-shadow-orange-500/40 hover:bg-orange-400 transition z-50"
-      >
-        <MessageSquare size={24} className="text-black" />
-      </button>
-    );
-  }
+  const open = async () => {
+    try {
+      const headers = await authHeaders();
+      await fetch('/api/chat', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action: 'open', orderId: target }),
+      });
+    } catch {
+      /* still navigate — the thread page will retry */
+    }
+    router.push(`/chat/${target}`);
+  };
 
-  if (variant === 'outline') {
-    return (
-      <button
-        onClick={() => router.push(`/chat/${targetChatId}`)}
-        className="flex items-center gap-2 px-5 py-3 border-2 
-border-orange-500 text-orange-500 rounded-xl font-bold 
-hover:bg-orange-500/10 transition"
-      >
-        <MessageSquare size={18} />
-        Message
-      </button>
-    );
-  }
+  const base =
+    variant === 'outline'
+      ? 'flex items-center justify-center gap-2 px-4 py-3 border-2 border-orange-500 text-orange-500 rounded-xl font-bold'
+      : 'flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 text-black rounded-xl font-bold';
 
   return (
-    <button
-      onClick={() => router.push(`/chat/${targetChatId}`)}
-      className="flex items-center gap-2 px-5 py-3 bg-orange-500 
-text-black rounded-xl font-bold hover:bg-orange-400 transition"
-    >
+    <button onClick={open} className={`${base} ${variant === 'block' || variant === 'outline' || variant === 'primary' ? 'w-full' : ''} mt-2`}>
       <MessageSquare size={18} />
-      Chat Now
+      {label}
     </button>
   );
 }

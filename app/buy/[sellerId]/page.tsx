@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { getApp } from 'firebase/app';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthContext } from '../../context/AuthContext';
+import { authHeaders, saveBuyerContact } from '@/lib/client-auth';
 import { MapPin, Phone, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Flame, Calculator, Tag, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 
@@ -30,9 +29,6 @@ interface Seller {
 
 const OGAS_DISCOUNT_PER_KG = 50;
 
-// Must match the region your Cloud Functions are actually deployed to (us-central1)
-const functions = getFunctions(getApp(), 'us-central1');
-
 export default function BuyPage() {
   const { sellerId } = useParams();
   const router = useRouter();
@@ -46,6 +42,9 @@ export default function BuyPage() {
   const [placingOrder, setPlacingOrder] = useState(false);
   const [buyerLocation, setBuyerLocation] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
+  const [buyerPhone, setBuyerPhone] = useState('');
+  const [buyerName, setBuyerName] = useState('');
+  const [buyerAddress, setBuyerAddress] = useState('');
 
   useEffect(() => {
     if (!sellerId) return;
@@ -103,48 +102,50 @@ export default function BuyPage() {
   const totalAmount = gasCost + deliveryFee;
   const totalDiscount = OGAS_DISCOUNT_PER_KG * kg;
   const isPendingApproval = seller.isApproved === false;
-  const isValid = kg >= 1 && kg <= 50 && !isPendingApproval;
+  const isValid = kg >= 1 && kg <= 50 && !isPendingApproval && buyerPhone.replace(/\D/g, '').length >= 10 && (deliveryType === 'pickup' || buyerAddress.trim().length >= 3);
 
   const placeOrder = async () => {
-    if (!user || !isValid) return;
+    if (!isValid) return;
     setPlacingOrder(true);
 
     try {
-      // 1. Write order directly to Firestore (bypass broken Cloud Functions)
-      const orderData = {
-        buyerId: user.uid,
-        buyerName: user.displayName || user.name || '',
-        buyerPhone: user.phoneNumber || '',
-        buyerEmail: user.email || '',
-        sellerId: seller.id,
-        sellerName: seller.businessName || 'Unknown Seller',
-        sellerPhone: seller.phone || '',
-        items: [{ size: String(kg), quantity: 1, unitPrice: discountedPrice }],
-        gasSize: String(kg),
-        quantity: 1,
-        pricePerKg: discountedPrice,
-        deliveryFee,
-        total: totalAmount,
-        totalAmount,
-        totalPrice: totalAmount,
-        status: paymentMethod === 'cash' ? 'pending_cash' : 'pending',
-        paymentMethod,
-        createdAt: serverTimestamp(),
-      };
+      await saveBuyerContact(buyerPhone, buyerName, buyerAddress || buyerLocation);
+      const headers = await authHeaders();
+      const createRes = await fetch('/api/create-order', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          sellerId: seller.id,
+          kg,
+          deliveryType,
+          paymentMethod,
+          buyerPhone,
+          buyerName,
+          buyerAddress: deliveryType === 'pickup' ? 'Pickup in store' : buyerAddress || buyerLocation,
+        }),
+      });
+      const created = await createRes.json();
+      if (!created.success || !created.orderId) {
+        throw new Error(created.message || 'Failed to place order');
+      }
 
-      const orderRef = await addDoc(collection(db, 'orders'), orderData);
-      const orderId = orderRef.id;
+      if (created.doorCode) {
+        try {
+          sessionStorage.setItem(`ogas-door-${created.orderId}`, created.doorCode);
+        } catch {
+          /* ignore */
+        }
+      }
 
       if (paymentMethod === 'paystack') {
-        // 2. Initialize Paystack via Next.js API route
         const res = await fetch('/api/checkout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
-            orderId,
-            amount: totalAmount,
-            email: user.email || '',
-            name: user.displayName || user.name || '',
+            orderId: created.orderId,
+            amount: created.totalAmount,
+            email: user?.email || '',
+            name: buyerName || user?.displayName || '',
             sellerId: seller.id,
           }),
         });
@@ -155,7 +156,6 @@ export default function BuyPage() {
           throw new Error(data.message || 'Payment initialization failed');
         }
       } else {
-        // Cash on pickup/delivery
         router.push('/orders');
       }
     } catch (err: any) {
@@ -359,6 +359,36 @@ export default function BuyPage() {
           </div>
         </div>
 
+        {/* Your details — no email needed */}
+        <div className="bg-gray-900 rounded-2xl p-4 space-y-3">
+          <h3 className="font-bold">Your details</h3>
+          <p className="text-xs text-gray-400">Phone is enough. No email signup required.</p>
+          <input
+            type="tel"
+            inputMode="tel"
+            value={buyerPhone}
+            onChange={(e) => setBuyerPhone(e.target.value)}
+            placeholder="Phone number"
+            className="w-full bg-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          <input
+            type="text"
+            value={buyerName}
+            onChange={(e) => setBuyerName(e.target.value)}
+            placeholder="Name (optional)"
+            className="w-full bg-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          {deliveryType === 'delivery' && (
+            <input
+              type="text"
+              value={buyerAddress}
+              onChange={(e) => setBuyerAddress(e.target.value)}
+              placeholder="Delivery address"
+              className="w-full bg-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          )}
+        </div>
+
         {/* Order Summary with Discount */}
         <div className="bg-gray-900 rounded-2xl p-4">
           <h3 className="font-bold mb-3">Order Summary</h3>
@@ -400,12 +430,16 @@ export default function BuyPage() {
               : 'bg-gray-800 text-gray-500 cursor-not-allowed'
           }`}
         >
-          {placingOrder ? 'Processing...' : `Place Order - ₦${totalAmount.toLocaleString()}`}
+          {placingOrder
+            ? 'Processing...'
+            : paymentMethod === 'paystack'
+              ? `Pay and lock in escrow — ₦${totalAmount.toLocaleString()}`
+              : `Place cash order — ₦${totalAmount.toLocaleString()}`}
         </button>
 
-        {deliveryType === 'pickup' && paymentMethod === 'cash' && (
+        {paymentMethod === 'paystack' && (
           <p className="text-center text-xs text-gray-500 mt-2">
-            You will pay ₦{totalAmount.toLocaleString()} when you pick up at the store
+            OGas holds your money. The seller is paid only with your Door Code at the door — never automatically the next day.
           </p>
         )}
       </div>

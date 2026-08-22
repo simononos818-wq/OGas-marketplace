@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="dark">
       <body className={`${inter.className} bg-black text-white antialiased`}>
         <AuthProvider>
-          <main className="min-h-screen pb-20">
+          <main className="min-h-screen pb-20 [&:has(.ogas-chat-thread)]:pb-0">
             {children}
           </main>
           <BottomNav />

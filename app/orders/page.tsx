@@ -2,11 +2,13 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { authHeaders } from '@/lib/client-auth';
 import Link from 'next/link';
-import { CheckCircle, Phone, Loader2 } from 'lucide-react';
+import { CheckCircle, Loader2, KeyRound } from 'lucide-react';
+import ChatButton from '@/components/ChatButton';
 
 interface Order {
   id: string;
@@ -38,6 +40,7 @@ function OrdersContent() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [doorCodes, setDoorCodes] = useState<Record<string, string>>({});
   const [callbackState, setCallbackState] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
   const [callbackMessage, setCallbackMessage] = useState('');
 
@@ -91,18 +94,50 @@ function OrdersContent() {
     return () => unsubscribe();
   }, [user]);
 
+  useEffect(() => {
+    if (!user || orders.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const headers = await authHeaders();
+      const next: Record<string, string> = {};
+      for (const order of orders) {
+        const held = order.status === 'paid' || order.status === 'confirmed' || order.status === 'out_for_delivery' || order.status === 'delivered';
+        if (!held) continue;
+        try {
+          const cached = sessionStorage.getItem(`ogas-door-${order.id}`);
+          if (cached) {
+            next[order.id] = cached;
+            continue;
+          }
+        } catch {
+          /* ignore */
+        }
+        const res = await fetch(`/api/door-code?orderId=${order.id}`, { headers });
+        const data = await res.json();
+        if (data.doorCode) next[order.id] = data.doorCode;
+      }
+      if (!cancelled) setDoorCodes(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, orders]);
+
   const confirmDelivery = async (orderId: string) => {
-    if (!confirm('Have you received your gas? This will release payment to the seller.')) return;
+    if (!confirm('Have you received your gas? This releases escrow to the seller.')) return;
     setConfirming(orderId);
     try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        status: 'completed',
-        deliveredAt: new Date(),
-        buyerConfirmed: true,
+      const headers = await authHeaders();
+      const res = await fetch('/api/release-escrow', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ orderId, action: 'buyer_confirm' }),
       });
-      alert('✅ Delivery confirmed! Seller has been paid.');
-    } catch (e) {
-      alert('Error confirming delivery. Please try again.');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+      alert('Delivery confirmed. Escrow released to the seller.');
+    } catch (e: any) {
+      alert(e.message || 'Error confirming delivery. Please try again.');
     } finally {
       setConfirming(null);
     }
@@ -169,7 +204,7 @@ function OrdersContent() {
         {success && callbackState === 'idle' && (
           <div className="bg-green-500/20 border border-green-500 rounded-2xl p-4 mb-6 text-center">
             <div className="text-green-400 font-bold text-lg mb-1">🎉 Order Placed!</div>
-            <p className="text-green-300 text-sm">Your order has been placed. The seller will contact you soon.</p>
+            <p className="text-green-300 text-sm">Your order is in. Chat with the store in Messages — numbers stay private.</p>
           </div>
         )}
 
@@ -186,7 +221,7 @@ function OrdersContent() {
         {callbackState === 'success' && (
           <div className="bg-green-500/20 border border-green-500 rounded-2xl p-4 mb-6 text-center">
             <div className="text-green-400 font-bold text-lg mb-1">🎉 {callbackMessage}</div>
-            <p className="text-green-300 text-sm">The seller will contact you soon.</p>
+            <p className="text-green-300 text-sm">Open Messages to talk to the store. Share the Door Code only at the door.</p>
           </div>
         )}
 
@@ -241,25 +276,26 @@ function OrdersContent() {
                     <span className="font-bold text-xl text-orange-500">₦{o.totalAmount.toLocaleString()}</span>
                   </div>
 
-                  {order.status === 'out_for_delivery' && (
+                  {doorCodes[order.id] && (
+                    <div className="mb-3 rounded-xl border border-orange-500/40 bg-orange-500/10 p-3 text-center">
+                      <p className="text-[10px] uppercase tracking-wide text-orange-300 flex items-center justify-center gap-1">
+                        <KeyRound size={12} /> Door Code — say this at the door
+                      </p>
+                      <p className="mt-1 font-mono text-2xl tracking-[0.3em] text-orange-400">{doorCodes[order.id]}</p>
+                    </div>
+                  )}
+
+                  <ChatButton orderId={order.id} label="Message store" />
+
+                  {(order.status === 'out_for_delivery' || order.status === 'delivered' || order.status === 'paid' || order.status === 'confirmed') && (
                     <button
                       onClick={() => confirmDelivery(order.id)}
                       disabled={confirming === order.id}
-                      className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition"
+                      className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition mt-2"
                     >
                       <CheckCircle size={18} />
-                      {confirming === order.id ? 'Confirming...' : 'I Have Received My Gas'}
+                      {confirming === order.id ? 'Releasing escrow...' : 'I have my gas — release escrow'}
                     </button>
-                  )}
-
-                  {order.status === 'paid' && o.sellerPhone && (
-                    <a
-                      href={`tel:${o.sellerPhone}`}
-                      className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition mt-2"
-                    >
-                      <Phone size={18} />
-                      Call Seller
-                    </a>
                   )}
 
                   {o.paymentReference && (

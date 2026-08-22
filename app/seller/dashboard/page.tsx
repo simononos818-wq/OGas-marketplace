@@ -3,9 +3,11 @@
 import { useAuth } from '../../hooks/useAuth';
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, orderBy, onSnapshot, updateDoc, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { Flame, Package, Phone, MapPin, Clock, CheckCircle, Truck, Star, LogOut, ChevronRight, RefreshCw, Banknote } from 'lucide-react';
+import { Flame, Package, MapPin, Clock, CheckCircle, Truck, Star, LogOut, ChevronRight, RefreshCw, Banknote, KeyRound, MessageSquare } from 'lucide-react';
+import ChatButton from '@/components/ChatButton';
+import { authHeaders } from '@/lib/client-auth';
 import Link from 'next/link';
 
 interface Order {
@@ -80,6 +82,8 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
   const [stats, setStats] = useState({ total: 0, pending: 0, confirmed: 0, delivered: 0, revenue: 0 });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'new' | 'active' | 'completed'>('new');
+  const [doorInputs, setDoorInputs] = useState<Record<string, string>>({});
+  const [unlocking, setUnlocking] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -102,7 +106,7 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
         const order = { ...data, id: doc.id };
         ordersList.push(order);
         
-        if (order.status === 'paid' || order.status === 'pending_payment') pendingCount++;
+        if (order.status === 'paid' || order.status === 'pending_payment' || order.status === 'pending_cash') pendingCount++;
         else if (order.status === 'confirmed' || order.status === 'out_for_delivery') confirmedCount++;
         else if (order.status === 'delivered' || order.status === 'completed') {
           deliveredCount++;
@@ -126,18 +130,64 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        status: newStatus,
-        updatedAt: new Date()
+      const headers = await authHeaders();
+      const res = await fetch('/api/order-status', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ orderId, status: newStatus }),
       });
-    } catch (err) {
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+    } catch (err: any) {
       console.error('Failed to update order:', err);
-      alert('Failed to update order. Try again.');
+      alert(err.message || 'Failed to update order. Try again.');
+    }
+  };
+
+  const unlockEscrow = async (orderId: string) => {
+    const code = doorInputs[orderId];
+    if (!code) {
+      alert('Ask the buyer for the Door Code at the door.');
+      return;
+    }
+    setUnlocking(orderId);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch('/api/release-escrow', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ orderId, action: 'seller_code', doorCode: code }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+      alert('Door Code matched. Escrow is released to you.');
+    } catch (err: any) {
+      alert(err.message || 'Could not unlock escrow');
+    } finally {
+      setUnlocking(null);
+    }
+  };
+
+  const completeCash = async (orderId: string) => {
+    setUnlocking(orderId);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch('/api/release-escrow', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ orderId, action: 'cash' }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+    } catch (err: any) {
+      alert(err.message || 'Could not complete cash order');
+    } finally {
+      setUnlocking(null);
     }
   };
 
   const filteredOrders = orders.filter(order => {
-    if (activeTab === 'new') return order.status === 'pending_payment' || order.status === 'paid' || order.status === 'pending';
+    if (activeTab === 'new') return order.status === 'pending_payment' || order.status === 'paid' || order.status === 'pending' || order.status === 'pending_cash';
     if (activeTab === 'active') return order.status === 'confirmed' || order.status === 'out_for_delivery';
     if (activeTab === 'completed') return order.status === 'delivered' || order.status === 'completed';
     return true;
@@ -158,6 +208,7 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'pending_payment': return 'Awaiting Payment';
+      case 'pending_cash': return 'Cash — confirm when paid';
       case 'paid': return 'Paid - Confirm Order';
       case 'confirmed': return 'Confirmed - Deliver';
       case 'out_for_delivery': return 'Out for Delivery';
@@ -169,20 +220,10 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
 
   const getNextAction = (status: string) => {
     switch (status) {
-      case 'pending':
-      case 'pending_payment':
-      case 'pending_cash':
-        return { label: 'Accept Order', next: 'confirmed', icon: CheckCircle };
-      case 'paid':
-        return { label: 'Confirm Order', next: 'confirmed', icon: CheckCircle };
-      case 'confirmed':
-        return { label: 'Out for Delivery', next: 'out_for_delivery', icon: Truck };
-      case 'out_for_delivery':
-        return { label: 'Mark Delivered', next: 'delivered', icon: CheckCircle };
-      case 'delivered':
-        return { label: 'Complete Order', next: 'completed', icon: Star };
-      default:
-        return null;
+      case 'paid': return { label: 'Confirm Order', next: 'confirmed', icon: CheckCircle };
+      case 'confirmed': return { label: 'Out for Delivery', next: 'out_for_delivery', icon: Truck };
+      case 'out_for_delivery': return { label: 'Mark Delivered', next: 'delivered', icon: CheckCircle };
+      default: return null;
     }
   };
 
@@ -198,12 +239,17 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
               <p className="text-xs text-gray-400">{sellerData?.address || ''}</p>
             </div>
           </div>
-          <button 
-            onClick={() => { /* sign out logic */ window.location.href = '/'; }}
-            className="p-2 text-gray-400 hover:text-white"
-          >
-            <LogOut size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <Link href="/chat" className="p-2 text-orange-400 hover:text-orange-300" aria-label="Messages">
+              <MessageSquare size={18} />
+            </Link>
+            <button 
+              onClick={() => { window.location.href = '/'; }}
+              className="p-2 text-gray-400 hover:text-white"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -280,14 +326,10 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
                         <span key={i}>{item.quantity}x {item.size} (N{item.price?.toLocaleString()})</span>
                       ))}
                     </div>
-                    <div className="flex items-center gap-2 text-gray-300">
-                      <Phone size={14} className="text-green-500" />
-                      {order.buyerPhone || 'No phone'}
-                    </div>
                     {order.deliveryType === 'delivery' && (
                       <div className="flex items-center gap-2 text-gray-300">
                         <MapPin size={14} className="text-blue-500" />
-                        <span className="truncate\">{order.buyerAddress || 'No address'}</span>
+                        <span className="truncate">{order.buyerAddress || 'No address'}</span>
                       </div>
                     )}
                     {order.deliveryType === 'pickup' && (
@@ -299,7 +341,47 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
                   </div>
                 </div>
 
+                <div className="px-3 pt-3">
+                  <ChatButton orderId={order.id} label="Message buyer" />
+                </div>
+
                 {/* Action Buttons */}
+                {order.status === 'pending_cash' && (
+                  <div className="p-3 bg-black/40 space-y-2">
+                    <p className="text-xs text-gray-400">Cash order. Confirm only after you have the money in hand.</p>
+                    <button
+                      onClick={() => completeCash(order.id)}
+                      disabled={unlocking === order.id}
+                      className="w-full bg-green-600 text-white font-bold py-2.5 rounded-xl text-sm"
+                    >
+                      {unlocking === order.id ? 'Saving…' : 'Customer paid cash'}
+                    </button>
+                  </div>
+                )}
+
+                {['paid', 'confirmed', 'out_for_delivery', 'delivered'].includes(order.status) && (
+                  <div className="p-3 bg-black/40 space-y-2">
+                    <p className="text-xs text-gray-400 flex items-center gap-1">
+                      <KeyRound size={12} /> Ask the buyer for the Door Code. That is how you get paid.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        value={doorInputs[order.id] || ''}
+                        onChange={(e) => setDoorInputs({ ...doorInputs, [order.id]: e.target.value.toUpperCase() })}
+                        placeholder="Door Code"
+                        className="flex-1 bg-gray-800 rounded-xl px-3 py-2 text-sm tracking-[0.25em] uppercase"
+                      />
+                      <button
+                        onClick={() => unlockEscrow(order.id)}
+                        disabled={unlocking === order.id}
+                        className="px-4 bg-green-600 text-white font-bold rounded-xl text-sm"
+                      >
+                        {unlocking === order.id ? '...' : 'Unlock'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {nextAction && (
                   <div className="p-3 bg-gray-800/50 flex gap-2">
                     <button
@@ -309,14 +391,6 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
                       <nextAction.icon size={16} />
                       {nextAction.label}
                     </button>
-                    {order.buyerPhone && (
-                      <a 
-                        href={`tel:${order.buyerPhone}`}
-                        className="px-4 bg-gray-800 text-green-400 rounded-xl flex items-center justify-center hover:bg-gray-700 transition"
-                      >
-                        <Phone size={18} />
-                      </a>
-                    )}
                   </div>
                 )}
                 

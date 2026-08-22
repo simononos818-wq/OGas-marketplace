@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { adminDb } from '../../../lib/firebase-admin';
+import { notifyPaidEscrow } from '../../../lib/escrow';
+import { postSystemMessage } from '../../../lib/chat-server';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,8 +18,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
     }
 
-    const hash = crypto.createHmac('sha512', secret).update(rawBody).digest('hex');
-    if (hash !== signature) {
+    const hash = createHmac('sha512', secret).update(rawBody).digest('hex');
+    try {
+      const a = Buffer.from(hash, 'hex');
+      const b = Buffer.from(String(signature), 'hex');
+      if (a.length !== b.length || !timingSafeEqual(a, b)) {
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
+    } catch {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
@@ -33,14 +41,12 @@ export async function POST(req: NextRequest) {
     const orderId = metadata.orderId;
 
     if (!orderId) {
-      console.warn('charge.success without orderId. Ref:', reference);
       return NextResponse.json({ received: true });
     }
 
     const orderRef = adminDb.collection('orders').doc(orderId);
     const orderSnap = await orderRef.get();
     if (!orderSnap.exists) {
-      console.error('Order not found:', orderId);
       return NextResponse.json({ received: true });
     }
 
@@ -51,11 +57,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (order.paystackRef && order.paystackRef !== reference) {
-      console.error(`Reference mismatch on order ${orderId}`);
       return NextResponse.json({ error: 'Reference mismatch' }, { status: 400 });
     }
 
-    // Smart amount check (same as verify)
     const possibleTotals = [
       order.total,
       order.totalAmount,
@@ -69,24 +73,26 @@ export async function POST(req: NextRequest) {
     const difference = Math.abs(paidAmount - expectedKobo);
 
     if (expectedKobo > 0 && difference > 200) {
-      console.error(`Amount mismatch on order ${orderId}: expected ${expectedKobo}, got ${paidAmount}`);
       return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
     }
 
     await orderRef.update({
       status: 'paid',
       paymentStatus: 'paid',
+      escrowStatus: 'held',
+      usedSplitPayment: false,
       paystackRef: reference,
       paystackAmount: paidAmount,
       paidAt: new Date(),
       verifiedAt: new Date(),
       verifiedViaWebhook: true,
       customerEmail: data.customer?.email || null,
-      usedSplitPayment: metadata.usedSplitPayment || false,
       updatedAt: new Date(),
     });
 
-    console.log(`✅ Webhook: Order ${orderId} marked paid (ref: ${reference})`);
+    await notifyPaidEscrow(orderId);
+    await postSystemMessage(orderId, 'Chat is open. Payment is locked in escrow until Door Code or buyer confirm.');
+
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('Webhook error:', error);

@@ -1,36 +1,58 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  collection, doc, query, orderBy, onSnapshot, addDoc,
-  serverTimestamp, updateDoc, getDoc, Timestamp,
+  collection,
+  doc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  Timestamp,
+  where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAuth } from '../context/AuthContext';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../lib/firebase';
+import { useAuth } from '../app/hooks/useAuth';
+import { authHeaders } from '../lib/client-auth';
+import type { ChatRole } from '../lib/chat';
 
 export interface ChatMessage {
   id: string;
   text: string;
   senderId: string;
   senderName: string;
-  senderPhoto?: string;
+  senderRole?: 'buyer' | 'seller' | 'system';
   type: 'text' | 'image' | 'system' | 'location';
-  timestamp: Timestamp;
+  timestamp: Timestamp | null;
   readBy: string[];
-  imageUrl?: string;
-  location?: { latitude: number; longitude: number; address?: string };
 }
 
 export interface Chat {
   id: string;
   participants: string[];
   orderId: string;
-  lastMessage: { text: string; senderId: string; timestamp: Timestamp };
+  buyerId: string;
+  sellerId: string;
+  buyerName: string;
+  sellerName: string;
+  productLabel?: string;
+  lastMessage: string;
+  lastMessageAt?: Timestamp;
+  lastSenderRole?: string;
   unreadCount: Record<string, number>;
-  typing: Record<string, Timestamp | null>;
-  updatedAt: Timestamp;
-  otherUser?: { displayName: string; photoURL?: string; phoneNumber?: 
-string };
+  updatedAt?: Timestamp;
+}
+
+async function chatAction(payload: Record<string, unknown>) {
+  const headers = await authHeaders();
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || 'Chat failed');
+  return data;
 }
 
 export function useChat(chatId: string) {
@@ -39,135 +61,78 @@ export function useChat(chatId: string) {
   const [chatInfo, setChatInfo] = useState<Chat | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [otherUserTyping, setOtherUserTyping] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const openedRef = useRef(false);
 
   useEffect(() => {
     if (!chatId || !user) return;
-    const chatRef = doc(db, 'chats', chatId);
-    const unsubscribe = onSnapshot(chatRef, async (snapshot) => {
+    openedRef.current = false;
+    const unsub = onSnapshot(doc(db, 'chats', chatId), (snapshot) => {
       if (snapshot.exists()) {
-        const data = snapshot.data();
-        const otherUserId = data.participants.find((id: string) => id !== 
-user.uid);
-        let otherUserInfo = null;
-        if (otherUserId) {
-          const userDoc = await getDoc(doc(db, 'users', otherUserId));
-          if (userDoc.exists()) otherUserInfo = userDoc.data();
-        }
-        setChatInfo({
-          id: snapshot.id, ...data,
-          otherUser: otherUserInfo ? {
-            displayName: otherUserInfo.displayName || 'User',
-            photoURL: otherUserInfo.photoURL,
-            phoneNumber: otherUserInfo.phoneNumber,
-          } : undefined,
-        } as Chat);
-
-        if (otherUserId && data.typing?.[otherUserId]) {
-          const typingTime = data.typing[otherUserId].toDate();
-          if (new Date().getTime() - typingTime.getTime() < 30000) 
-setOtherUserTyping(true);
-          else setOtherUserTyping(false);
-        } else setOtherUserTyping(false);
+        setChatInfo({ id: snapshot.id, ...snapshot.data() } as Chat);
+        setLoading(false);
+      } else if (!openedRef.current) {
+        openedRef.current = true;
+        chatAction({ action: 'open', orderId: chatId })
+          .catch((e) => setError(e.message))
+          .finally(() => setLoading(false));
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, [chatId, user]);
 
   useEffect(() => {
     if (!chatId || !user) return;
-    const messagesRef = collection(db, 'chats', chatId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs: ChatMessage[] = [];
-      snapshot.forEach((doc) => msgs.push({ id: doc.id, ...doc.data() } as 
-ChatMessage));
-      setMessages(msgs);
+    const q = query(
+      collection(db, 'chats', chatId, 'messages'),
+      orderBy('timestamp', 'asc'),
+      limit(200),
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      setMessages(snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)));
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, [chatId, user]);
 
   useEffect(() => {
-    if (!chatId || !user) return;
-    const markAsRead = async () => {
+    if (!chatId || !user || !chatInfo) return;
+    chatAction({ action: 'read', chatId }).catch(() => {});
+  }, [chatId, user, chatInfo?.id, messages.length]);
+
+  const sendMessage = useCallback(
+    async (text: string, quickKey?: string) => {
+      if (!chatId || !user) return;
+      setSending(true);
+      setError(null);
       try {
-        const markReadFn = httpsCallable(functions, 'markMessagesAsRead');
-        await markReadFn({ chatId });
-      } catch (error) { console.error('Error marking messages as read:', 
-error); }
-    };
-    markAsRead();
-  }, [chatId, user]);
+        await chatAction({ action: 'send', chatId, text, quickKey });
+      } catch (e: any) {
+        setError(e.message || 'Could not send');
+        throw e;
+      } finally {
+        setSending(false);
+      }
+    },
+    [chatId, user],
+  );
 
-  const sendMessage = useCallback(async (text: string) => {
-    if (!chatId || !user || !text.trim()) return;
-    setSending(true);
-    try {
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
-        text: text.trim(), senderId: user.uid, senderName: 
-user.displayName || 'User',
-        senderPhoto: user.photoURL || null, type: 'text', timestamp: 
-serverTimestamp(), readBy: [user.uid],
-      });
-      await updateDoc(doc(db, 'chats', chatId), {
-        lastMessage: { text: text.trim(), senderId: user.uid, timestamp: 
-serverTimestamp() },
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) { console.error('Error sending message:', error); 
-throw error; }
-    finally { setSending(false); }
-  }, [chatId, user]);
-
-  const sendLocationMessage = useCallback(async (latitude: number, 
-longitude: number, address?: string) => {
-    if (!chatId || !user) return;
-    setSending(true);
-    try {
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
-        text: address || '📍 Shared location', senderId: user.uid, 
-senderName: user.displayName || 'User',
-        senderPhoto: user.photoURL || null, type: 'location', location: { 
-latitude, longitude, address },
-        timestamp: serverTimestamp(), readBy: [user.uid],
-      });
-      await updateDoc(doc(db, 'chats', chatId), {
-        lastMessage: { text: address || '📍 Shared location', senderId: 
-user.uid, timestamp: serverTimestamp() },
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) { console.error('Error sending location:', error); 
-throw error; }
-    finally { setSending(false); }
-  }, [chatId, user]);
-
-  const setTyping = useCallback(async (isTyping: boolean) => {
-    if (!chatId || !user) return;
-    try {
-      const updateTypingFn = httpsCallable(functions, 
-'updateTypingStatus');
-      await updateTypingFn({ chatId, isTyping });
-    } catch (error) { console.error('Error updating typing status:', 
-error); }
-  }, [chatId, user]);
-
-  const handleTyping = useCallback(() => {
-    setTyping(true);
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => setTyping(false), 3000);
-  }, [setTyping]);
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
+  const role: ChatRole = chatInfo?.sellerId === user?.uid ? 'seller' : 'buyer';
+  const counterpart =
+    role === 'seller' ? chatInfo?.buyerName || 'Buyer' : chatInfo?.sellerName || 'Store';
 
   return {
-    messages, chatInfo, loading, sending, otherUserTyping,
-    sendMessage, sendLocationMessage, handleTyping, scrollToBottom, 
-messagesEndRef,
+    messages,
+    chatInfo,
+    loading,
+    sending,
+    error,
+    role,
+    counterpart,
+    sendMessage,
+    messagesEndRef,
   };
 }
 
@@ -176,42 +141,57 @@ export function useChatList() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalUnread, setTotalUnread] = useState(0);
+  const buyerRows = useRef<Chat[]>([]);
+  const sellerRows = useRef<Chat[]>([]);
+
+  const merge = useCallback((uid: string) => {
+    const map = new Map<string, Chat>();
+    for (const row of [...buyerRows.current, ...sellerRows.current]) map.set(row.id, row);
+    const list = Array.from(map.values()).sort((a, b) => {
+      const am = a.updatedAt?.toMillis?.() || a.lastMessageAt?.toMillis?.() || 0;
+      const bm = b.updatedAt?.toMillis?.() || b.lastMessageAt?.toMillis?.() || 0;
+      return bm - am;
+    });
+    setChats(list);
+    setTotalUnread(list.reduce((sum, c) => sum + (c.unreadCount?.[uid] || 0), 0));
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    if (!user) return;
-    const chatsRef = collection(db, 'chats');
-    const unsubscribe = onSnapshot(chatsRef, async (snapshot) => {
-      const chatList: Chat[] = [];
-      let unread = 0;
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-        if (data.participants?.includes(user.uid)) {
-          const otherUserId = data.participants.find((id: string) => id 
-!== user.uid);
-          let otherUserInfo = null;
-          if (otherUserId) {
-            const userDoc = await getDoc(doc(db, 'users', otherUserId));
-            if (userDoc.exists()) otherUserInfo = userDoc.data();
-          }
-          chatList.push({
-            id: docSnap.id, ...data,
-            otherUser: otherUserInfo ? {
-              displayName: otherUserInfo.displayName || 'User',
-              photoURL: otherUserInfo.photoURL,
-              phoneNumber: otherUserInfo.phoneNumber,
-            } : undefined,
-          } as Chat);
-          unread += data.unreadCount?.[user.uid] || 0;
-        }
-      }
-      chatList.sort((a, b) => b.updatedAt?.toMillis() - 
-a.updatedAt?.toMillis());
-      setChats(chatList);
-      setTotalUnread(unread);
+    if (!user) {
+      setChats([]);
+      setTotalUnread(0);
       setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [user]);
+      return;
+    }
+    const asChat = (id: string, data: Record<string, unknown>): Chat => ({ id, ...(data as Omit<Chat, 'id'>) });
+    const unsubs: Array<() => void> = [];
+    const listen = (field: 'buyerId' | 'sellerId', bucket: { current: Chat[] }) => {
+      const apply = (snap: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) => {
+        bucket.current = snap.docs.map((d) => asChat(d.id, d.data()));
+        merge(user.uid);
+      };
+      const fallback = () =>
+        onSnapshot(
+          query(collection(db, 'chats'), where(field, '==', user.uid)),
+          apply,
+          () => {
+            bucket.current = [];
+            merge(user.uid);
+          },
+        );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'chats'), where(field, '==', user.uid), orderBy('updatedAt', 'desc')),
+          apply,
+          () => unsubs.push(fallback()),
+        ),
+      );
+    };
+    listen('buyerId', buyerRows);
+    listen('sellerId', sellerRows);
+    return () => unsubs.forEach((fn) => fn());
+  }, [user, merge]);
 
   return { chats, loading, totalUnread };
 }

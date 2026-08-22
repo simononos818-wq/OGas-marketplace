@@ -86,9 +86,12 @@ export function usePaystack() {
     };
 
     if (params.sellerSubaccount && params.sellerAmount && params.sellerAmount > 0) {
-      config.subaccount = params.sellerSubaccount;
-      config.bearer = "subaccount";
-      config.transaction_charge = Math.round((params.amount - params.sellerAmount) * 100);
+      // Split is disabled. OGas holds 100% until Door Code / buyer confirm.
+      config.metadata = {
+        ...config.metadata,
+        escrow: 'held_until_door_code',
+        usedSplitPayment: false,
+      };
     }
 
     try {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '../../../lib/firebase-admin';
+import { notifyPaidEscrow } from '../../../lib/escrow';
+import { postSystemMessage } from '../../../lib/chat-server';
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +27,6 @@ export async function POST(req: NextRequest) {
 
     const resolvedOrderId = orderId || data.data?.metadata?.orderId;
     if (!resolvedOrderId) {
-      console.warn('Payment verified but no orderId found. Ref:', reference);
       return NextResponse.json({ success: false, message: 'Payment verified but order not linked' }, { status: 400 });
     }
 
@@ -36,19 +37,14 @@ export async function POST(req: NextRequest) {
     }
     const order = orderSnap.data()!;
 
-    // Already paid – idempotent
     if (order.paymentStatus === 'paid' || order.status === 'paid') {
       return NextResponse.json({ success: true, message: 'Order already marked paid', orderId: resolvedOrderId });
     }
 
-    // Reference safety
     if (order.paystackRef && order.paystackRef !== reference) {
-      console.error(`Reference mismatch for order ${resolvedOrderId}`);
       return NextResponse.json({ success: false, message: 'Reference mismatch' }, { status: 400 });
     }
 
-    // === SMART AMOUNT CHECK ===
-    // Look at every possible total field the app has used
     const possibleTotals = [
       order.total,
       order.totalAmount,
@@ -60,28 +56,22 @@ export async function POST(req: NextRequest) {
     const expectedNaira = possibleTotals.length > 0 ? Math.max(...possibleTotals) : 0;
     const expectedKobo = Math.round(expectedNaira * 100);
     const paidKobo = data.data.amount;
-
-    // Allow ±2 naira tolerance for rounding / floating-point issues
     const difference = Math.abs(paidKobo - expectedKobo);
-    const isMatch = expectedKobo > 0 && difference <= 200; // 200 kobo = ₦2
+    const isMatch = expectedKobo > 0 && difference <= 200;
 
     if (!isMatch) {
-      console.error(`Amount mismatch for order ${resolvedOrderId}:
-        expected fields: ${JSON.stringify(possibleTotals)}
-        expectedKobo: ${expectedKobo}
-        paidKobo: ${paidKobo}
-        difference: ${difference} kobo`);
-      return NextResponse.json({ 
-        success: false, 
+      return NextResponse.json({
+        success: false,
         message: 'Amount mismatch',
-        debug: { expectedKobo, paidKobo, difference }
+        debug: { expectedKobo, paidKobo, difference },
       }, { status: 400 });
     }
 
-    // Mark paid
     await orderRef.update({
       status: 'paid',
       paymentStatus: 'paid',
+      escrowStatus: 'held',
+      usedSplitPayment: false,
       paystackRef: reference,
       paystackAmount: paidKobo,
       customerEmail: data.data.customer?.email || null,
@@ -91,8 +81,10 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date(),
     });
 
-    console.log(`✅ Order ${resolvedOrderId} verified and marked paid (paid ${paidKobo} kobo)`);
-    return NextResponse.json({ success: true, message: 'Payment verified', orderId: resolvedOrderId });
+    await notifyPaidEscrow(resolvedOrderId);
+    await postSystemMessage(resolvedOrderId, 'Chat is open. Payment is locked in escrow until Door Code or buyer confirm.');
+
+    return NextResponse.json({ success: true, message: 'Payment held in escrow', orderId: resolvedOrderId });
   } catch (error) {
     console.error('Verify error:', error);
     return NextResponse.json({ success: false, message: 'Server error' }, { status: 500 });
