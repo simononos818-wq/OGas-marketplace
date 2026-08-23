@@ -168,6 +168,23 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
     }
   };
 
+  const confirmPaystack = async (order: Order) => {
+    setUnlocking(order.id);
+    try {
+      const res = await fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, reference: order.paystackRef }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Paystack has not confirmed this payment');
+    } catch (err: any) {
+      alert(err.message || 'Could not confirm payment');
+    } finally {
+      setUnlocking(null);
+    }
+  };
+
   const completeCash = async (orderId: string) => {
     setUnlocking(orderId);
     try {
@@ -339,8 +356,8 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
                   <div className="space-y-1 text-sm">
                     <div className="flex items-center gap-2 text-gray-300">
                       <Package size={14} className="text-orange-500" />
-                      {order.items?.map((item, i) => (
-                        <span key={i}>{item.quantity}x {item.size} (N{item.price?.toLocaleString()})</span>
+                      {order.items?.map((item: any, i) => (
+                        <span key={i}>{item.quantity}x {item.size}kg (N{(item.price || item.unitPrice || 0).toLocaleString()})</span>
                       ))}
                     </div>
                     {order.deliveryType === 'delivery' && (
@@ -363,6 +380,19 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
                 </div>
 
                 {/* Action Buttons */}
+                {(status === 'pending_payment' || status === 'pending') && (
+                  <div className="p-3 bg-black/40 space-y-2">
+                    <p className="text-xs text-yellow-400">Paystack has the charge, but this order is not marked paid yet. Tap once to confirm.</p>
+                    <button
+                      onClick={() => confirmPaystack(order)}
+                      disabled={unlocking === order.id || !order.paystackRef}
+                      className="w-full bg-orange-500 text-black font-black py-4 rounded-xl text-lg"
+                    >
+                      {unlocking === order.id ? 'Checking Paystack…' : 'Confirm payment'}
+                    </button>
+                  </div>
+                )}
+
                 {order.status === 'pending_cash' && (
                   <div className="p-3 bg-black/40 space-y-2">
                     <p className="text-xs text-gray-400">Cash order. Confirm only after you have the money in hand.</p>

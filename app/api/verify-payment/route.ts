@@ -5,7 +5,12 @@ import { postSystemMessage } from '../../../lib/chat-server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { reference, orderId } = await req.json();
+    let { reference, orderId } = await req.json();
+
+    if (!reference && orderId) {
+      const snap = await adminDb.collection('orders').doc(orderId).get();
+      reference = snap.exists ? snap.data()?.paystackRef : '';
+    }
 
     if (!reference) {
       return NextResponse.json({ success: false, message: 'Missing reference' }, { status: 400 });
