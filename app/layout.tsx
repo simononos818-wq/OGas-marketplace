@@ -21,15 +21,16 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#f97316',
+  viewportFit: 'cover',
+  themeColor: '#000000',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} bg-black text-white antialiased`}>
+      <body className={`${inter.className} bg-black text-white antialiased overscroll-none`}>
         <AuthProvider>
-          <main className="min-h-screen pb-20 [&:has(.ogas-chat-thread)]:pb-0">
+          <main className="min-h-dvh max-w-lg mx-auto pb-24 [&:has(.ogas-chat-thread)]:pb-0">
             {children}
           </main>
           <BottomNav />

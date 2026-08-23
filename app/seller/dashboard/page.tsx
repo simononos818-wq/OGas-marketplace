@@ -174,7 +174,7 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
       const res = await fetch('/api/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: order.id, reference: order.paystackRef }),
+        body: JSON.stringify({ orderId: order.id, reference: order.paystackRef || undefined }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.message || 'Paystack has not confirmed this payment');
@@ -251,7 +251,7 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
   };
 
   return (
-    <div className="min-h-screen bg-black text-white pb-6">
+    <div className="min-h-screen bg-black text-white pb-28" style={{ paddingTop: "env(safe-area-inset-top)" }}>
       {/* Header */}
       <div className="bg-gradient-to-b from-orange-900/30 to-black px-4 pt-4 pb-6">
         <div className="flex items-center justify-between mb-4">
@@ -385,7 +385,7 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
                     <p className="text-xs text-yellow-400">Paystack has the charge, but this order is not marked paid yet. Tap once to confirm.</p>
                     <button
                       onClick={() => confirmPaystack(order)}
-                      disabled={unlocking === order.id || !order.paystackRef}
+                      disabled={unlocking === order.id}
                       className="w-full bg-orange-500 text-black font-black py-4 rounded-xl text-lg"
                     >
                       {unlocking === order.id ? 'Checking Paystack…' : 'Confirm payment'}

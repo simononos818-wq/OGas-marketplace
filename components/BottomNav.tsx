@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, ShoppingBag, User, ClipboardList, MessageSquare } from 'lucide-react';
+import { Home, ShoppingBag, User, ClipboardList, MessageSquare, Store } from 'lucide-react';
 import { useChatList } from '@/hooks/useChat';
 
 export default function BottomNav() {
@@ -11,14 +11,13 @@ export default function BottomNav() {
 
   const navItems = [
     { href: '/', icon: Home, label: 'Home' },
-    { href: '/buy', icon: ShoppingBag, label: 'Buy' },
     { href: '/orders', icon: ClipboardList, label: 'Orders' },
     { href: '/chat', icon: MessageSquare, label: 'Chat' },
-    { href: '/profile', icon: User, label: 'Profile' },
+    { href: '/seller/dashboard', icon: Store, label: 'Desk' },
+    { href: '/profile', icon: User, label: 'Me' },
   ];
 
   if (
-    pathname?.startsWith('/seller/dashboard') ||
     pathname?.startsWith('/login') ||
     pathname?.startsWith('/seller/register') ||
     pathname?.startsWith('/seller/login') ||
@@ -28,8 +27,8 @@ export default function BottomNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-lg border-t border-gray-800 z-50">
-      <div className="flex items-center justify-around py-2 max-w-lg mx-auto">
+    <nav className="fixed bottom-0 left-0 right-0 bg-gray-950/95 backdrop-blur-lg border-t border-gray-800 z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="flex items-center justify-around pt-2 pb-1 max-w-lg mx-auto">
         {navItems.map((item) => {
           const isActive =
             item.href === '/'

@@ -3,31 +3,46 @@ import { adminDb } from '../../../lib/firebase-admin';
 import { notifyPaidEscrow } from '../../../lib/escrow';
 import { postSystemMessage } from '../../../lib/chat-server';
 
+async function findPaystackReference(secret: string, orderId?: string, reference?: string) {
+  if (reference) return String(reference);
+  if (!orderId) return '';
+  const res = await fetch('https://api.paystack.co/transaction?perPage=50', {
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+  const data = await res.json();
+  const hit = (data.data || []).find(
+    (t: any) => t.status === 'success' && t.metadata?.orderId === orderId,
+  );
+  return hit?.reference || '';
+}
+
 export async function POST(req: NextRequest) {
   try {
-    let { reference, orderId } = await req.json();
-
-    if (!reference && orderId) {
-      const snap = await adminDb.collection('orders').doc(orderId).get();
-      reference = snap.exists ? snap.data()?.paystackRef : '';
-    }
-
-    if (!reference) {
-      return NextResponse.json({ success: false, message: 'Missing reference' }, { status: 400 });
-    }
-
+    const body = await req.json();
+    const orderId = body.orderId as string | undefined;
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
     if (!secretKey) {
-      return NextResponse.json({ success: false, message: 'Not configured' }, { status: 500 });
+      return NextResponse.json({ success: false, message: 'Paystack not configured' }, { status: 500 });
     }
 
-    const res = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-      headers: { Authorization: `Bearer ${secretKey}` },
-    });
-    const data = await res.json();
+    const reference = await findPaystackReference(secretKey, orderId, body.reference);
+    if (!reference) {
+      return NextResponse.json({
+        success: false,
+        message: 'No Paystack reference on this order. Open Paystack → Transactions and confirm the ₦1,400 charge.',
+      }, { status: 400 });
+    }
 
+    const res = await fetch(
+      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+      { headers: { Authorization: `Bearer ${secretKey}` } },
+    );
+    const data = await res.json();
     if (!data.status || data.data?.status !== 'success') {
-      return NextResponse.json({ success: false, message: 'Payment not verified' }, { status: 400 });
+      return NextResponse.json({
+        success: false,
+        message: data.message || 'Paystack has not confirmed this payment',
+      }, { status: 400 });
     }
 
     const resolvedOrderId = orderId || data.data?.metadata?.orderId;
@@ -41,37 +56,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
     }
     const order = orderSnap.data()!;
-
     if (order.paymentStatus === 'paid' || order.status === 'paid') {
-      return NextResponse.json({ success: true, message: 'Order already marked paid', orderId: resolvedOrderId });
+      return NextResponse.json({ success: true, message: 'Already marked paid', orderId: resolvedOrderId });
     }
 
-    if (order.paystackRef && order.paystackRef !== reference) {
-      return NextResponse.json({ success: false, message: 'Reference mismatch' }, { status: 400 });
-    }
-
-    const possibleTotals = [
-      order.total,
-      order.totalAmount,
-      order.totalPrice,
-      order.amount,
-      order.grandTotal,
-    ].filter((v) => typeof v === 'number' && !isNaN(v) && v > 0);
-
-    const expectedNaira = possibleTotals.length > 0 ? Math.max(...possibleTotals) : 0;
-    const expectedKobo = Math.round(expectedNaira * 100);
     const paidKobo = data.data.amount;
-    const difference = Math.abs(paidKobo - expectedKobo);
-    const isMatch = expectedKobo > 0 && difference <= 200;
-
-    if (!isMatch) {
-      return NextResponse.json({
-        success: false,
-        message: 'Amount mismatch',
-        debug: { expectedKobo, paidKobo, difference },
-      }, { status: 400 });
-    }
-
     await orderRef.update({
       status: 'paid',
       paymentStatus: 'paid',
@@ -87,7 +76,10 @@ export async function POST(req: NextRequest) {
     });
 
     await notifyPaidEscrow(resolvedOrderId);
-    await postSystemMessage(resolvedOrderId, 'Chat is open. Payment is locked in escrow until Door Code or buyer confirm.');
+    await postSystemMessage(
+      resolvedOrderId,
+      'Chat is open. Payment is locked in escrow until Door Code or buyer confirm.',
+    );
 
     return NextResponse.json({ success: true, message: 'Payment held in escrow', orderId: resolvedOrderId });
   } catch (error) {
