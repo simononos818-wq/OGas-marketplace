@@ -58,10 +58,10 @@ export default function ChatScreen({ chatId }: { chatId: string }) {
           </p>
         </div>
         <button
-          onClick={() => router.push('/orders')}
+          onClick={() => router.push(role === 'seller' ? '/seller/dashboard' : '/orders')}
           className="text-xs font-semibold text-orange-400 px-3 py-2 rounded-lg hover:bg-gray-900"
         >
-          Order
+          {role === 'seller' ? 'Accept' : 'Order'}
         </button>
       </div>
 

@@ -186,10 +186,16 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
     }
   };
 
+  const liveStatus = (order: Order) =>
+    order.paymentStatus === 'paid' && ['pending_payment', 'pending'].includes(order.status)
+      ? 'paid'
+      : order.status;
+
   const filteredOrders = orders.filter(order => {
-    if (activeTab === 'new') return order.status === 'pending_payment' || order.status === 'paid' || order.status === 'pending' || order.status === 'pending_cash';
-    if (activeTab === 'active') return order.status === 'confirmed' || order.status === 'out_for_delivery';
-    if (activeTab === 'completed') return order.status === 'delivered' || order.status === 'completed';
+    const status = liveStatus(order);
+    if (activeTab === 'new') return status === 'pending_payment' || status === 'paid' || status === 'pending' || status === 'pending_cash';
+    if (activeTab === 'active') return status === 'confirmed' || status === 'out_for_delivery';
+    if (activeTab === 'completed') return status === 'delivered' || status === 'completed';
     return true;
   });
 
@@ -220,7 +226,7 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
 
   const getNextAction = (status: string) => {
     switch (status) {
-      case 'paid': return { label: 'Confirm Order', next: 'confirmed', icon: CheckCircle };
+      case 'paid': return { label: 'ACCEPT ORDER', next: 'confirmed', icon: CheckCircle };
       case 'confirmed': return { label: 'Out for Delivery', next: 'out_for_delivery', icon: Truck };
       case 'out_for_delivery': return { label: 'Mark Delivered', next: 'delivered', icon: CheckCircle };
       default: return null;
@@ -302,15 +308,16 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
           </div>
         ) : (
           filteredOrders.map(order => {
-            const nextAction = getNextAction(order.status);
+            const status = liveStatus(order);
+            const nextAction = getNextAction(status);
             return (
               <div key={order.id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                 {/* Order Header */}
                 <div className="p-4 border-b border-gray-800">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] px-2 py-1 rounded-full border ${getStatusColor(order.status)}`}>
-                        {getStatusLabel(order.status)}
+                      <span className={`text-[10px] px-2 py-1 rounded-full border ${getStatusColor(status)}`}>
+                        {getStatusLabel(status)}
                       </span>
                       <span className="text-xs text-gray-500">
                         {order.createdAt?.toDate?.().toLocaleDateString?.() || 'Recent'}
@@ -318,6 +325,16 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
                     </div>
                     <span className="text-orange-400 font-bold">N{order.totalAmount?.toLocaleString()}</span>
                   </div>
+
+                  {nextAction && (
+                    <button
+                      onClick={() => updateOrderStatus(order.id, nextAction.next)}
+                      className="mt-3 w-full bg-orange-500 text-black font-black py-4 rounded-xl text-lg flex items-center justify-center gap-2"
+                    >
+                      <nextAction.icon size={20} />
+                      {nextAction.label}
+                    </button>
+                  )}
                   
                   <div className="space-y-1 text-sm">
                     <div className="flex items-center gap-2 text-gray-300">
@@ -386,9 +403,9 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
                   <div className="p-3 bg-gray-800/50 flex gap-2">
                     <button
                       onClick={() => updateOrderStatus(order.id, nextAction.next)}
-                      className="flex-1 bg-orange-500 text-black font-bold py-2.5 rounded-xl hover:bg-orange-400 transition flex items-center justify-center gap-2"
+                      className="flex-1 bg-orange-500 text-black font-black py-4 rounded-xl text-base flex items-center justify-center gap-2"
                     >
-                      <nextAction.icon size={16} />
+                      <nextAction.icon size={18} />
                       {nextAction.label}
                     </button>
                   </div>
