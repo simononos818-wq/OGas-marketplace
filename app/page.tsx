@@ -1,145 +1,109 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Flame, MapPin, Shield, Zap, ArrowRight, Store, Truck, Star, CheckCircle } from 'lucide-react';
+import { Flame, MapPin, Search, Navigation } from 'lucide-react';
+import { useLocation } from './hooks/useLocation';
+import { useSellers } from './hooks/useSellers';
 
 export default function HomePage() {
+  const { location, loading: locLoading } = useLocation();
+  const hasGps = !!(location && !location.error && location.lat && location.lng);
+  const { sellers, loading } = useSellers(
+    hasGps ? location!.lat : undefined,
+    hasGps ? location!.lng : undefined,
+  );
+  const [search, setSearch] = useState('');
+
+  const list = sellers.filter((s) => {
+    if (s.id.startsWith('seed_')) return false;
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      s.businessName.toLowerCase().includes(q) ||
+      (s.address || '').toLowerCase().includes(q) ||
+      (s.city || '').toLowerCase().includes(q)
+    );
+  });
+
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-orange-900/20 via-black to-black" />
-        <div className="relative px-4 pt-12 pb-16 max-w-lg mx-auto text-center">
-          <div className="flex justify-center mb-6">
-            <img src="/ogas-logo.svg" alt="OGas" className="h-14 w-auto" />
+    <div className="min-h-dvh bg-black text-white pb-28">
+      <header
+        className="sticky top-0 z-40 bg-black/90 backdrop-blur-xl border-b border-gray-900 px-4 pb-3"
+        style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center">
+              <Flame size={18} className="text-black" />
+            </div>
+            <div>
+              <p className="text-[11px] text-gray-500 leading-none">OGas</p>
+              <p className="font-bold leading-tight">Nearby gas</p>
+            </div>
           </div>
-          
-          <h1 className="text-4xl font-bold leading-tight mb-3">
-            Gas from your<br />
-            <span className="text-orange-400">trusted neighbour</span>
-          </h1>
-          
-          <p className="text-gray-400 text-lg mb-8">
-            Order cooking gas from verified sellers near you. Safe, fast and at the price they set.
+          <p className="text-[11px] text-gray-400 flex items-center gap-1 max-w-[45%] truncate">
+            <Navigation size={11} className={hasGps ? 'text-green-400' : 'text-gray-600'} />
+            {hasGps ? 'Near you' : locLoading ? 'Finding you…' : 'All of Nigeria'}
           </p>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search a store or area"
+            className="w-full bg-gray-900 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+      </header>
 
-          <div className="flex flex-col gap-3">
-            <Link 
-              href="/buy"
-              className="w-full bg-orange-500 text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-2 text-lg hover:bg-orange-400 transition"
-            >
-              Buy Gas Now
-              <ArrowRight size={20} />
+      <div className="px-4 pt-4 space-y-3">
+        {loading ? (
+          <p className="text-center text-orange-400 py-16 animate-pulse">Finding sellers…</p>
+        ) : list.length === 0 ? (
+          <div className="text-center py-16 text-gray-500">
+            <p className="font-medium text-white mb-1">No live stores yet</p>
+            <p className="text-sm mb-4">Be the first in this area.</p>
+            <Link href="/seller/register" className="text-orange-400 font-semibold">
+              Open a store
             </Link>
-            
-            <Link 
-              href="/seller/register"
-              className="w-full bg-gray-900 border border-gray-700 text-white font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 hover:border-orange-500/50 transition"
+          </div>
+        ) : (
+          list.map((s) => (
+            <Link
+              key={s.id}
+              href={`/buy/${s.id}`}
+              className="flex items-center gap-3 bg-gray-900 rounded-2xl p-3 active:scale-[0.99] transition"
             >
-              <Store size={18} />
-              Become a Seller
+              <div className="w-12 h-12 rounded-2xl bg-orange-500/15 flex items-center justify-center shrink-0">
+                <MapPin className="text-orange-400" size={20} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold truncate">{s.businessName}</h3>
+                  {s.isOnline && <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />}
+                </div>
+                <p className="text-xs text-gray-500 truncate">{s.address || s.city}</p>
+                <p className="text-sm mt-0.5">
+                  <span className="text-orange-400 font-semibold">
+                    ₦{(s.pricePerKg || 0).toLocaleString()}/kg
+                  </span>
+                  {s.distanceKm != null && s.distanceKm < 900 && (
+                    <span className="text-gray-500"> · {s.distanceKm < 1 ? `${Math.round(s.distanceKm * 1000)} m` : `${s.distanceKm.toFixed(1)} km`}</span>
+                  )}
+                  {s.deliveryFee != null && (
+                    <span className="text-gray-500"> · delivery ₦{s.deliveryFee}</span>
+                  )}
+                </p>
+              </div>
+              <span className="bg-orange-500 text-black font-bold text-sm px-4 py-2 rounded-xl shrink-0">
+                Order
+              </span>
             </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Trust Badges */}
-      <section className="px-4 py-8 max-w-lg mx-auto">
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-gray-900/80 border border-gray-800 rounded-2xl p-4 text-center">
-            <Shield className="w-6 h-6 text-orange-400 mx-auto mb-2" />
-            <p className="text-xs font-medium">Verified Sellers</p>
-          </div>
-          <div className="bg-gray-900/80 border border-gray-800 rounded-2xl p-4 text-center">
-            <MapPin className="w-6 h-6 text-orange-400 mx-auto mb-2" />
-            <p className="text-xs font-medium">Nearby Only</p>
-          </div>
-          <div className="bg-gray-900/80 border border-gray-800 rounded-2xl p-4 text-center">
-            <Zap className="w-6 h-6 text-orange-400 mx-auto mb-2" />
-            <p className="text-xs font-medium">Fast Delivery</p>
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section className="px-4 py-10 max-w-lg mx-auto">
-        <h2 className="text-2xl font-bold mb-6 text-center">How OGas Works</h2>
-        
-        <div className="space-y-4">
-          <div className="flex gap-4 items-start bg-gray-900 border border-gray-800 rounded-2xl p-4">
-            <div className="w-10 h-10 bg-orange-500 text-black font-bold rounded-full flex items-center justify-center shrink-0">1</div>
-            <div>
-              <h3 className="font-semibold">Find sellers near you</h3>
-              <p className="text-sm text-gray-400 mt-1">We show verified neighbourhood sellers and gas plants around your location with their live prices.</p>
-            </div>
-          </div>
-
-          <div className="flex gap-4 items-start bg-gray-900 border border-gray-800 rounded-2xl p-4">
-            <div className="w-10 h-10 bg-orange-500 text-black font-bold rounded-full flex items-center justify-center shrink-0">2</div>
-            <div>
-              <h3 className="font-semibold">Choose & order</h3>
-              <p className="text-sm text-gray-400 mt-1">Pick the size you need, choose pickup or delivery, and pay securely with Paystack or cash on delivery.</p>
-            </div>
-          </div>
-
-          <div className="flex gap-4 items-start bg-gray-900 border border-gray-800 rounded-2xl p-4">
-            <div className="w-10 h-10 bg-orange-500 text-black font-bold rounded-full flex items-center justify-center shrink-0">3</div>
-            <div>
-              <h3 className="font-semibold">Get your gas</h3>
-              <p className="text-sm text-gray-400 mt-1">Seller accepts your order. Track it and confirm when you receive your cylinder safely.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* For Sellers */}
-      <section className="px-4 py-10 max-w-lg mx-auto">
-        <div className="bg-gradient-to-br from-orange-900/40 to-gray-900 border border-orange-500/30 rounded-3xl p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Store className="text-orange-400" size={22} />
-            <h2 className="text-xl font-bold">Sell on OGas</h2>
-          </div>
-          <p className="text-gray-300 text-sm mb-5">
-            Even if you only have 200kg of gas, you can sell at your own price. Verified neighbourhood sellers and gas plants are welcome.
-          </p>
-          
-          <ul className="space-y-2 mb-6 text-sm">
-            <li className="flex items-center gap-2">
-              <CheckCircle size={16} className="text-green-400" />
-              Set your own prices
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle size={16} className="text-green-400" />
-              Accurate GPS verification
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle size={16} className="text-green-400" />
-              Get orders from people near you
-            </li>
-          </ul>
-
-          <Link 
-            href="/seller/register"
-            className="block w-full bg-orange-500 text-black font-bold py-3.5 rounded-xl text-center"
-          >
-            Start Selling
-          </Link>
-        </div>
-      </section>
-
-      {/* Safety note */}
-      <section className="px-4 pb-12 max-w-lg mx-auto text-center">
-        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-5">
-          <Shield className="w-8 h-8 text-orange-400 mx-auto mb-3" />
-          <h3 className="font-semibold mb-1">Safety First</h3>
-          <p className="text-sm text-gray-400">
-            Only verified sellers appear on OGas. We capture accurate location and require stock photos for every seller.
-          </p>
-        </div>
-      </section>
-
-      {/* Bottom spacing for nav */}
-      <div className="h-8" />
+          ))
+        )}
+      </div>
     </div>
   );
 }
