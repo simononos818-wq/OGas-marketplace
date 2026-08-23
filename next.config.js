@@ -9,6 +9,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  serverExternalPackages: ['firebase-admin', 'jose', 'jwks-rsa'],
 }
 
 module.exports = nextConfig
