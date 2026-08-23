@@ -16,43 +16,49 @@ export async function sendSms(to: string, message: string) {
   const phone = normalizeNgPhone(to);
   if (phone.length < 11) return { sent: false, reason: 'bad_phone' as const };
 
-  const from = process.env.TERMII_SENDER_ID || 'N-Alert';
+  const from = process.env.TERMII_SENDER_ID || '';
   const bases = [
+    'https://v4.api.termii.com',
     process.env.TERMII_BASE_URL || '',
     'https://v3.api.termii.com',
-    'https://api.ng.termii.com',
   ]
     .map((b) => b.replace(/\/$/, ''))
     .filter(Boolean);
 
-  const tried = new Set<string>();
-  for (const base of bases) {
-    for (const channel of ['dnd', 'generic'] as const) {
-      const mark = `${base}:${channel}`;
-      if (tried.has(mark)) continue;
-      tried.add(mark);
-      try {
-        const res = await fetch(`${base}/api/sms/send`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: phone,
-            from,
-            sms: message,
-            type: 'plain',
-            api_key: key,
-            channel,
-          }),
-        });
-        const body = await res.text().catch(() => '');
-        if (res.ok) {
-          console.log('sms sent', phone, channel, base);
-          return { sent: true as const };
-        }
-        console.error('Termii SMS failed', res.status, channel, body.slice(0, 240));
-      } catch (err) {
-        console.error('Termii SMS error', err);
+  const attempts: Array<{ url: string; body: Record<string, unknown> }> = [];
+  for (const base of [...new Set(bases)]) {
+    attempts.push({
+      url: `${base}/api/sms/number/send`,
+      body: { to: phone, sms: message, api_key: key },
+    });
+    attempts.push({
+      url: `${base}/api/v1/sms/number/send`,
+      body: { to: phone, sms: message, api_key: key },
+    });
+    if (from) {
+      for (const channel of ['generic', 'dnd'] as const) {
+        const branded = { to: phone, from, sms: message, type: 'plain', channel, api_key: key };
+        attempts.push({ url: `${base}/api/sms/send`, body: branded });
+        attempts.push({ url: `${base}/api/v1/sms/send`, body: branded });
       }
+    }
+  }
+
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(attempt.body),
+      });
+      const text = await res.text().catch(() => '');
+      if (res.ok) {
+        console.log('sms sent', phone, attempt.url);
+        return { sent: true as const };
+      }
+      console.error('Termii SMS failed', res.status, attempt.url, text.slice(0, 220));
+    } catch (err) {
+      console.error('Termii SMS error', err);
     }
   }
   return { sent: false, reason: 'termii_error' as const };
