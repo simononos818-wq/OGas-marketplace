@@ -47,34 +47,40 @@ function OrdersContent() {
   // Handle Paystack callback: verify then confirm via API
   useEffect(() => {
     const reference = searchParams.get('reference') || searchParams.get('trxref');
-    if (reference && callbackState === 'idle') {
-      setCallbackState('verifying');
-      setCallbackMessage('Confirming your payment...');
+    const orderId = searchParams.get('ref') || searchParams.get('orderId') || undefined;
+    if (!reference || callbackState !== 'idle' || !user) return;
 
-      fetch('/api/verify-payment', {
-        method: 'POST',
-        headers: await authHeaders(),
-        body: JSON.stringify({
-          reference,
-          orderId: searchParams.get('ref') || searchParams.get('orderId') || undefined,
-        }),
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            setCallbackState('success');
-            setCallbackMessage('Payment successful! Your order has been placed.');
-          } else {
-            setCallbackState('error');
-            setCallbackMessage(data.message || 'We could not confirm this payment. Contact support if you were charged.');
-          }
-        })
-        .catch(() => {
+    let cancelled = false;
+    setCallbackState('verifying');
+    setCallbackMessage('Confirming your payment...');
+
+    (async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch('/api/verify-payment', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ reference, orderId }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.success) {
+          setCallbackState('success');
+          setCallbackMessage('Payment locked in escrow. Share the Door Code only at the door.');
+        } else {
+          setCallbackState('error');
+          setCallbackMessage(data.message || 'We could not confirm this payment. Contact support if you were charged.');
+        }
+      } catch {
+        if (!cancelled) {
           setCallbackState('error');
           setCallbackMessage('Network error confirming payment. Contact support if you were charged.');
-        });
-    }
-  }, [searchParams, callbackState]);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [searchParams, callbackState, user]);
 
   useEffect(() => {
     if (!user) return;
