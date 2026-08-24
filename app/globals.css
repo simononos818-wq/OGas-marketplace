@@ -12,14 +12,37 @@
   --color-gray-950: #030712;
 }
 
-body {
-  background-color: #000;
-  color: #fff;
-}
-
-
 html, body {
   min-height: 100dvh;
+  background: #000;
+  color: #fff;
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+input, textarea {
+  user-select: text;
+}
+
+.ogas-phone {
+  min-height: 100dvh;
+  max-width: 430px;
+  margin: 0 auto;
+  background: #000;
+  position: relative;
+}
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active, a:active {
+  transform: scale(0.98);
+}
+
+@media (display-mode: standalone) {
+  html { background: #000; }
 }

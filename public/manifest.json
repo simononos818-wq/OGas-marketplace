@@ -1,24 +1,48 @@
 {
-  "name": "OGas - Nigeria's Gas Marketplace",
+  "id": "/",
+  "name": "OGas",
   "short_name": "OGas",
-  "description": "Order cooking gas from verified sellers near you. Fast delivery.",
+  "description": "Buy cooking gas from sellers near you.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#000000",
-  "theme_color": "#f97316",
-  "orientation": "portrait-primary",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "categories": ["shopping", "business"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    { "name": "Buy gas", "short_name": "Buy", "url": "/", "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }] },
+    { "name": "My orders", "short_name": "Orders", "url": "/orders", "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }] },
+    { "name": "Seller desk", "short_name": "Desk", "url": "/seller/dashboard", "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }] }
   ]
 }
