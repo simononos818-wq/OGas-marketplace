@@ -53,8 +53,11 @@ function OrdersContent() {
 
       fetch('/api/verify-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference }),
+        headers: await authHeaders(),
+        body: JSON.stringify({
+          reference,
+          orderId: searchParams.get('ref') || searchParams.get('orderId') || undefined,
+        }),
       })
         .then(res => res.json())
         .then(data => {

@@ -171,9 +171,10 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
   const confirmPaystack = async (order: Order) => {
     setUnlocking(order.id);
     try {
+      const headers = await authHeaders();
       const res = await fetch('/api/verify-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ orderId: order.id, reference: order.paystackRef || undefined }),
       });
       const data = await res.json();
