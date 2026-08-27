@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Allow: /blog/
+Allow: /ads.txt
+Allow: /privacy
+Allow: /terms
+Disallow: /api/
+Disallow: /orders
+Disallow: /chat
+Disallow: /seller/
+Disallow: /login
+Disallow: /profile
+Disallow: /admin
+Disallow: /receipt
+Disallow: /buy/
+
+Sitemap: https://ogaslpgmarketplace.com/blog/
