@@ -3,7 +3,6 @@ import './globals.css';
 import { AuthProvider } from './context/AuthContext';
 import BottomNav from '@/components/BottomNav';
 import InstallApp from '@/components/InstallApp';
-import AdSense from '@/components/AdSense';
 
 export const metadata: Metadata = {
   title: 'OGas',
@@ -21,7 +20,6 @@ export const metadata: Metadata = {
   },
   other: {
     'mobile-web-app-capable': 'yes',
-    'google-adsense-account': 'ca-pub-7537556385111201',
   },
 };
 
@@ -46,7 +44,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="min-h-dvh pb-24 [&:has(.ogas-chat-thread)]:pb-0">{children}</main>
             <BottomNav />
             <InstallApp />
-            <AdSense />
           </div>
         </AuthProvider>
       </body>
