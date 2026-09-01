@@ -24,6 +24,7 @@ export interface Seller {
   image?: string;
   city?: string;
   state?: string;
+  landmark?: string;
   totalOrders?: number;
   distanceKm?: number;
 }
@@ -61,6 +62,18 @@ export function extractCoords(seller: any): { lat: number; lng: number } | null 
   return null;
 }
 
+function derivePricePerKg(s: Seller): number {
+  if (s.pricePerKg && s.pricePerKg >= 800 && s.pricePerKg <= 2500) return s.pricePerKg;
+  const p = s.prices || {};
+  const from125 = Number(p['12.5kg'] || p['12kg'] || 0);
+  if (from125 > 0) return Math.round(from125 / 12.5);
+  const from6 = Number(p['6kg'] || 0);
+  if (from6 > 0) return Math.round(from6 / 6);
+  const from3 = Number(p['3kg'] || 0);
+  if (from3 > 0) return Math.round(from3 / 3);
+  return Number(s.pricePerKg || 0);
+}
+
 export function useSellers(userLat?: number | null, userLng?: number | null) {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +88,8 @@ export function useSellers(userLat?: number | null, userLng?: number | null) {
       q,
       (snapshot) => {
         let data = snapshot.docs.map((doc) => {
-          return { id: doc.id, ...doc.data() } as Seller;
+          const raw = { id: doc.id, ...doc.data() } as Seller;
+          return { ...raw, pricePerKg: derivePricePerKg(raw) };
         });
 
         data = data.filter((s) => s.isActive !== false);
