@@ -241,7 +241,7 @@ export default function BuyPage() {
             </button>
             <div className="flex-1 text-center">
               <div className="text-3xl font-bold">{kg} <span className="text-lg text-gray-400">kg</span></div>
-              <div className="text-sm text-orange-400">₦{discountedPrice}/kg (was ₦{originalPrice})</div>
+              <div className="text-sm text-gray-400">₦{originalPrice.toLocaleString()}/kg</div>
             </div>
             <button
               onClick={() => setKg(Math.min(50, kg + 1))}
