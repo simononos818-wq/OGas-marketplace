@@ -20,6 +20,8 @@ export const metadata: Metadata = {
   },
   other: {
     'mobile-web-app-capable': 'yes',
+    // Ownership only. Ads are served on /blog/*.html, not the app.
+    'google-adsense-account': 'ca-pub-7537556385111201',
   },
 };
 
