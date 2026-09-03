@@ -10,6 +10,20 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   serverExternalPackages: ['firebase-admin', 'jose', 'jwks-rsa'],
+  async redirects() {
+    return [
+      {
+        source: '/blog',
+        destination: 'https://blog.ogaslpgmarketplace.com',
+        permanent: true,
+      },
+      {
+        source: '/blog/:path*',
+        destination: 'https://blog.ogaslpgmarketplace.com/:path*',
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {
