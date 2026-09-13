@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0F1B3D"/>
+  <circle cx="256" cy="228" r="128" fill="none" stroke="#1DCF9F" stroke-width="18"/>
+  <g fill="none" stroke="#F4F7FB" stroke-width="16" stroke-linejoin="round">
+    <rect x="214" y="118" width="84" height="52" rx="10"/>
+    <path d="M228 170 h56 v118 a28 28 0 0 1-56 0z"/>
+    <path d="M248 132 h16 M256 122 v22"/>
+  </g>
+  <rect x="286" y="214" width="62" height="28" rx="4" fill="#1DCF9F"/>
+  <text x="256" y="430" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="72" font-weight="800" fill="#F4F7FB" letter-spacing="6">OGAS</text>
+</svg>

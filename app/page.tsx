@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Flame, MapPin, Search, Navigation } from 'lucide-react';
+import { MapPin, Search, Navigation } from 'lucide-react';
 import { useLocation } from './hooks/useLocation';
 import { useSellers } from './hooks/useSellers';
 
@@ -38,9 +38,7 @@ export default function HomePage() {
       >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center">
-              <Flame size={18} className="text-black" />
-            </div>
+            <img src="/ogas-icon.svg" alt="OGas" className="w-9 h-9 rounded-full bg-white object-cover" />
             <div>
               <p className="text-[11px] text-gray-500 leading-none">OGas marketplace</p>
               <p className="font-bold leading-tight">Find gas near you</p>

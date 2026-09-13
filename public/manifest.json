@@ -7,42 +7,22 @@
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#0F1B3D",
+  "theme_color": "#0F1B3D",
   "orientation": "portrait",
   "lang": "en-NG",
   "dir": "ltr",
   "categories": ["shopping", "business"],
   "prefer_related_applications": false,
   "icons": [
-    {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
+    { "src": "/ogas-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/ogas-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" },
+    { "src": "/icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "Buy gas", "short_name": "Buy", "url": "/", "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }] },
-    { "name": "My orders", "short_name": "Orders", "url": "/orders", "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }] },
-    { "name": "Seller desk", "short_name": "Desk", "url": "/seller/dashboard", "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }] }
+    { "name": "Buy gas", "short_name": "Buy", "url": "/", "icons": [{ "src": "/ogas-icon.svg", "sizes": "any" }] },
+    { "name": "My orders", "short_name": "Orders", "url": "/orders", "icons": [{ "src": "/ogas-icon.svg", "sizes": "any" }] },
+    { "name": "Seller desk", "short_name": "Desk", "url": "/seller/dashboard", "icons": [{ "src": "/ogas-icon.svg", "sizes": "any" }] }
   ]
 }

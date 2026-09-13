@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   description: 'Buy cooking gas from sellers near you.',
   manifest: '/manifest.json',
   icons: {
-    icon: '/icon-192x192.png',
-    apple: '/icon-192x192.png',
+    icon: '/ogas-icon.svg',
+    apple: '/ogas-icon.svg',
   },
   appleWebApp: {
     capable: true,
@@ -20,7 +20,6 @@ export const metadata: Metadata = {
   },
   other: {
     'mobile-web-app-capable': 'yes',
-    // Ownership only. Ads are served on /blog/*.html, not the app.
     'google-adsense-account': 'ca-pub-7537556385111201',
   },
 };
@@ -31,7 +30,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#000000',
+  themeColor: '#0F1B3D',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

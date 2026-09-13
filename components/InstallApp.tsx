@@ -56,7 +56,7 @@ export default function InstallApp() {
   return (
     <div className="fixed left-0 right-0 z-[60] px-3" style={{ bottom: 'calc(64px + env(safe-area-inset-bottom))' }}>
       <div className="max-w-lg mx-auto bg-gray-900 border border-orange-500/40 rounded-2xl p-3 flex items-center gap-3 shadow-2xl">
-        <div className="w-11 h-11 rounded-xl bg-orange-500 flex items-center justify-center shrink-0 text-black font-black">G</div>
+        <img src="/ogas-icon.svg" alt="OGas" className="w-11 h-11 rounded-full bg-white object-cover shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm">Install OGas</p>
           <p className="text-[11px] text-gray-400">Open like an Android app. No browser bar.</p>
