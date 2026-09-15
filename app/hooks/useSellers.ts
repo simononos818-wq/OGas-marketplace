@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { sellerVerified } from '@/lib/fields';
 
 export interface Seller {
   id: string;
@@ -92,7 +93,7 @@ export function useSellers(userLat?: number | null, userLng?: number | null) {
           return { ...raw, pricePerKg: derivePricePerKg(raw) };
         });
 
-        data = data.filter((s) => s.isActive !== false);
+        data = data.filter((s) => s.isActive !== false && sellerVerified(s));
 
         if (userLat != null && userLng != null) {
           data = data
