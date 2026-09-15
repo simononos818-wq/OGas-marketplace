@@ -33,10 +33,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
     }
     const order = orderSnap.data()!;
-    if (order.buyerId !== user.uid) {
+    const buyerId = order.buyerId || order.userId;
+    if (buyerId !== user.uid) {
       return NextResponse.json({ success: false, message: 'Not your order' }, { status: 403 });
     }
     const resolvedSellerId = sellerId || order.sellerId;
+
+    const expected = Number(order.total ?? order.totalAmount ?? order.totalPrice ?? 0);
+    if (expected > 0 && Math.abs(Number(amount) - expected) > 1) {
+      return NextResponse.json(
+        { success: false, message: 'Amount does not match this order' },
+        { status: 400 },
+      );
+    }
 
     const amountInKobo = Math.round(Number(amount) * 100);
     if (amountInKobo < 10000) {

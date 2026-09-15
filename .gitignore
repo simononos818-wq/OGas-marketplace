@@ -19,3 +19,6 @@ functions/.env
 *.zip
 *.pkg
 serviceAccountKey.json
+.env*.local
+functions/.env*
+functions/.env.ogasapp-5a003

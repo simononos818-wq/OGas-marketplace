@@ -10,6 +10,13 @@ service cloud.firestore {
     function orderBuyer(data) {
       return data.buyerId != null ? data.buyerId : data.userId;
     }
+    function isChatParticipant() {
+      return request.auth != null && (
+        request.auth.uid in resource.data.participants ||
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid
+      );
+    }
 
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
@@ -17,39 +24,55 @@ service cloud.firestore {
       allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow delete: if false;
     }
+
     match /sellers/{sellerId} {
       allow read: if true;
-      allow create: if request.auth != null && request.auth.uid == sellerId
-        && request.resource.data.verified == false;
+      allow create: if request.auth != null
+        && request.auth.uid == sellerId
+        && request.resource.data.status == 'pending'
+        && (
+          !('verified' in request.resource.data) ||
+          request.resource.data.verified == false
+        )
+        && (
+          !('isVerified' in request.resource.data) ||
+          request.resource.data.isVerified == false
+        );
       allow update: if isAdmin() || (
         request.auth != null && request.auth.uid == sellerId &&
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['businessName','ownerName','address','state','location',
                     'cylinderSizes','prices','isActive','deliveryFee','updatedAt',
-                    'name','phone','email','city','pricePerKg','availableSizes'])
+                    'name','phone','email','city','pricePerKg','availableSizes',
+                    'landmark','hours','offersDelivery','stockKg'])
       );
       allow delete: if false;
     }
+
     match /orders/{orderId} {
       allow read: if request.auth != null && (
         orderBuyer(resource.data) == request.auth.uid ||
         resource.data.sellerId == request.auth.uid || isAdmin()
       );
-      allow create: if request.auth != null
-        && orderBuyer(request.resource.data) == request.auth.uid
-        && request.resource.data.paymentStatus == 'pending';
-      allow update: if isAdmin() || (
-        request.auth != null && (
-          (resource.data.sellerId == request.auth.uid &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])) ||
-          (orderBuyer(resource.data) == request.auth.uid &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating','review','updatedAt','paymentStatus','paystackRef','status']))
-        )
-      );
+      allow create: if false;
+      allow update: if false;
       allow delete: if false;
     }
-    match /orderSecrets/{secretId} { allow read, write: if isAdmin(); }
-    match /chats/{chatId} { allow read, write: if isAdmin(); }
-    match /chats/{chatId}/messages/{messageId} { allow read, write: if isAdmin(); }
+
+    match /orderSecrets/{secretId} {
+      allow read, write: if false;
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAdmin() || isChatParticipant();
+      allow create, update, delete: if false;
+      match /messages/{messageId} {
+        allow read: if isAdmin() ||
+          get(/databases/$(database)/documents/chats/$(chatId)).data.buyerId == request.auth.uid ||
+          get(/databases/$(database)/documents/chats/$(chatId)).data.sellerId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create, update, delete: if false;
+      }
+    }
   }
 }
