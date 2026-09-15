@@ -1,6 +1,7 @@
 import { signInAnonymously } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { normalizeNgPhone } from './phone';
 
 export async function ensureBuyerSession() {
   if (!auth.currentUser) {
@@ -26,10 +27,9 @@ export async function saveBuyerContact(phone: string, name?: string, address?: s
   await setDoc(
     doc(db, 'users', user.uid),
     {
-      phone,
+      phone: normalizeNgPhone(phone),
       name: name || '',
       lastAddress: address || '',
-      role: 'buyer',
       updatedAt: new Date(),
     },
     { merge: true },

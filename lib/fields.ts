@@ -2,7 +2,7 @@
 
 export function orderTotal(data: Record<string, any> | null | undefined): number {
   if (!data) return 0;
-  const n = Number(data.total ?? data.totalAmount ?? 0);
+  const n = Number(data.total ?? data.totalAmount ?? data.totalPrice ?? 0);
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -13,5 +13,11 @@ export function orderBuyerId(data: Record<string, any> | null | undefined): stri
 
 export function sellerVerified(data: Record<string, any> | null | undefined): boolean {
   if (!data) return false;
-  return Boolean(data.verified ?? data.isVerified);
+  if (data.status === 'pending' && data.isApproved !== true) return false;
+  return Boolean(data.verified ?? data.isVerified ?? data.isApproved);
+}
+
+export function formatNaira(n: number): string {
+  const v = Number.isFinite(n) ? n : 0;
+  return `₦${Math.round(v).toLocaleString()}`;
 }
