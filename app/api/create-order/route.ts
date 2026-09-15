@@ -4,6 +4,8 @@ import { requireUser } from '../../../lib/require-user';
 import { hashDoorCode, makeDoorCode, formatDoorCode } from '../../../lib/door-code';
 import { sendSms } from '../../../lib/sms';
 import { openOrderChat } from '../../../lib/chat-server';
+import { sellerVerified } from '../../../lib/fields';
+import { isNgPhone, normalizeNgPhone } from '../../../lib/phone';
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,8 +26,8 @@ export async function POST(req: NextRequest) {
       quantity,
     } = body;
 
-    const phone = String(buyerPhone || '').trim();
-    if (!sellerId || !phone || phone.replace(/\D/g, '').length < 10) {
+    const phone = normalizeNgPhone(String(buyerPhone || '').trim());
+    if (!sellerId || !isNgPhone(phone)) {
       return NextResponse.json({ success: false, message: 'Phone number is required' }, { status: 400 });
     }
 
@@ -34,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Seller not found' }, { status: 404 });
     }
     const seller = sellerSnap.data()!;
-    if (seller.isApproved === false) {
+    if (seller.isApproved === false || !sellerVerified(seller)) {
       return NextResponse.json({ success: false, message: 'This store cannot take orders yet' }, { status: 400 });
     }
 
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!original) {
       return NextResponse.json({ success: false, message: 'Seller has not set a price' }, { status: 400 });
     }
-    const discounted = Math.max(original - 50, 0);
+    const discounted = original;
     const deliveryFee = deliveryType === 'pickup' ? 0 : Number(seller.deliveryFee || 500);
     const gasCost = discounted * size * qty;
     const totalAmount = gasCost + deliveryFee;
@@ -69,6 +71,7 @@ export async function POST(req: NextRequest) {
 
     await orderRef.set({
       buyerId: user.uid,
+      userId: user.uid,
       buyerName: buyerName || '',
       buyerPhone: phone,
       buyerEmail: user.email || '',

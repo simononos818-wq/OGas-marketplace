@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '../../../lib/firebase-admin';
 import { OGAS_COMMISSION_PERCENT } from '../../../lib/escrow';
 import { requireUser } from '../../../lib/require-user';
+import { orderBuyerId, orderTotal } from '../../../lib/fields';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,9 +14,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Sign in required' }, { status: 401 });
     }
 
-    if (!orderId || !amount) {
+    if (!orderId) {
       return NextResponse.json(
-        { success: false, message: 'Missing orderId or amount' },
+        { success: false, message: 'Missing orderId' },
         { status: 400 },
       );
     }
@@ -33,21 +34,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
     }
     const order = orderSnap.data()!;
-    const buyerId = order.buyerId || order.userId;
+    const buyerId = orderBuyerId(order);
     if (buyerId !== user.uid) {
       return NextResponse.json({ success: false, message: 'Not your order' }, { status: 403 });
     }
     const resolvedSellerId = sellerId || order.sellerId;
 
-    const expected = Number(order.total ?? order.totalAmount ?? order.totalPrice ?? 0);
-    if (expected > 0 && Math.abs(Number(amount) - expected) > 1) {
+    const expected = orderTotal(order);
+    if (expected < 100) {
+      return NextResponse.json(
+        { success: false, message: 'Order total is missing or too small' },
+        { status: 400 },
+      );
+    }
+    if (amount != null && Math.abs(Number(amount) - expected) > 1) {
       return NextResponse.json(
         { success: false, message: 'Amount does not match this order' },
         { status: 400 },
       );
     }
 
-    const amountInKobo = Math.round(Number(amount) * 100);
+    const amountInKobo = Math.round(expected * 100);
     if (amountInKobo < 10000) {
       return NextResponse.json(
         { success: false, message: 'Amount too small (min ₦100)' },
