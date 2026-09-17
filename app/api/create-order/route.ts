@@ -40,7 +40,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'This store cannot take orders yet' }, { status: 400 });
     }
 
-    const size = Number(kg) || 12.5;
+    const size = Number(kg);
+    if (!size || size < 0.05 || size > 50) {
+      return NextResponse.json({ success: false, message: 'Gas size must be at least 0.05kg' }, { status: 400 });
+    }
     const qty = Number(quantity) || 1;
     const original = Number(seller.pricePerKg) || 0;
     if (!original) {

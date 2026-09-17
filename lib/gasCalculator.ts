@@ -1,20 +1,33 @@
 /**
  * Smart Gas Calculator - OGas Marketplace
- * Built to make OGas #1 in Nigeria
+ * Scale counts 0.05, 0.10 … 0.95, 1.00, 1.05 (shop digital scale).
  */
 
-export const COMMON_CYLINDERS = [3, 5, 6, 12.5, 25, 50] as const;
+export const SCALE_STEP = 0.05;
+export const DEFAULT_PRICE_PER_KG = 1350;
+export const COMMON_CYLINDERS = [3, 6, 12, 12.5, 25, 50] as const;
 export type CylinderSize = (typeof COMMON_CYLINDERS)[number];
+
+/** Floor exact kg down to the next 0.05 the scale can show. Remainder is change. */
+export function floorToScale(exactKg: number, step = SCALE_STEP) {
+  if (!exactKg || exactKg < step) return 0;
+  return Math.round((Math.floor((exactKg + 1e-9) / step) * step) * 100) / 100;
+}
 
 export function moneyToKg(amount: number, pricePerKg: number) {
   if (!amount || !pricePerKg || pricePerKg <= 0) {
-    return { kg: 0, formatted: "0.00 kg", error: "Invalid input" };
+    return { kg: 0, formatted: "0.00 kg", exact: 0, gasCost: 0, change: 0, error: "Invalid input" };
   }
-  const kg = amount / pricePerKg;
+  const exact = amount / pricePerKg;
+  const kg = floorToScale(exact);
+  const gasCost = Math.round(kg * pricePerKg);
+  const change = Math.max(0, Math.round(amount - gasCost));
   return {
-    kg: Number(kg.toFixed(3)),
+    kg,
     formatted: `${kg.toFixed(2)} kg`,
-    exact: kg,
+    exact,
+    gasCost,
+    change,
   };
 }
 
@@ -41,7 +54,7 @@ export function estimateUsage({
   familySize = 4,
   cookingHoursPerDay = 1.5,
   cylinderSize = 12.5,
-  pricePerKg = 1400,
+  pricePerKg = DEFAULT_PRICE_PER_KG,
 }: {
   familySize?: number;
   cookingHoursPerDay?: number;
@@ -76,10 +89,8 @@ export function estimateUsage({
 
 function getAdvice(days: number, size: number) {
   if (days < 18)
-    return `Your ${size}kg finishes fast. Consider a bigger cylinder or 
-check for leaks.`;
-  if (days > 45) return `Excellent efficiency with your ${size}kg 
-cylinder.`;
+    return `Your ${size}kg finishes fast. Consider a bigger cylinder or check for leaks.`;
+  if (days > 45) return `Excellent efficiency with your ${size}kg cylinder.`;
   return `Normal usage for a ${size}kg cylinder.`;
 }
 
@@ -92,6 +103,5 @@ export function generateWhatsAppMessage({
   amount: number;
   pricePerKg: number;
 }) {
-  return `Please fill *${kg.toFixed(2)} kg* for 
-₦${amount.toLocaleString()} at ₦${pricePerKg}/kg. Thank you. – via OGas`;
+  return `Please fill *${kg.toFixed(2)} kg* for ₦${amount.toLocaleString()} at ₦${pricePerKg}/kg. Thank you. – via OGas`;
 }

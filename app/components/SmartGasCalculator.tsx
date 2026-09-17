@@ -8,12 +8,14 @@ import {
   estimateUsage,
   generateWhatsAppMessage,
   COMMON_CYLINDERS,
+  DEFAULT_PRICE_PER_KG,
+  SCALE_STEP,
 } from "@/lib/gasCalculator";
 
 export default function SmartGasCalculator() {
   const [mode, setMode] = useState<"buyer" | "seller">("buyer");
-  const [pricePerKg, setPricePerKg] = useState(1400);
-  const [amount, setAmount] = useState("");
+  const [pricePerKg, setPricePerKg] = useState(DEFAULT_PRICE_PER_KG);
+  const [amount, setAmount] = useState("3000");
   const [kg, setKg] = useState("");
   const [familySize, setFamilySize] = useState(4);
   const [cookingHours, setCookingHours] = useState(1.5);
@@ -100,7 +102,7 @@ export default function SmartGasCalculator() {
         <h1 className="text-2xl font-bold text-gray-900">Smart Gas 
 Calculator</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Accurate • Fast • Built for Nigerian buyers & sellers
+          Scale {SCALE_STEP.toFixed(2)}kg steps · change goes back
         </p>
       </div>
 
@@ -160,9 +162,15 @@ outline-none focus:ring-2 focus:ring-green-500"
         {moneyResult && (
           <div className="bg-green-50 rounded-xl p-4 space-y-3">
             <div>
-              <p className="text-sm text-green-700">Seller should fill</p>
+              <p className="text-sm text-green-700">Scale go read</p>
               <p className="text-3xl font-bold 
 text-green-800">{moneyResult.formatted}</p>
+              <p className="text-sm text-green-700 mt-1">
+                Gas na ₦{moneyResult.gasCost.toLocaleString()}
+                {moneyResult.change > 0
+                  ? ` · change ₦${moneyResult.change.toLocaleString()}`
+                  : ""}
+              </p>
             </div>
             <div className="flex gap-2">
               <button
