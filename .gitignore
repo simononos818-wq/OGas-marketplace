@@ -24,3 +24,5 @@ functions/.env*
 functions/.env.ogasapp-5a003
 .env*
 ogas-deploy.zip
+ogas-codebase-dump.txt
+ogas_audit.txt
