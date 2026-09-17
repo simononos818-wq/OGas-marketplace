@@ -1,85 +1,62 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isAdmin() {
       return request.auth != null && (
         request.auth.token.email == 'simononos818@gmail.com' ||
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
       );
     }
-    function orderBuyer(data) {
-      return data.buyerId != null ? data.buyerId : data.userId;
-    }
-    function isChatParticipant() {
-      return request.auth != null && (
-        request.auth.uid in resource.data.participants ||
-        resource.data.buyerId == request.auth.uid ||
-        resource.data.sellerId == request.auth.uid
-      );
-    }
 
+    // ─── USERS ───
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.get('role', 'buyer') in ['buyer', 'seller'];
-      allow update: if isAdmin() || (
-        request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.get('role', 'buyer') in ['buyer', 'seller']
-        && resource.data.get('role', 'buyer') != 'admin'
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (
+        request.auth.uid == userId || isAdmin()
       );
       allow delete: if false;
     }
 
+    // ─── SELLERS ───
     match /sellers/{sellerId} {
       allow read: if true;
-      allow create: if request.auth != null
-        && request.auth.uid == sellerId
-        && request.resource.data.status == 'pending'
-        && (
-          !('verified' in request.resource.data) ||
-          request.resource.data.verified == false
-        )
-        && (
-          !('isVerified' in request.resource.data) ||
-          request.resource.data.isVerified == false
-        );
-      allow update: if isAdmin() || (
-        request.auth != null && request.auth.uid == sellerId &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['businessName','ownerName','address','state','location',
-                    'cylinderSizes','prices','isActive','deliveryFee','updatedAt',
-                    'name','phone','email','city','pricePerKg','availableSizes',
-                    'landmark','hours','offersDelivery','stockKg'])
+      allow create: if request.auth != null && request.auth.uid == sellerId;
+      allow update: if request.auth != null && (
+        request.auth.uid == sellerId || isAdmin()
       );
       allow delete: if false;
     }
 
+    // ─── ORDERS ───
     match /orders/{orderId} {
-      allow read: if request.auth != null && (
-        orderBuyer(resource.data) == request.auth.uid ||
-        resource.data.sellerId == request.auth.uid || isAdmin()
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid ||
+        isAdmin()
       );
-      allow create: if false;
-      allow update: if false;
       allow delete: if false;
     }
 
+    // ─── ORDER SECRETS ───
     match /orderSecrets/{secretId} {
-      allow read, write: if false;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
 
+    // ─── CHATS ───
     match /chats/{chatId} {
-      allow read: if isAdmin() || isChatParticipant();
-      allow create, update, delete: if false;
-      match /messages/{messageId} {
-        allow read: if isAdmin() ||
-          get(/databases/$(database)/documents/chats/$(chatId)).data.buyerId == request.auth.uid ||
-          get(/databases/$(database)/documents/chats/$(chatId)).data.sellerId == request.auth.uid ||
-          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
-        allow create, update, delete: if false;
-      }
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // ─── MESSAGES ───
+    match /chats/{chatId}/messages/{messageId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
   }
 }

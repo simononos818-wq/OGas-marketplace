@@ -1,0 +1,608 @@
+===== OGAS PROJECT AUDIT =====
+--- DATE ---
+Thu Sep 17 13:57:30 WAT 2026
+--- SYSTEM ---
+Darwin macs-MacBook-Air.local 21.6.0 Darwin Kernel Version 21.6.0: Mon Jun 24 00:56:10 PDT 2024; root:xnu-8020.240.18.709.2~1/RELEASE_X86_64 x86_64
+v24.13.1
+11.8.0
+--- GIT ---
+6d4b248 Redirect old /blog paths to blog.ogaslpgmarketplace.com
+45c62d6 Add AdSense ownership meta only. No ads on the app; ads stay on /blog static pages.
+b57a1b4 Disable marketplace AdSense component. Keep file so old imports do not break.
+13ffe29 Remove AdSense from the marketplace app. Ads belong on the blog only.
+4e24671 Derive pricePerKg from cylinder prices so newly approved neighbourhood shops appear on Home.
+5b9835f Nationwide seller search by town plus Open a store CTA so Simon can onboard shops without code.
+89cf033 Remove leftover was-price on buy page
+2d04d99 Charge plant price only; remove 50 naira promo
+5c4e455 fix: clean blog index and list 50kg POL article
+051d983 feat: add 50kg POL refill safety article
+bde8bab feat: add AdSense to blog and public pages
+3190aa9 fix: show 50kg cylinder photo in article body
+5b09b1d feat: add 50kg cylinder photo to LPG fill article
+d156518 feat: add 50kg cylinder 88% fill article
+46a2246 feat: add gas business startup guide (3 tiers) + updated blog index
+  backup-remote-main
+  clean-deploy
+  conflict_110226_1430
+* main
+  simononos818-wq-patch-1
+  remotes/origin/backup-remote-main
+  remotes/origin/clean-deploy
+  remotes/origin/conflict_110226_1430
+  remotes/origin/main
+  remotes/origin/simononos818-wq-patch-1
+origin	git@github.com:simononos818-wq/OGas-marketplace.git (fetch)
+origin	git@github.com:simononos818-wq/OGas-marketplace.git (push)
+--- FILE TREE ---
+./.DS_Store
+./.env.local
+./.eslintrc.json
+./.firebaserc
+./.github/workflows/build-android.yml
+./.github/workflows/deploy.yml
+./.gitignore
+./.npmrc
+./.prettierrc
+./.vercel/.env.development.local
+./.vercel/.env.production.local
+./.vercel/README.txt
+./.vercel/repo.json
+./EXECUTIVE_SUMMARY.md
+./IMPLEMENTATION_CHECKLIST.md
+./IMPLEMENTATION_SUMMARY.md
+./MARKETPLACE_README.md
+./PRODUCT_ROADMAP.md
+./QUICK_START.md
+./README.md
+./android/.idea/gradle.xml
+./android/.idea/workspace.xml
+./android/capacitor-cordova-android-plugins/build.gradle
+./android/capacitor-cordova-android-plugins/cordova.variables.gradle
+./android/local.properties
+./app/buy-kit/page.tsx
+./app/buy/page.tsx
+./app/calculator/page.tsx
+./app/chat/page.tsx
+./app/components/OrderChat.tsx
+./app/components/OrderStatusActions.tsx
+./app/components/SmartGasCalculator.tsx
+./app/context/AuthContext.tsx
+./app/globals.css
+./app/hooks/useAuth.ts
+./app/hooks/useLocation.ts
+./app/hooks/useOrderChat.ts
+./app/hooks/useSellers.ts
+./app/layout.tsx
+./app/login/page.tsx
+./app/orders/page.tsx
+./app/page.tsx
+./app/privacy/page.tsx
+./app/profile/page.tsx
+./app/support/page.tsx
+./app/terms/page.tsx
+./apphosting.yaml
+./build-for-drive.sh
+./build.log
+./capacitor.config.json
+./check-sellers.js
+./check-sender.js
+./components/AdSense.tsx
+./components/BottomNav.tsx
+./components/ChatButton.tsx
+./components/ChatListScreen.tsx
+./components/ChatScreen.tsx
+./components/InstallApp.tsx
+./components/LoadingSkeleton.tsx
+./components/Logo.tsx
+./components/PaystackButton.tsx
+./components/ReorderButton.tsx
+./components/Toast.tsx
+./contexts/AuthContext.tsx
+./current_rules.txt
+./eslint.config.mjs
+./firebase.json
+./firebase.json.backup
+./firebase.ts
+./firestore.indexes.json
+./firestore.rules
+./firestore.rules.backup
+./fix-all-sellers.js
+./fix-branding.sh
+./fix-seller-fields.js
+./fix-sellers.js
+./functions/.env
+./functions/.env.ogasapp-5a003
+./functions/.gitignore
+./functions/check-prices-temp.js
+./functions/checkCollections.js
+./functions/createOrder.js
+./functions/firestore.rules
+./functions/fixSellers.js
+./functions/getMessages.js
+./functions/getOrders.js
+./functions/getVendors.js
+./functions/index.js
+./functions/index.js.backup
+./functions/lib/index.js
+./functions/lib/index.js.map
+./functions/package-lock.json
+./functions/package.json
+./functions/register-eegoja-seller.js
+./functions/registerSeller.js
+./functions/saveSellerBankDetails.js
+./functions/seed-eegoja.js
+./functions/sendMessage.js
+./functions/src/index.ts
+./functions/src/index.ts.backup.1782136015
+./functions/tsconfig.json
+./functions/updateOrderStatus.js
+./hooks/useAIChat.ts
+./hooks/useChat.ts
+./hooks/useLocation.ts
+./hooks/useNotifications.ts
+./hooks/useOrders.ts
+./hooks/usePaystack.ts
+./hooks/useSellers.ts
+./install.sh
+./item.seller.uid
+./lib/chat-server.ts
+./lib/chat.ts
+./lib/client-auth.ts
+./lib/db.ts
+./lib/door-code.ts
+./lib/escrow.ts
+./lib/firebase-admin.ts
+./lib/firebase.ts
+./lib/gasCalculator.ts
+./lib/orderStatus.ts
+./lib/require-user.ts
+./lib/sms.ts
+./middleware.ts
+./middleware.ts.bak
+./mobile/.claude/settings.json
+./mobile/.expo/README.md
+./mobile/.expo/devices.json
+./mobile/.gitignore
+./mobile/AGENTS.md
+./mobile/App.tsx
+./mobile/CLAUDE.md
+./mobile/LICENSE
+./mobile/api.ts
+./mobile/app.json
+./mobile/assets/android-icon-background.png
+./mobile/assets/android-icon-foreground.png
+./mobile/assets/android-icon-monochrome.png
+./mobile/assets/favicon.png
+./mobile/assets/icon.png
+./mobile/assets/splash-icon.png
+./mobile/build-1780583617761.apk
+./mobile/eas.json
+./mobile/index.ts
+./mobile/ios/.gitignore
+./mobile/ios/.xcode.env
+./mobile/ios/Podfile
+./mobile/ios/Podfile.properties.json
+./mobile/package-lock.json
+./mobile/package.json
+./mobile/screens/BuyScreen.tsx
+./mobile/screens/HomeScreen.tsx
+./mobile/screens/OrdersScreen.tsx
+./mobile/screens/ProfileScreen.tsx
+./mobile/tsconfig.json
+./next-env.d.ts
+./next.config.js
+./next.config.js.bak
+./next/404.html
+./next/index.html
+./ogas-deploy.zip
+./ogas_audit.txt
+./package-lock.json
+./package.json
+./postcss.config.mjs
+./public/ads.txt
+./public/between-cards.svg
+./public/between-links.svg
+./public/blog/hidden-danger-roadside-sellers.html
+./public/blog/how-to-know-gas-seller-cheating-weight.html
+./public/blog/index.html
+./public/blog/refill-50kg-pol-tanks.html
+./public/blog/start-gas-business.html
+./public/blog/why-50kg-cylinder-only-holds-45kg.html
+./public/blog/why-gas-prices-keep-rising.html
+./public/icon-192x192.png
+./public/icon-512x512.png
+./public/icons/icon-192.png
+./public/icons/icon-512.png
+./public/icons/icon-template.svg
+./public/index.html
+./public/manifest.json
+./public/offline.html
+./public/ogas-logo.svg
+./public/register-sw.js
+./public/robots.txt
+./public/service-worker.js
+./public/sw.js
+./seed-delta-75.js
+./seed-dsez-30.js
+./seed-eegoja-seller.js
+./seed-eegoja.js
+./seed-sellers.js
+./seed-ughelli.js
+./serviceAccountKey.json
+./skills-lock.json
+./tailwind.config.js
+./tailwind.config.ts
+./test-termii.js
+./tsconfig.json
+./types/index.ts
+./update-sellers-fixed.js
+./update-sellers.js
+./yarn.lock
+--- PACKAGE.JSON (root) ---
+{
+  "name": "ogas-marketplace",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "export": "next export"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "firebase": "^11.10.0",
+    "firebase-admin": "^14.0.0",
+    "firebase-frameworks": "^0.4.2",
+    "framer-motion": "^12.40.0",
+    "lucide-react": "^1.16.0",
+    "next": "15.5.14",
+    "next-pwa": "^5.6.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-paystack": "^6.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^5.0.0"
+  }
+}
+--- PACKAGE.JSON (functions) ---
+{
+  "name": "ogas-chat-functions",
+  "version": "1.0.0",
+  "description": "OGas Chat System Cloud Functions",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "axios": "^1.18.0",
+    "expo-server-sdk": "^3.13.0",
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^7.3.2"
+  },
+  "devDependencies": {
+    "@types/axios": "^0.9.36",
+    "typescript": "^5.4.0"
+  },
+  "private": true
+}
+--- PACKAGE.JSON (mobile) ---
+{
+  "name": "mobile",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/bottom-tabs": "^7.16.2",
+    "@react-navigation/native": "^7.2.5",
+    "expo": "~56.0.8",
+    "expo-status-bar": "~56.0.4",
+    "react": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-gesture-handler": "~2.31.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "4.25.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "private": true
+}
+--- ENV VARS (values REDACTED) ---
+### ./.vercel/.env.production.local ###
+# Created by Vercel CLI
+FIREBASE_SERVICE_ACCOUNT_JSON=***REDACTED***
+NEXT_PUBLIC_APP_URL=***REDACTED***
+NEXT_PUBLIC_FIREBASE_API_KEY=***REDACTED***
+NEXT_PUBLIC_FIREBASE_APP_ID=***REDACTED***
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=***REDACTED***
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=***REDACTED***
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=***REDACTED***
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=***REDACTED***
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=***REDACTED***
+NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=***REDACTED***
+NODE_OPTIONS=***REDACTED***
+NX_DAEMON=***REDACTED***
+PAYSTACK_SECRET_KEY=***REDACTED***
+TERMII_API_KEY=***REDACTED***
+TURBO_CACHE=***REDACTED***
+TURBO_DOWNLOAD_LOCAL_ENABLED=***REDACTED***
+TURBO_REMOTE_ONLY=***REDACTED***
+TURBO_RUN_SUMMARY=***REDACTED***
+VERCEL=***REDACTED***
+VERCEL_ENV=***REDACTED***
+VERCEL_GIT_COMMIT_AUTHOR_LOGIN=***REDACTED***
+VERCEL_GIT_COMMIT_AUTHOR_NAME=***REDACTED***
+VERCEL_GIT_COMMIT_MESSAGE=***REDACTED***
+VERCEL_GIT_COMMIT_REF=***REDACTED***
+VERCEL_GIT_COMMIT_SHA=***REDACTED***
+VERCEL_GIT_PREVIOUS_SHA=***REDACTED***
+VERCEL_GIT_PROVIDER=***REDACTED***
+VERCEL_GIT_PULL_REQUEST_ID=***REDACTED***
+VERCEL_GIT_REPO_ID=***REDACTED***
+VERCEL_GIT_REPO_OWNER=***REDACTED***
+VERCEL_GIT_REPO_SLUG=***REDACTED***
+VERCEL_OIDC_TOKEN=***REDACTED***
+VERCEL_TARGET_ENV=***REDACTED***
+VERCEL_URL=***REDACTED***
+### ./.vercel/.env.development.local ###
+# Created by Vercel CLI
+VERCEL_OIDC_TOKEN=***REDACTED***
+### ./.env.local ###
+NEXT_PUBLIC_FIREBASE_API_KEY=***REDACTED***
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=***REDACTED***
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=***REDACTED***
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=***REDACTED***
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=***REDACTED***
+NEXT_PUBLIC_FIREBASE_APP_ID=***REDACTED***
+PAYSTACK_SECRET_KEY=***REDACTED***
+NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=***REDACTED***
+NEXT_PUBLIC_APP_URL=***REDACTED***
+
+# Created by Vercel CLI
+VERCEL_OIDC_TOKEN=***REDACTED***
+### ./functions/.env.ogasapp-5a003 ###
+SENDGRID_API_KEY=***REDACTED***
+FROM_EMAIL=***REDACTED***
+### ./functions/.env ###
+PAYSTACK_SECRET=***REDACTED***
+TERMII_API_KEY=***REDACTED***
+--- FIREBASE/CONFIG FILES ---
+### firebase.json ###
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default"
+    }
+  ],
+  "hosting": {
+    "public": "public",
+    "redirects": [
+      {
+        "source": "/**",
+        "destination": "https://www.ogaslpgmarketplace.com/:splat",
+        "type": 301
+      }
+    ],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}
+### firestore.rules ###
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == 'simononos818@gmail.com' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
+    // ─── USERS ───
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (
+        request.auth.uid == userId || isAdmin()
+      );
+      allow delete: if false;
+    }
+
+    // ─── SELLERS ───
+    match /sellers/{sellerId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.auth.uid == sellerId;
+      allow update: if request.auth != null && (
+        request.auth.uid == sellerId || isAdmin()
+      );
+      allow delete: if false;
+    }
+
+    // ─── ORDERS ───
+    match /orders/{orderId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if false;
+    }
+
+    // ─── ORDER SECRETS ───
+    match /orderSecrets/{secretId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // ─── CHATS ───
+    match /chats/{chatId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // ─── MESSAGES ───
+    match /chats/{chatId}/messages/{messageId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+}
+### .firebaserc ###
+{
+  "projects": {
+    "default": "ogasapp-5a003",
+    "production": "ogasapp-5a003"
+  },
+  "targets": {},
+  "etags": {}
+}### next.config.js ###
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    unoptimized: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  serverExternalPackages: ['firebase-admin', 'jose', 'jwks-rsa'],
+  async redirects() {
+    return [
+      {
+        source: '/blog',
+        destination: 'https://blog.ogaslpgmarketplace.com',
+        permanent: true,
+      },
+      {
+        source: '/blog/:path*',
+        destination: 'https://blog.ogaslpgmarketplace.com/:path*',
+        permanent: true,
+      },
+    ]
+  },
+  async headers() {
+    return [
+      {
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+          { key: 'Service-Worker-Allowed', value: '/' },
+        ],
+      },
+    ]
+  },
+}
+
+
+module.exports = nextConfig
+### tsconfig.json ###
+{
+  "compilerOptions": {
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "target": "ES2017"
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "next-env.d.ts",
+    "out/types/**/*.ts",
+    "dist/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+--- API ROUTES ---
+./app/api/webhook/route.ts:7:export async function POST(req: NextRequest) {
+./app/api/door-code/route.ts:8:export async function GET(req: NextRequest) {
+./app/api/chat/route.ts:8:export async function POST(req: NextRequest) {
+./app/api/order-status/route.ts:13:export async function POST(req: NextRequest) {
+./app/api/checkout/route.ts:6:export async function POST(req: NextRequest) {
+./app/api/create-order/route.ts:8:export async function POST(req: NextRequest) {
+./app/api/seller-bank/route.ts:5:export async function POST(req: NextRequest) {
+./app/api/seller-bank/route.ts:73:export async function GET(req: NextRequest) {
+./app/api/release-escrow/route.ts:12:export async function POST(req: NextRequest) {
+./app/api/whatsapp-order/route.ts:3:export async function POST(request: NextRequest) {
+./app/api/verify-payment/route.ts:25:export async function POST(req: NextRequest) {
+--- DEPENDENCY VULNS ---
+  Depends on vulnerable versions of uuid
+  node_modules/teeny-request
+    @google-cloud/storage  2.2.0 - 2.5.0 || 5.19.0 - 8.0.0
+    Depends on vulnerable versions of retry-request
+    Depends on vulnerable versions of teeny-request
+    node_modules/@google-cloud/storage
+      firebase-admin  7.0.0 - 8.2.0 || 11.0.0 - 14.3.0
+      Depends on vulnerable versions of @google-cloud/storage
+      node_modules/firebase-admin
+    retry-request  7.0.0 - 7.0.2
+    Depends on vulnerable versions of teeny-request
+    node_modules/retry-request
+
+15 vulnerabilities (6 moderate, 8 high, 1 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+===== END AUDIT =====

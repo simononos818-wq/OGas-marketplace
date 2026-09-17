@@ -69,3 +69,5 @@ exports.createOrder = onRequest(
     }
   }
 );
+exports.saveSellerBankDetails = require("./saveSellerBankDetails").saveSellerBankDetails;
+Object.assign(exports, require('./lib/index.js'));

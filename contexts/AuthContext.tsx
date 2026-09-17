@@ -1,45 +1,94 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signOut,
-  GoogleAuthProvider,
-  signInWithPopup,
+  signOut as firebaseSignOut,
   updateProfile,
   User as FirebaseUser,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  ConfirmationResult,
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 
 interface AuthContextType {
   user: FirebaseUser | null;
+  userData: any;
   uid: string | null;
   loading: boolean;
+  isSeller: boolean;
+  isAdmin: boolean;
+  sellerStatus: string | null;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signInWithPhone: (phoneNumber: string) => Promise<ConfirmationResult>;
+  signUp: (
+    email: string,
+    password: string,
+    name: string,
+    phone: string,
+    isSeller?: boolean
+  ) => Promise<void>;
   logout: () => Promise<void>;
+  signOut: () => Promise<void>;
+  refreshUserData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [uid, setUid] = useState<string | null>(null);
+  const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const refreshUserData = async (firebaseUser?: FirebaseUser | null) => {
+    const targetUser = firebaseUser ?? user;
+    if (!targetUser) {
+      setUserData(null);
+      return;
+    }
+    try {
+      const docRef = doc(db, "users", targetUser.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        setUserData(docSnap.data());
+      } else {
+        const basicData = {
+          name: targetUser.displayName || "",
+          email: targetUser.email || "",
+          phone: targetUser.phoneNumber || "",
+          role: "buyer",
+          sellerStatus: null,
+          addressesVerified: false,
+          createdAt: new Date(),
+          addresses: [],
+        };
+        await setDoc(docRef, basicData);
+        setUserData(basicData);
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      setUserData(null);
+    }
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setUid(user?.uid || null);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        await refreshUserData(firebaseUser);
+      } else {
+        setUserData(null);
+      }
       setLoading(false);
     });
+
     return () => unsubscribe();
   }, []);
 
@@ -47,44 +96,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    name: string,
+    phone: string,
+    isSeller: boolean = false
+  ) => {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(result.user, { displayName: name });
-  };
 
-  const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-  };
+    const userDoc = {
+      name,
+      email,
+      phone,
+      role: isSeller ? "seller" : "buyer",
+      sellerStatus: isSeller ? "pending" : null,
+      addressesVerified: false,
+      createdAt: new Date(),
+      addresses: [],
+    };
 
-  const signInWithPhone = async (phoneNumber: string): Promise<ConfirmationResult> => {
-    // Format phone number for Nigeria
-    let formattedPhone = phoneNumber.trim();
-    if (!formattedPhone.startsWith('+')) {
-      if (formattedPhone.startsWith('0')) {
-        formattedPhone = '+234' + formattedPhone.substring(1);
-      } else if (formattedPhone.startsWith('234')) {
-        formattedPhone = '+' + formattedPhone;
-      } else {
-        formattedPhone = '+234' + formattedPhone;
-      }
-    }
-
-    // Create invisible recaptcha
-    const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-      size: 'invisible',
-      callback: () => {},
-    });
-
-    return await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier);
+    await setDoc(doc(db, "users", result.user.uid), userDoc);
+    setUserData(userDoc);
   };
 
   const logout = async () => {
-    await signOut(auth);
+    await firebaseSignOut(auth);
+    setUserData(null);
   };
 
+  const isSeller = userData?.role === "seller" && userData?.sellerStatus === "approved";
+  const isAdmin = userData?.role === "admin";
+  const sellerStatus = userData?.sellerStatus || null;
+
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signInWithEmail, signUp, signInWithGoogle, signInWithPhone, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        userData,
+        uid: user?.uid || null,
+        loading,
+        isSeller,
+        isAdmin,
+        sellerStatus,
+        signInWithEmail,
+        signUp,
+        logout,
+        signOut: logout,
+        refreshUserData,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -96,4 +158,8 @@ export function useAuth() {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+}
+
+export function useAuthContext() {
+  return useAuth();
 }

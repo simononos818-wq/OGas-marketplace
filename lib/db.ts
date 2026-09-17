@@ -71,15 +71,15 @@ export async function getSellerByEmail(email: string): Promise<Seller | null> {
   return { id: d.id, ...d.data() } as Seller;
 }
 
-export async function registerSeller(data: Omit<Seller, 'id' | 'createdAt' | 'rating' | 'totalOrders' | 'verified' | 'isApproved'>): Promise<string> {
+export async function registerSeller(
+  data: Omit<Seller, 'id' | 'createdAt' | 'rating' | 'totalOrders' | 'verified' | 'isApproved'>
+): Promise<string> {
   const ref = await addDoc(collection(db, 'sellers'), {
     ...data,
     isApproved: false,
-    sellerStatus: "pending",
-    statusBadge: "Pending Approval",
-    verified: false,
     sellerStatus: 'pending',
     statusBadge: 'Pending Approval',
+    verified: false,
     rating: 0,
     totalOrders: 0,
     createdAt: serverTimestamp(),
