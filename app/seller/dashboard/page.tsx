@@ -287,7 +287,11 @@ function SellerDashboardContent({ userId, sellerData }: { userId: string; seller
 
 
       {/* Payout */}
-      <div className="px-4 mt-3">
+      <div className="px-4 mt-3 space-y-2">
+        <Link href="/calculator?for=seller" className="flex items-center justify-center gap-2 w-full py-3 bg-orange-500 text-black rounded-lg text-sm font-bold">
+          <Flame size={16} />
+          Calculate sales
+        </Link>
         <Link href="/seller/bank" className="flex items-center justify-center gap-2 w-full py-2.5 bg-green-600/20 border border-green-500/30 text-green-400 rounded-lg text-sm font-medium hover:bg-green-600/30 transition">
           <Banknote size={16} />
           Set Payout Account

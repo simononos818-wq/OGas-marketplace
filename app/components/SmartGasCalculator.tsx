@@ -1,387 +1,259 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  moneyToKg,
-  kgToMoney,
-  getCylinderCosts,
-  estimateUsage,
-  generateWhatsAppMessage,
-  COMMON_CYLINDERS,
+  BOTTLE_SIZES,
   DEFAULT_PRICE_PER_KG,
   SCALE_STEP,
+  loadTodaySales,
+  moneyToKg,
+  naira,
+  saveTodaySales,
+  saleTotals,
+  type SaleRow,
 } from "@/lib/gasCalculator";
 
-export default function SmartGasCalculator() {
-  const [mode, setMode] = useState<"buyer" | "seller">("buyer");
-  const [pricePerKg, setPricePerKg] = useState(DEFAULT_PRICE_PER_KG);
-  const [amount, setAmount] = useState("3000");
-  const [kg, setKg] = useState("");
-  const [familySize, setFamilySize] = useState(4);
-  const [cookingHours, setCookingHours] = useState(1.5);
-  const [cylinderSize, setCylinderSize] = useState(12.5);
+type Mode = "buyer" | "seller";
 
-  // Remaining Gas Tracker
-  const [currentWeight, setCurrentWeight] = useState("");
-  const [fullCylinderSize, setFullCylinderSize] = useState(12.5);
+export default function SmartGasCalculator({
+  defaultMode = "buyer",
+  shopName = "Mega Think Success",
+  shopArea = "Oteri, Ughelli",
+  lockedPrice,
+  refillHref,
+}: {
+  defaultMode?: Mode;
+  shopName?: string;
+  shopArea?: string;
+  lockedPrice?: number;
+  refillHref?: string;
+}) {
+  const [mode, setMode] = useState<Mode>(defaultMode);
+  const [pricePerKg, setPricePerKg] = useState(lockedPrice || DEFAULT_PRICE_PER_KG);
+  const [buyMode, setBuyMode] = useState<"money" | "bottle">("money");
+  const [money, setMoney] = useState("3000");
+  const [size, setSize] = useState(12);
+  const [sales, setSales] = useState<SaleRow[]>([]);
 
-  // Remember last used price
   useEffect(() => {
-    const saved = localStorage.getItem("ogas_last_price");
-    if (saved) setPricePerKg(Number(saved));
-  }, []);
+    setMode(defaultMode);
+  }, [defaultMode]);
 
   useEffect(() => {
-    if (pricePerKg > 0) {
-      localStorage.setItem("ogas_last_price", String(pricePerKg));
+    if (lockedPrice && lockedPrice > 0) setPricePerKg(lockedPrice);
+  }, [lockedPrice]);
+
+  useEffect(() => {
+    if (!lockedPrice) {
+      const saved = localStorage.getItem("ogas_last_price");
+      if (saved) setPricePerKg(Number(saved) || DEFAULT_PRICE_PER_KG);
     }
+    setSales(loadTodaySales());
+  }, [lockedPrice]);
+
+  useEffect(() => {
+    if (pricePerKg > 0) localStorage.setItem("ogas_last_price", String(pricePerKg));
   }, [pricePerKg]);
 
-  const moneyResult = useMemo(() => {
-    const val = parseFloat(amount);
-    if (!val) return null;
-    return moneyToKg(val, pricePerKg);
-  }, [amount, pricePerKg]);
+  const cash = Number(String(money).replace(/[^0-9.]/g, "")) || 0;
+  const moneyFill = moneyToKg(cash, pricePerKg);
+  const fillKg = buyMode === "money" ? moneyFill.kg : size;
+  const gasCost = buyMode === "money" ? moneyFill.gasCost : Math.round(pricePerKg * size);
+  const change = buyMode === "money" ? moneyFill.change : 0;
+  const totals = useMemo(() => saleTotals(sales), [sales]);
 
-  const kgResult = useMemo(() => {
-    const val = parseFloat(kg);
-    if (!val) return null;
-    return kgToMoney(val, pricePerKg);
-  }, [kg, pricePerKg]);
-
-  const cylinderCosts = useMemo(() => getCylinderCosts(pricePerKg), 
-[pricePerKg]);
-
-  const usage = useMemo(
-    () =>
-      estimateUsage({
-        familySize,
-        cookingHoursPerDay: cookingHours,
-        cylinderSize,
-        pricePerKg,
-      }),
-    [familySize, cookingHours, cylinderSize, pricePerKg]
-  );
-
-  const remaining = useMemo(() => {
-    const current = parseFloat(currentWeight);
-    if (!current || current <= 0) return null;
-
-    const daily = usage.dailyKg;
-    const daysLeft = current / daily;
-
-    return {
-      kgLeft: current,
-      daysLeft: Math.max(0, Math.round(daysLeft)),
-      percentage: Math.min(100, Math.round((current / fullCylinderSize) * 
-100)),
-      status: daysLeft <= 3 ? "critical" : daysLeft <= 7 ? "low" : "good",
+  const addSale = () => {
+    if (fillKg < SCALE_STEP) return;
+    const row: SaleRow = {
+      id: String(Date.now()),
+      at: Date.now(),
+      kg: fillKg,
+      gasCost,
+      cash: buyMode === "money" ? cash : gasCost,
+      change,
+      kind: buyMode,
     };
-  }, [currentWeight, usage.dailyKg, fullCylinderSize]);
-
-  const shareMessage = () => {
-    if (moneyResult) {
-      const msg = generateWhatsAppMessage({
-        kg: moneyResult.kg,
-        amount: parseFloat(amount),
-        pricePerKg,
-      });
-      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, 
-"_blank");
-    }
+    const next = [row, ...sales];
+    setSales(next);
+    saveTodaySales(next);
   };
 
-  const handleOrderThis = (quantity: number) => {
-    window.location.href = `/order?kg=${quantity}&price=${pricePerKg}`;
+  const clearSales = () => {
+    setSales([]);
+    saveTodaySales([]);
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4 space-y-6 pb-20">
-      {/* Header */}
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900">Smart Gas 
-Calculator</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Scale {SCALE_STEP.toFixed(2)}kg steps · change goes back
-        </p>
-      </div>
+    <div className="min-h-dvh bg-black text-white pb-28" style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}>
+      <header className="px-4 pb-3 flex items-center gap-3">
+        <img src="/ogas-icon.svg" alt="OGas" className="w-10 h-10 rounded-full bg-white object-cover" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] text-gray-500 leading-none">OGas</p>
+          <h1 className="font-bold truncate">{mode === "buyer" ? shopName : "Calculate your sales"}</h1>
+          <p className="text-xs text-gray-500 truncate">{mode === "buyer" ? shopArea : "Customer money → kg + change"}</p>
+        </div>
+      </header>
 
-      {/* Mode Toggle */}
-      <div className="flex bg-gray-100 rounded-xl p-1">
+      <div className="px-4 mb-4 flex bg-gray-900 rounded-2xl p-1">
         <button
+          type="button"
           onClick={() => setMode("buyer")}
-          className={`flex-1 py-2.5 rounded-lg text-sm font-medium 
-transition ${
-            mode === "buyer" ? "bg-white shadow text-green-700" : 
-"text-gray-600"
-          }`}
+          className={`flex-1 py-3 rounded-xl text-sm font-bold ${mode === "buyer" ? "bg-orange-500 text-black" : "text-gray-400"}`}
         >
-          Buyer Mode
+          I wan refill
         </button>
         <button
+          type="button"
           onClick={() => setMode("seller")}
-          className={`flex-1 py-2.5 rounded-lg text-sm font-medium 
-transition ${
-            mode === "seller" ? "bg-white shadow text-green-700" : 
-"text-gray-600"
-          }`}
+          className={`flex-1 py-3 rounded-xl text-sm font-bold ${mode === "seller" ? "bg-orange-500 text-black" : "text-gray-400"}`}
         >
-          Seller Mode
+          Shop sales
         </button>
       </div>
 
-      {/* Price Input */}
-      <div className="bg-white rounded-2xl border p-4 shadow-sm">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Current Price per kg (₦)
-        </label>
-        <input
-          type="number"
-          value={pricePerKg}
-          onChange={(e) => setPricePerKg(Number(e.target.value) || 0)}
-          className="w-full text-2xl font-bold border rounded-xl px-4 py-3 
-focus:ring-2 focus:ring-green-500 outline-none"
-        />
-        <p className="text-xs text-gray-400 mt-1">Price is remembered for 
-next time</p>
-      </div>
-
-      {/* Money → Kg */}
-      <div className="bg-white rounded-2xl border p-4 shadow-sm 
-space-y-3">
-        <h3 className="font-semibold text-gray-800">I have this 
-amount</h3>
-        <input
-          type="number"
-          placeholder="e.g. 8000"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="w-full border rounded-xl px-4 py-3 text-lg 
-outline-none focus:ring-2 focus:ring-green-500"
-        />
-        {moneyResult && (
-          <div className="bg-green-50 rounded-xl p-4 space-y-3">
-            <div>
-              <p className="text-sm text-green-700">Scale go read</p>
-              <p className="text-3xl font-bold 
-text-green-800">{moneyResult.formatted}</p>
-              <p className="text-sm text-green-700 mt-1">
-                Gas na ₦{moneyResult.gasCost.toLocaleString()}
-                {moneyResult.change > 0
-                  ? ` · change ₦${moneyResult.change.toLocaleString()}`
-                  : ""}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={shareMessage}
-                className="flex-1 bg-green-600 text-white py-2.5 
-rounded-xl font-medium text-sm"
-              >
-                Share on WhatsApp
-              </button>
-              <button
-                onClick={() => handleOrderThis(moneyResult.kg)}
-                className="flex-1 bg-black text-white py-2.5 rounded-xl 
-font-medium text-sm"
-              >
-                Order this
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Kg → Money */}
-      <div className="bg-white rounded-2xl border p-4 shadow-sm 
-space-y-3">
-        <h3 className="font-semibold text-gray-800">I want this 
-quantity</h3>
-        <input
-          type="number"
-          placeholder="e.g. 11"
-          value={kg}
-          onChange={(e) => setKg(e.target.value)}
-          className="w-full border rounded-xl px-4 py-3 text-lg 
-outline-none focus:ring-2 focus:ring-green-500"
-        />
-        {kgResult && (
-          <div className="bg-blue-50 rounded-xl p-4 space-y-3">
-            <div>
-              <p className="text-sm text-blue-700">You will pay</p>
-              <p className="text-3xl font-bold 
-text-blue-800">{kgResult.formatted}</p>
-            </div>
-            <button
-              onClick={() => handleOrderThis(parseFloat(kg))}
-              className="w-full bg-black text-white py-2.5 rounded-xl 
-font-medium text-sm"
-            >
-              Order {kg} kg now
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Remaining Gas Tracker */}
-      <div className="bg-white rounded-2xl border p-4 shadow-sm 
-space-y-4">
-        <h3 className="font-semibold text-gray-800">Remaining Gas 
-Tracker</h3>
-        <p className="text-xs text-gray-500">
-          Enter the current weight of your cylinder to know how many days 
-you have left
-        </p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-gray-500">Current Weight 
-(kg)</label>
-            <input
-              type="number"
-              placeholder="e.g. 4.2"
-              value={currentWeight}
-              onChange={(e) => setCurrentWeight(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500">Full Size</label>
-            <select
-              value={fullCylinderSize}
-              onChange={(e) => 
-setFullCylinderSize(Number(e.target.value))}
-              className="w-full border rounded-lg px-3 py-2"
-            >
-              {COMMON_CYLINDERS.map((size) => (
-                <option key={size} value={size}>
-                  {size} kg
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {remaining && (
-          <div
-            className={`rounded-xl p-4 ${
-              remaining.status === "critical"
-                ? "bg-red-50"
-                : remaining.status === "low"
-                ? "bg-orange-50"
-                : "bg-green-50"
-            }`}
-          >
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium">Gas Left</span>
-              <span className="text-xl font-bold">{remaining.kgLeft} 
-kg</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
-              <div
-                className={`h-3 rounded-full transition-all ${
-                  remaining.status === "critical"
-                    ? "bg-red-500"
-                    : remaining.status === "low"
-                    ? "bg-orange-500"
-                    : "bg-green-500"
-                }`}
-                style={{ width: `${remaining.percentage}%` }}
+      <div className="px-4 space-y-4">
+        <div className="bg-gray-900 rounded-2xl p-4">
+          <p className="text-sm text-gray-400">{mode === "buyer" ? "Today" : "Your price today"}</p>
+          {mode === "seller" || !lockedPrice ? (
+            <div className="flex items-end gap-2">
+              <span className="text-2xl font-bold">₦</span>
+              <input
+                inputMode="numeric"
+                value={pricePerKg || ""}
+                onChange={(e) => setPricePerKg(Number(String(e.target.value).replace(/[^0-9]/g, "")) || 0)}
+                className="flex-1 bg-transparent text-3xl font-bold outline-none"
               />
+              <span className="text-gray-400 pb-1">= 1kg</span>
             </div>
-            <p className="text-sm">
-              Approximately <strong>{remaining.daysLeft} days</strong> 
-remaining
-            </p>
-            {remaining.status === "critical" && (
-              <p className="text-xs text-red-600 mt-1 font-medium">
-                ⚠️ Running very low — refill soon
+          ) : (
+            <p className="text-3xl font-bold">{naira(pricePerKg)} = 1kg</p>
+          )}
+          <p className="text-xs text-gray-500 mt-2">Scale: 0.05 · 0.10 · 0.15 … 1.00 · 1.05</p>
+          <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
+            {BOTTLE_SIZES.map((sz) => (
+              <div key={sz} className="bg-gray-800 rounded-xl px-3 py-2">
+                {sz}kg = {naira(Math.round(pricePerKg * sz))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-gray-900 rounded-2xl p-4">
+          <p className="font-bold mb-3">{mode === "buyer" ? "How you wan buy?" : "Wetin the customer bring?"}</p>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <button
+              type="button"
+              onClick={() => setBuyMode("money")}
+              className={`p-3 rounded-xl border-2 text-left ${buyMode === "money" ? "border-orange-500 bg-orange-500/10" : "border-gray-700 bg-gray-800"}`}
+            >
+              <div className="font-bold">{mode === "buyer" ? "I get money" : "E bring money"}</div>
+              <div className="text-xs text-gray-400">Tell me the kg</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBuyMode("bottle")}
+              className={`p-3 rounded-xl border-2 text-left ${buyMode === "bottle" ? "border-orange-500 bg-orange-500/10" : "border-gray-700 bg-gray-800"}`}
+            >
+              <div className="font-bold">{mode === "buyer" ? "I know bottle" : "E know bottle"}</div>
+              <div className="text-xs text-gray-400">3 · 6 · 12 · 12.5</div>
+            </button>
+          </div>
+
+          {buyMode === "money" ? (
+            <>
+              <label className="text-sm text-gray-400">{mode === "buyer" ? "Money wey you get" : "Money wey e give you"}</label>
+              <input
+                inputMode="numeric"
+                value={money}
+                onChange={(e) => setMoney(e.target.value)}
+                placeholder="3000"
+                className="w-full mt-1 bg-gray-800 rounded-xl px-4 py-4 text-2xl font-bold text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {BOTTLE_SIZES.map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setSize(sz)}
+                  className={`p-3 rounded-xl border-2 ${size === sz ? "border-orange-500 bg-orange-500/10" : "border-gray-700 bg-gray-800"}`}
+                >
+                  <div className="font-bold">{sz}kg</div>
+                  <div className="text-xs text-gray-400">{naira(Math.round(pricePerKg * sz))}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-orange-500 text-black rounded-2xl p-4">
+          {fillKg >= SCALE_STEP ? (
+            <>
+              <p className="text-sm font-medium opacity-80">Scale go read</p>
+              <p className="text-4xl font-black leading-tight">{fillKg.toFixed(2)} kg</p>
+              <p className="mt-1 font-semibold">
+                Gas na {naira(gasCost)}
+                {change > 0 ? ` · give am change ${naira(change)}` : ""}
               </p>
+            </>
+          ) : (
+            <p className="font-semibold">
+              {cash > 0
+                ? `This money no reach 0.05kg. 0.05kg na ${naira(Math.round(pricePerKg * SCALE_STEP))}`
+                : "Put money or pick bottle."}
+            </p>
+          )}
+        </div>
+
+        {mode === "buyer" ? (
+          <div className="space-y-2">
+            {refillHref ? (
+              <Link href={refillHref} className="block text-center bg-white text-black font-bold py-4 rounded-2xl">
+                I wan refill — tell the shop
+              </Link>
+            ) : (
+              <p className="text-center text-sm text-gray-500">Show this screen to the shop.</p>
             )}
+            <Link href="/shops" className="block text-center text-sm text-gray-500 py-2">
+              Another shop
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={addSale}
+              disabled={fillKg < SCALE_STEP}
+              className="w-full bg-white text-black font-bold py-4 rounded-2xl disabled:bg-gray-800 disabled:text-gray-500"
+            >
+              Add this sale
+            </button>
+            <div className="bg-gray-900 rounded-2xl p-4">
+              <div className="flex justify-between items-center mb-2">
+                <p className="font-bold">Today sales</p>
+                {sales.length > 0 && (
+                  <button type="button" onClick={clearSales} className="text-xs text-gray-500">
+                    Clear today
+                  </button>
+                )}
+              </div>
+              <p className="text-lg font-bold text-orange-400">
+                {totals.count} refill · {totals.kg.toFixed(2)} kg · {naira(totals.naira)}
+              </p>
+              <div className="mt-3 space-y-2 max-h-48 overflow-auto">
+                {sales.length === 0 && <p className="text-sm text-gray-500">No sale yet. Calculate, then add.</p>}
+                {sales.map((s) => (
+                  <div key={s.id} className="flex justify-between text-sm bg-gray-800 rounded-xl px-3 py-2">
+                    <span>{s.kg.toFixed(2)} kg</span>
+                    <span>{naira(s.gasCost)}{s.change ? ` · ch ${naira(s.change)}` : ""}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
-      </div>
-
-      {/* Quick Cylinder Prices */}
-      <div className="bg-white rounded-2xl border p-4 shadow-sm">
-        <h3 className="font-semibold text-gray-800 mb-3">Quick Cylinder 
-Prices</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {cylinderCosts.map((item) => (
-            <button
-              key={item.size}
-              onClick={() => handleOrderThis(item.size)}
-              className="border rounded-xl p-3 text-center 
-hover:border-green-500 hover:bg-green-50 transition"
-            >
-              <p className="text-sm text-gray-500">{item.size} kg</p>
-              <p className="font-bold text-lg">{item.formatted}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Usage Estimator */}
-      <div className="bg-white rounded-2xl border p-4 shadow-sm 
-space-y-4">
-        <h3 className="font-semibold text-gray-800">Family Usage 
-Estimator</h3>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-gray-500">Family Size</label>
-            <input
-              type="number"
-              value={familySize}
-              onChange={(e) => setFamilySize(Number(e.target.value))}
-              className="w-full border rounded-lg px-3 py-2"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500">Cooking 
-hrs/day</label>
-            <input
-              type="number"
-              step="0.5"
-              value={cookingHours}
-              onChange={(e) => setCookingHours(Number(e.target.value))}
-              className="w-full border rounded-lg px-3 py-2"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs text-gray-500">Cylinder Size</label>
-          <select
-            value={cylinderSize}
-            onChange={(e) => setCylinderSize(Number(e.target.value))}
-            className="w-full border rounded-lg px-3 py-2"
-          >
-            {COMMON_CYLINDERS.map((size) => (
-              <option key={size} value={size}>
-                {size} kg
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-          <div className="flex justify-between">
-            <span className="text-sm text-gray-600">Daily use</span>
-            <span className="font-medium">{usage.formatted.daily}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-gray-600">Lasts</span>
-            <span className="font-medium">{usage.formatted.days}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-gray-600">Monthly cost</span>
-            <span className="font-bold 
-text-green-700">{usage.formatted.monthly}</span>
-          </div>
-          <p className="text-xs text-gray-500 pt-2 
-border-t">{usage.advice}</p>
-        </div>
       </div>
     </div>
   );
