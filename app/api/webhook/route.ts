@@ -13,6 +13,9 @@ export async function POST(req: NextRequest) {
 
     const rawBody = await req.text();
     const signature = req.headers.get('x-paystack-signature');
+    if (!signature) {
+      return NextResponse.json({ ok: false }, { status: 401 });
+    }
     if (signature) {
       const hash = createHmac('sha512', secret).update(rawBody).digest('hex');
       try {
@@ -20,6 +23,7 @@ export async function POST(req: NextRequest) {
         const b = Buffer.from(String(signature), 'hex');
         if (a.length !== b.length || !timingSafeEqual(a, b)) {
           console.error('webhook bad signature');
+          return NextResponse.json({ ok: false }, { status: 401 });
         }
       } catch {
         console.error('webhook signature parse');
