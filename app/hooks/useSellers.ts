@@ -93,7 +93,7 @@ export function useSellers(userLat?: number | null, userLng?: number | null) {
           return { ...raw, pricePerKg: derivePricePerKg(raw) };
         });
 
-        data = data.filter((s) => s.isActive !== false && sellerVerified(s));
+        data = data.filter((s) => s.isActive !== false && (sellerVerified(s) || s.isApproved === true));
 
         if (userLat != null && userLng != null) {
           data = data

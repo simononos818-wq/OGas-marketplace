@@ -128,6 +128,8 @@ export default function AdminSellersPage() {
         sellerStatus: 'approved',
         statusBadge: 'Verified Seller',
         verified: true,
+        isVerified: true,
+        status: 'approved',
         isActive: true,
         approvedAt: now,
         approvedBy: user?.uid,
@@ -146,7 +148,7 @@ export default function AdminSellersPage() {
       setSellers((prev) =>
         prev.map((s) =>
           s.id === sellerId
-            ? { ...s, isApproved: true, sellerStatus: 'approved', statusBadge: 'Verified Seller', verified: true, isActive: true }
+            ? { ...s, isApproved: true, sellerStatus: 'approved', statusBadge: 'Verified Seller', verified: true, isVerified: true, status: 'approved', isActive: true }
             : s
         )
       );
