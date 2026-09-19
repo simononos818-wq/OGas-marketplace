@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flame, User, ClipboardList, MessageSquare, Store } from 'lucide-react';
+import { Flame, User, ClipboardList, MessageSquare } from 'lucide-react';
 import { useChatList } from '@/hooks/useChat';
 
 export default function BottomNav() {
@@ -13,21 +13,19 @@ export default function BottomNav() {
     { href: '/', icon: Flame, label: 'Gas' },
     { href: '/orders', icon: ClipboardList, label: 'Orders' },
     { href: '/chat', icon: MessageSquare, label: 'Chat' },
-    { href: '/seller/dashboard', icon: Store, label: 'Sell' },
     { href: '/profile', icon: User, label: 'Me' },
   ];
 
   if (
     pathname?.startsWith('/login') ||
-    pathname?.startsWith('/seller/register') ||
-    pathname?.startsWith('/seller/login') ||
+    pathname?.startsWith('/seller') ||   // Seller Studio is fullscreen — no buyer nav inside
     (pathname?.startsWith('/chat/') && pathname !== '/chat')
   ) {
     return null;
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-gray-950/95 backdrop-blur-lg border-t border-gray-800 z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-gray-100 z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="flex items-center justify-around pt-2 pb-1 max-w-lg mx-auto">
         {navItems.map((item) => {
           const isActive =
@@ -39,16 +37,17 @@ export default function BottomNav() {
               key={item.href}
               href={item.href}
               className={`relative flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-all ${
-                isActive ? 'text-orange-500' : 'text-gray-500'
+                isActive ? 'text-[#16305e]' : 'text-gray-400'
               }`}
             >
               <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
               {item.href === '/chat' && totalUnread > 0 && (
-                <span className="absolute top-0 right-1 min-w-4 h-4 px-1 rounded-full bg-orange-500 text-black text-[10px] font-bold leading-4 text-center">
+                <span className="absolute top-0 right-1 min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold leading-4 text-center">
                   {totalUnread > 9 ? '9+' : totalUnread}
                 </span>
               )}
               <span className="text-[10px] font-medium">{item.label}</span>
+              {isActive && <span className="w-1 h-1 rounded-full bg-[#12a5b0]" />}
             </Link>
           );
         })}

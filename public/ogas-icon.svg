@@ -1,23 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OGas">
-  <defs>
-    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#F8E7A8"/>
-      <stop offset="0.45" stop-color="#D4AF37"/>
-      <stop offset="1" stop-color="#8C6A12"/>
-    </linearGradient>
-    <linearGradient id="navy" x1="0.2" y1="0" x2="0.8" y2="1">
-      <stop offset="0" stop-color="#1B2A4A"/>
-      <stop offset="1" stop-color="#0B1224"/>
-    </linearGradient>
-  </defs>
-  <path fill="url(#gold)" d="M256 28c78 18 148 22 196 22v168c0 118-78 214-196 266C138 432 60 336 60 218V50c48 0 118-4 196-22z"/>
-  <path fill="url(#navy)" d="M256 52c70 16 132 20 174 20v148c0 104-70 188-174 234C152 408 82 324 82 220V72c42 0 104-4 174-20z"/>
-  <path fill="none" stroke="url(#gold)" stroke-width="10" d="M256 78c54 12 102 16 136 16v118c0 82-54 148-136 186C174 360 120 294 120 212V94c34 0 82-4 136-16z"/>
-  <g fill="none" stroke="#F3E3A1" stroke-width="14" stroke-linejoin="round">
-    <rect x="226" y="128" width="60" height="38" rx="7"/>
-    <path d="M236 166h40v86a20 20 0 0 1-40 0z"/>
-    <path d="M248 138h16M256 128v22"/>
-  </g>
-  <rect x="286" y="198" width="48" height="20" rx="3" fill="#D4AF37"/>
-  <text x="256" y="348" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="54" font-weight="800" fill="#F3E3A1" letter-spacing="3">OGAS</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <circle cx="256" cy="256" r="246" fill="#ffffff" stroke="#16305e" stroke-width="22"/>
+  <circle cx="256" cy="256" r="212" fill="none" stroke="#16305e" stroke-width="6"/>
+  <path d="M140 196 A 132 132 0 1 0 372 196" fill="none" stroke="#16305e" stroke-width="34"/>
+  <path d="M352 176 L352 300" stroke="#16305e" stroke-width="34"/>
+  <rect x="220" y="180" width="72" height="150" rx="32" fill="#12a5b0"/>
+  <rect x="238" y="146" width="36" height="26" rx="8" fill="#12a5b0"/>
+  <rect x="222" y="118" width="68" height="22" rx="10" fill="#12a5b0"/>
+  <text x="256" y="98" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="64" font-weight="bold" fill="#16305e" letter-spacing="8">OGAS</text>
+  <text x="256" y="452" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="600" fill="#16305e" letter-spacing="10">ONLINE GAS REFILL</text>
 </svg>

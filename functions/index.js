@@ -71,3 +71,47 @@ exports.createOrder = onRequest(
 );
 exports.saveSellerBankDetails = require("./saveSellerBankDetails").saveSellerBankDetails;
 Object.assign(exports, require('./lib/index.js'));
+
+// ================= PUSH NOTIFICATIONS (A–D build) =================
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
+
+async function sendPushToUser(uid, title, body, data) {
+  if (!uid) return;
+  try {
+    const snap = await db.collection('userTokens').doc(uid).get();
+    const tokens = (snap.data()?.tokens || []).slice(-5);
+    if (!tokens.length) return;
+    await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      data: data || {},
+      webpush: { notification: { icon: '/ogas-icon.svg', badge: '/ogas-icon.svg' } }
+    });
+  } catch (err) {
+    console.error('push to', uid, 'failed:', err.message);
+  }
+}
+
+exports.notifySellerOnNewOrder = onDocumentCreated('orders/{orderId}', async (event) => {
+  const order = event.data?.data();
+  if (!order) return;
+  const first = (order.items || [])[0];
+  const desc = first ? `${first.quantity}x ${first.kg ?? first.size}kg` : 'New order';
+  await sendPushToUser(order.sellerId, '🔥 New gas order!', `${desc} — ₦${(order.total ?? order.totalAmount ?? 0).toLocaleString()}. Tap to accept.`, { orderId: event.params.orderId });
+});
+
+const BUYER_PUSH = {
+  confirmed: ['✅ Order accepted', 'The seller confirmed your order. Gas is being prepared.'],
+  out_for_delivery: ['🛵 Gas on the way', 'Your gas is out for delivery. Have your Door Code ready.'],
+  delivered: ['✔️ Gas delivered', 'Enjoy! Tap to rate your seller.'],
+  cancelled: ['Order cancelled', 'Your order was cancelled. Any payment is being refunded.']
+};
+
+exports.notifyBuyerOnStatusChange = onDocumentUpdated('orders/{orderId}', async (event) => {
+  const before = event.data?.before?.data();
+  const after = event.data?.after?.data();
+  if (!before || !after || before.status === after.status) return;
+  const msg = BUYER_PUSH[after.status];
+  if (!msg) return;
+  await sendPushToUser(after.buyerId ?? after.userId ?? after.buyerUid, msg[0], msg[1], { orderId: event.params.orderId });
+});

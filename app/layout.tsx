@@ -3,6 +3,7 @@ import './globals.css';
 import { AuthProvider } from './context/AuthContext';
 import BottomNav from '@/components/BottomNav';
 import InstallApp from '@/components/InstallApp';
+import NotificationManager from '@/components/NotificationManager';
 
 export const metadata: Metadata = {
   title: 'OGas',
@@ -30,7 +31,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#000000',
+  themeColor: '#16305e',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="min-h-dvh pb-24 [&:has(.ogas-chat-thread)]:pb-0">{children}</main>
             <BottomNav />
             <InstallApp />
+            <NotificationManager />
           </div>
         </AuthProvider>
       </body>
