@@ -51,10 +51,10 @@ export default function BuyPage() {
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('pickup');
   const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'cash'>('cash');
   const [placingOrder, setPlacingOrder] = useState(false);
-  const [buyerLocation, setBuyerLocation] = useState('');
   const [buyerPhone, setBuyerPhone] = useState('');
   const [buyerName, setBuyerName] = useState('');
   const [buyerAddress, setBuyerAddress] = useState('');
+  const [contactSaved, setContactSaved] = useState(false);
 
   useEffect(() => {
     if (!sellerId) return;
@@ -66,19 +66,19 @@ export default function BuyPage() {
     });
   }, [sellerId]);
 
+  // If the buyer is signed in and their number is on file, don't ask again
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude } = pos.coords;
-          setBuyerLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-        },
-        () => {
-          setBuyerLocation('Location access denied');
-        }
-      );
-    }
-  }, []);
+    if (!user?.uid) return;
+    getDoc(doc(db, 'users', user.uid)).then((snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data() as any;
+      if (d.phone && String(d.phone).replace(/\D/g, '').length >= 10) {
+        setBuyerPhone(d.phone);
+        setBuyerName(d.name || d.displayName || user.displayName || '');
+        setContactSaved(true);
+      }
+    });
+  }, [user?.uid]);
 
   if (loading) {
     return (
@@ -130,7 +130,7 @@ export default function BuyPage() {
     setPlacingOrder(true);
 
     try {
-      await saveBuyerContact(buyerPhone, buyerName, buyerAddress || buyerLocation);
+      await saveBuyerContact(buyerPhone, buyerName, buyerAddress);
       const headers = await authHeaders();
       const createRes = await fetch('/api/create-order', {
         method: 'POST',
@@ -142,7 +142,7 @@ export default function BuyPage() {
           paymentMethod,
           buyerPhone,
           buyerName,
-          buyerAddress: deliveryType === 'pickup' ? 'Pickup in store' : buyerAddress || buyerLocation,
+          buyerAddress: deliveryType === 'pickup' ? 'Pickup in store' : buyerAddress,
         }),
       });
       const created = await createRes.json();
@@ -188,7 +188,7 @@ export default function BuyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white max-w-md mx-auto border-x border-gray-900">
       <div className="sticky top-0 z-10 bg-black/90 backdrop-blur border-b border-gray-800 px-4 py-3 flex items-center gap-3">
         <Link href="/" className="p-2 hover:bg-gray-800 rounded-full">
           <ChevronLeft className="w-5 h-5" />
@@ -202,7 +202,7 @@ export default function BuyPage() {
         </div>
       </div>
 
-      <div className="p-4 space-y-6">
+      <div className="p-4 space-y-4">
         {isPendingApproval && (
           <div className="bg-yellow-500/20 border border-yellow-500 rounded-2xl p-3 text-center text-yellow-400 text-sm">
             This store is pending verification and can't take orders yet.
@@ -358,33 +358,39 @@ export default function BuyPage() {
           </div>
         </div>
 
-        <div className="bg-gray-900 rounded-2xl p-4 space-y-3">
-          <h3 className="font-bold">4. Your phone number</h3>
-          <input
-            type="tel"
-            inputMode="tel"
-            value={buyerPhone}
-            onChange={(e) => setBuyerPhone(e.target.value)}
-            placeholder="0803 000 0000"
-            className="w-full bg-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
-          <input
-            type="text"
-            value={buyerName}
-            onChange={(e) => setBuyerName(e.target.value)}
-            placeholder="Name (optional)"
-            className="w-full bg-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
-          {deliveryType === 'delivery' && (
-            <input
-              type="text"
-              value={buyerAddress}
-              onChange={(e) => setBuyerAddress(e.target.value)}
-              placeholder="Delivery address"
-              className="w-full bg-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
-          )}
-        </div>
+        {(!contactSaved || deliveryType === 'delivery') && (
+          <div className="bg-gray-900 rounded-2xl p-4 space-y-3">
+            <h3 className="font-bold">{contactSaved ? 'Delivery address' : '4. Your phone number'}</h3>
+            {!contactSaved && (
+              <>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={buyerPhone}
+                  onChange={(e) => setBuyerPhone(e.target.value)}
+                  placeholder="0803 000 0000"
+                  className="w-full bg-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+                <input
+                  type="text"
+                  value={buyerName}
+                  onChange={(e) => setBuyerName(e.target.value)}
+                  placeholder="Name (optional)"
+                  className="w-full bg-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </>
+            )}
+            {deliveryType === 'delivery' && (
+              <input
+                type="text"
+                value={buyerAddress}
+                onChange={(e) => setBuyerAddress(e.target.value)}
+                placeholder="Delivery address"
+                className="w-full bg-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            )}
+          </div>
+        )}
 
         <div className="bg-gray-900 rounded-2xl p-4">
           <h3 className="font-bold mb-3">Your order</h3>
