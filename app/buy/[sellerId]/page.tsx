@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { useAuthContext } from '../../context/AuthContext';
+import { useAuthContext } from '../../../context/AuthContext';
 import { authHeaders, saveBuyerContact } from '@/lib/client-auth';
-import { MapPin, Phone, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Flame, Tag } from 'lucide-react';
+import { MapPin, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Flame, Tag, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { moneyToKg, SCALE_STEP } from '@/lib/gasCalculator';
 
@@ -29,6 +29,14 @@ interface Seller {
 }
 
 const BOTTLE_SIZES = [3, 6, 12, 12.5];
+
+// Show area level only — the exact street stays private until an order exists
+const shortAddress = (addr: string) => {
+  if (!addr) return '';
+  const parts = addr.split(',').map((s) => s.trim()).filter(Boolean);
+  if (parts.length <= 3) return addr;
+  return parts.slice(-3).join(', ');
+};
 
 export default function BuyPage() {
   const { sellerId } = useParams();
@@ -189,7 +197,7 @@ export default function BuyPage() {
           <h1 className="font-bold">{seller.businessName}</h1>
           <div className="flex items-center gap-1 text-xs text-gray-400">
             <MapPin className="w-3 h-3" />
-            {seller.address}
+            {shortAddress(seller.address)}
           </div>
         </div>
       </div>
@@ -212,29 +220,21 @@ export default function BuyPage() {
               <span className="text-sm">{seller.rating || 4.5}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-400">
-            <Phone className="w-4 h-4" />
-            {seller.phone}
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <Lock className="w-3 h-3" />
+            Exact location and contact are shared after you order. Chat in-app to talk to the shop.
           </div>
         </div>
 
         <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
           <div className="text-sm text-gray-400">Today</div>
           <div className="text-2xl font-bold text-white">{naira(originalPrice)} = 1kg</div>
-          <p className="text-xs text-gray-500 mt-2">Scale: 0.05 · 0.10 · 0.15 … 1.00 · 1.05</p>
-          <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
-            {BOTTLE_SIZES.map((sz) => (
-              <div key={sz} className="bg-gray-800 rounded-xl px-3 py-2">
-                {sz}kg = {naira(Math.round(originalPrice * sz))}
-              </div>
-            ))}
-          </div>
         </div>
 
         <div className="bg-gray-900 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-3">
             <Flame className="w-5 h-5 text-orange-500" />
-            <span className="font-bold">1. How you wan buy?</span>
+            <span className="font-bold">1. How would you like to buy?</span>
           </div>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <button
@@ -242,22 +242,22 @@ export default function BuyPage() {
               onClick={() => setBuyMode('money')}
               className={`p-3 rounded-xl border-2 text-left ${buyMode === 'money' ? 'border-orange-500 bg-orange-500/10' : 'border-gray-700 bg-gray-800'}`}
             >
-              <div className="font-bold">I get money</div>
-              <div className="text-xs text-gray-400">Tell me my kg</div>
+              <div className="font-bold">I have a budget</div>
+              <div className="text-xs text-gray-400">Enter amount — see your kg</div>
             </button>
             <button
               type="button"
               onClick={() => setBuyMode('bottle')}
               className={`p-3 rounded-xl border-2 text-left ${buyMode === 'bottle' ? 'border-orange-500 bg-orange-500/10' : 'border-gray-700 bg-gray-800'}`}
             >
-              <div className="font-bold">I know bottle</div>
-              <div className="text-xs text-gray-400">3 · 6 · 12 · 12.5</div>
+              <div className="font-bold">I know my size</div>
+              <div className="text-xs text-gray-400">Choose cylinder size</div>
             </button>
           </div>
 
           {buyMode === 'money' ? (
             <>
-              <label className="text-sm text-gray-400">Money wey you get</label>
+              <label className="text-sm text-gray-400">How much do you have?</label>
               <input
                 inputMode="numeric"
                 value={money}
@@ -268,13 +268,13 @@ export default function BuyPage() {
               <p className="mt-3 text-sm">
                 {cash > 0 && moneyFill.kg >= SCALE_STEP ? (
                   <>
-                    Scale go read <b>{moneyFill.kg.toFixed(2)} kg</b>. Gas na {naira(gasCost)}
-                    {change > 0 ? <> · give am change {naira(change)}</> : null}
+                    You'll get <b>{moneyFill.kg.toFixed(2)} kg</b> — gas costs {naira(gasCost)}
+                    {change > 0 ? <> · change {naira(change)}</> : null}
                   </>
                 ) : cash > 0 ? (
-                  <>This money no reach 0.05kg. 0.05kg na {naira(Math.round(originalPrice * SCALE_STEP))}</>
+                  <>Not enough for the minimum refill (0.05kg = {naira(Math.round(originalPrice * SCALE_STEP))}). Add a little more.</>
                 ) : (
-                  <>Scale count 0.05, 0.10, 0.15… Put money.</>
+                  <>Enter the amount you have.</>
                 )}
               </p>
             </>
@@ -298,7 +298,7 @@ export default function BuyPage() {
         <div className="bg-gray-900 rounded-2xl p-4">
           <h3 className="font-bold mb-3 flex items-center gap-2">
             <Truck className="w-5 h-5 text-orange-500" />
-            2. Where you dey?
+            2. How do you want it?
           </h3>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -309,7 +309,7 @@ export default function BuyPage() {
               }`}
             >
               <Store className="w-6 h-6 mx-auto mb-1" />
-              <div className="text-sm font-bold">I dey the shop</div>
+              <div className="text-sm font-bold">Pick up at shop</div>
               <div className="text-xs text-gray-400">FREE</div>
             </button>
             <button
@@ -320,14 +320,14 @@ export default function BuyPage() {
               }`}
             >
               <Truck className="w-6 h-6 mx-auto mb-1" />
-              <div className="text-sm font-bold">Bring am come</div>
+              <div className="text-sm font-bold">Deliver to me</div>
               <div className="text-xs text-gray-400">{naira(seller.deliveryFee || 500)}</div>
             </button>
           </div>
         </div>
 
         <div className="bg-gray-900 rounded-2xl p-4">
-          <h3 className="font-bold mb-3">3. How you go pay?</h3>
+          <h3 className="font-bold mb-3">3. Payment method</h3>
           <div className="space-y-2">
             <button
               type="button"
@@ -339,7 +339,7 @@ export default function BuyPage() {
               <Banknote className="w-5 h-5" />
               <div className="text-left">
                 <div className="font-bold">Cash</div>
-                <div className="text-xs text-gray-400">Pay for the shop</div>
+                <div className="text-xs text-gray-400">Pay at the shop</div>
               </div>
             </button>
             <button
@@ -351,8 +351,8 @@ export default function BuyPage() {
             >
               <CreditCard className="w-5 h-5" />
               <div className="text-left">
-                <div className="font-bold">Pay with phone</div>
-                <div className="text-xs text-gray-400">Card, transfer, USSD</div>
+                <div className="font-bold">Pay online</div>
+                <div className="text-xs text-gray-400">Card · Transfer · USSD</div>
               </div>
             </button>
           </div>
@@ -387,7 +387,7 @@ export default function BuyPage() {
         </div>
 
         <div className="bg-gray-900 rounded-2xl p-4">
-          <h3 className="font-bold mb-3">You go pay</h3>
+          <h3 className="font-bold mb-3">Your order</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span>{fillKg.toFixed(2)}kg × {naira(discountedPrice)}</span>
@@ -428,14 +428,14 @@ export default function BuyPage() {
           }`}
         >
           {placingOrder
-            ? 'Dey tell the shop...'
+            ? 'Placing your order...'
             : paymentMethod === 'paystack'
-              ? `Pay ${naira(totalAmount)} — lock in escrow`
-              : `Tell the shop — I wan refill · ${naira(totalAmount)}`}
+              ? `Pay ${naira(totalAmount)} — secure with escrow`
+              : `Place order · ${naira(totalAmount)}`}
         </button>
         {paymentMethod === 'paystack' && (
           <p className="text-center text-xs text-gray-500 mt-2">
-            OGas holds your money. The seller is paid only with your Door Code at the door.
+            OGas holds your money. The seller is paid only when you give your Door Code at the door.
           </p>
         )}
       </div>
