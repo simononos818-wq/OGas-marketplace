@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { useAuthContext } from '../../../context/AuthContext';
+import { useAuthContext } from '../../context/AuthContext';
 import { authHeaders, saveBuyerContact } from '@/lib/client-auth';
 import { MapPin, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Flame, Tag, Lock } from 'lucide-react';
 import Link from 'next/link';
