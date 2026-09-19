@@ -115,3 +115,98 @@ exports.notifyBuyerOnStatusChange = onDocumentUpdated('orders/{orderId}', async 
   if (!msg) return;
   await sendPushToUser(after.buyerId ?? after.userId ?? after.buyerUid, msg[0], msg[1], { orderId: event.params.orderId });
 });
+
+// ================= KG-TRACKER (OGas Credit foundation) =================
+const { onDocumentUpdated: _onDocUpdatedKg } = require('firebase-functions/v2/firestore');
+const FV = admin.firestore.FieldValue;
+
+function weekKey(d = new Date()) {
+  const onejan = new Date(d.getFullYear(), 0, 1);
+  const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay() + 1) / 7);
+  return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+function orderKgAndNaira(order) {
+  let kg = 0, naira = 0;
+  for (const item of (order.items || [])) {
+    const qty = Number(item.quantity) || 1;
+    const k = Number(item.kg) || parseFloat(String(item.size || '').replace('kg', '')) || 0;
+    const price = Number(item.price ?? item.unitPrice ?? 0);
+    if (!k || !price) continue;
+    const perKg = price / k;
+    if (perKg < 800 || perKg > 2500) continue;   // price sanity — blocks loan-farming
+    kg += k * qty;
+    naira += price * qty;
+  }
+  return { kg: Math.round(kg * 100) / 100, naira };
+}
+
+exports.trackDeliveredKg = _onDocUpdatedKg('orders/{orderId}', async (event) => {
+  const before = event.data?.before?.data();
+  const after = event.data?.after?.data();
+  if (!after) return;
+  if (after.status !== 'delivered') return;               // only count deliveries
+  if (before?.status === 'delivered') return;             // transition guard
+  if (after.kgTracked === true) return;                   // idempotency
+  if (after.paymentStatus !== 'paid') return;             // escrow-verified only
+  const buyerId = after.buyerId ?? after.userId ?? after.buyerUid;
+  const sellerId = after.sellerId;
+  if (!buyerId || !sellerId) return;
+  if (buyerId === sellerId) return;                       // self-dealing excluded
+
+  const { kg, naira } = orderKgAndNaira(after);
+  if (kg <= 0) return;
+
+  const orderRef = db.collection('orders').doc(event.params.orderId);
+  const buyerRef = db.collection('buyerStats').doc(buyerId);
+  const sellerRef = db.collection('sellerStats').doc(sellerId);
+  const now = new Date().toISOString();
+  const wk = weekKey();
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(orderRef);
+    if (snap.data()?.kgTracked === true) return;          // race-condition guard
+    tx.update(orderRef, { kgTracked: true, kgTrackedAt: now, kgTotal: kg, nairaTotal: naira });
+
+    tx.set(buyerRef, {
+      lifetimeKg: FV.increment(kg),
+      deliveredOrders: FV.increment(1),
+      totalNaira: FV.increment(naira),
+      [`byWeek.${wk}.kg`]: FV.increment(kg),
+      [`byWeek.${wk}.naira`]: FV.increment(naira),
+      updatedAt: now
+    }, { merge: true });
+
+    tx.set(sellerRef, {
+      lifetimeKg: FV.increment(kg),
+      deliveredOrders: FV.increment(1),
+      totalNaira: FV.increment(naira),
+      [`byWeek.${wk}.kg`]: FV.increment(kg),
+      [`byWeek.${wk}.naira`]: FV.increment(naira),
+      updatedAt: now
+    }, { merge: true });
+  });
+
+  // Auto-compute credit unlocks (policy v1 gates)
+  const [b, s] = await Promise.all([buyerRef.get(), sellerRef.get()]);
+  const bKg = b.data()?.lifetimeKg || 0;
+  const sKg = s.data()?.lifetimeKg || 0;
+
+  await buyerRef.set({
+    bnpl: {
+      unlocked: bKg >= 50,
+      limitKg: bKg >= 50 ? 5 : 0,
+      unlockedAt: bKg >= 50 ? (b.data()?.bnpl?.unlockedAt || now) : null
+    }
+  }, { merge: true });
+
+  const tier = sKg >= 200 ? 'full' : sKg >= 100 ? 'micro' : 'none';
+  await sellerRef.set({
+    credit: {
+      tier,
+      unlockedAt: tier !== 'none' ? (s.data()?.credit?.unlockedAt || now) : null
+    }
+  }, { merge: true });
+
+  console.log(`kg-tracked: order ${event.params.orderId} → buyer ${buyerId} +${kg}kg, seller ${sellerId} +${kg}kg (${tier})`);
+});
