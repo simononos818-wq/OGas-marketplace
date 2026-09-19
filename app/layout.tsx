@@ -3,7 +3,6 @@ import './globals.css';
 import { AuthProvider } from './context/AuthContext';
 import BottomNav from '@/components/BottomNav';
 import InstallApp from '@/components/InstallApp';
-import Footer from '@/components/Footer'
 
 export const metadata: Metadata = {
   title: 'OGas',
@@ -31,7 +30,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#0F1B3D',
+  themeColor: '#000000',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -48,7 +47,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <InstallApp />
           </div>
         </AuthProvider>
-              <Footer />
       </body>
     </html>
   );

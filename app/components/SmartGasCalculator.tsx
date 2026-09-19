@@ -18,8 +18,8 @@ type Mode = "buyer" | "seller";
 
 export default function SmartGasCalculator({
   defaultMode = "buyer",
-  shopName = "Mega Think Success",
-  shopArea = "Oteri, Ughelli",
+  shopName = "OGas",
+  shopArea = "Gas calculator",
   lockedPrice,
   refillHref,
 }: {
@@ -90,8 +90,8 @@ export default function SmartGasCalculator({
         <img src="/ogas-icon.svg" alt="OGas" className="w-10 h-10 rounded-full bg-white object-cover" />
         <div className="min-w-0 flex-1">
           <p className="text-[11px] text-gray-500 leading-none">OGas</p>
-          <h1 className="font-bold truncate">{mode === "buyer" ? shopName : "Calculate your sales"}</h1>
-          <p className="text-xs text-gray-500 truncate">{mode === "buyer" ? shopArea : "Customer money → kg + change"}</p>
+          <h1 className="font-bold truncate">{mode === "buyer" ? shopName : "Sales calculator"}</h1>
+          <p className="text-xs text-gray-500 truncate">{mode === "buyer" ? shopArea : "Payment → kg + change"}</p>
         </div>
       </header>
 
@@ -101,14 +101,14 @@ export default function SmartGasCalculator({
           onClick={() => setMode("buyer")}
           className={`flex-1 py-3 rounded-xl text-sm font-bold ${mode === "buyer" ? "bg-orange-500 text-black" : "text-gray-400"}`}
         >
-          I wan refill
+          Refill
         </button>
         <button
           type="button"
           onClick={() => setMode("seller")}
           className={`flex-1 py-3 rounded-xl text-sm font-bold ${mode === "seller" ? "bg-orange-500 text-black" : "text-gray-400"}`}
         >
-          Shop sales
+          Sales
         </button>
       </div>
 
@@ -140,29 +140,29 @@ export default function SmartGasCalculator({
         </div>
 
         <div className="bg-gray-900 rounded-2xl p-4">
-          <p className="font-bold mb-3">{mode === "buyer" ? "How you wan buy?" : "Wetin the customer bring?"}</p>
+          <p className="font-bold mb-3">{mode === "buyer" ? "How would you like to buy?" : "Customer payment"}</p>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <button
               type="button"
               onClick={() => setBuyMode("money")}
               className={`p-3 rounded-xl border-2 text-left ${buyMode === "money" ? "border-orange-500 bg-orange-500/10" : "border-gray-700 bg-gray-800"}`}
             >
-              <div className="font-bold">{mode === "buyer" ? "I get money" : "E bring money"}</div>
-              <div className="text-xs text-gray-400">Tell me the kg</div>
+              <div className="font-bold">{mode === "buyer" ? "By amount" : "By amount"}</div>
+              
             </button>
             <button
               type="button"
               onClick={() => setBuyMode("bottle")}
               className={`p-3 rounded-xl border-2 text-left ${buyMode === "bottle" ? "border-orange-500 bg-orange-500/10" : "border-gray-700 bg-gray-800"}`}
             >
-              <div className="font-bold">{mode === "buyer" ? "I know bottle" : "E know bottle"}</div>
-              <div className="text-xs text-gray-400">3 · 6 · 12 · 12.5</div>
+              <div className="font-bold">{mode === "buyer" ? "By cylinder size" : "By cylinder size"}</div>
+              
             </button>
           </div>
 
           {buyMode === "money" ? (
             <>
-              <label className="text-sm text-gray-400">{mode === "buyer" ? "Money wey you get" : "Money wey e give you"}</label>
+              <label className="text-sm text-gray-400">{mode === "buyer" ? "Amount" : "Amount received"}</label>
               <input
                 inputMode="numeric"
                 value={money}
@@ -191,18 +191,18 @@ export default function SmartGasCalculator({
         <div className="bg-orange-500 text-black rounded-2xl p-4">
           {fillKg >= SCALE_STEP ? (
             <>
-              <p className="text-sm font-medium opacity-80">Scale go read</p>
+              
               <p className="text-4xl font-black leading-tight">{fillKg.toFixed(2)} kg</p>
               <p className="mt-1 font-semibold">
-                Gas na {naira(gasCost)}
-                {change > 0 ? ` · give am change ${naira(change)}` : ""}
+                {naira(gasCost)}
+                {change > 0 ? ` · change ${naira(change)}` : ""}
               </p>
             </>
           ) : (
             <p className="font-semibold">
               {cash > 0
-                ? `This money no reach 0.05kg. 0.05kg na ${naira(Math.round(pricePerKg * SCALE_STEP))}`
-                : "Put money or pick bottle."}
+                ? `Minimum fill is 0.05kg — ${naira(Math.round(pricePerKg * SCALE_STEP))}`
+                : "Enter an amount or choose a size."}
             </p>
           )}
         </div>
@@ -211,13 +211,13 @@ export default function SmartGasCalculator({
           <div className="space-y-2">
             {refillHref ? (
               <Link href={refillHref} className="block text-center bg-white text-black font-bold py-4 rounded-2xl">
-                I wan refill — tell the shop
+                Order refill
               </Link>
             ) : (
               <p className="text-center text-sm text-gray-500">Show this screen to the shop.</p>
             )}
             <Link href="/shops" className="block text-center text-sm text-gray-500 py-2">
-              Another shop
+              Browse all sellers
             </Link>
           </div>
         ) : (
@@ -228,11 +228,11 @@ export default function SmartGasCalculator({
               disabled={fillKg < SCALE_STEP}
               className="w-full bg-white text-black font-bold py-4 rounded-2xl disabled:bg-gray-800 disabled:text-gray-500"
             >
-              Add this sale
+              Add sale
             </button>
             <div className="bg-gray-900 rounded-2xl p-4">
               <div className="flex justify-between items-center mb-2">
-                <p className="font-bold">Today sales</p>
+                <p className="font-bold">Today's sales</p>
                 {sales.length > 0 && (
                   <button type="button" onClick={clearSales} className="text-xs text-gray-500">
                     Clear today
@@ -243,11 +243,11 @@ export default function SmartGasCalculator({
                 {totals.count} refill · {totals.kg.toFixed(2)} kg · {naira(totals.naira)}
               </p>
               <div className="mt-3 space-y-2 max-h-48 overflow-auto">
-                {sales.length === 0 && <p className="text-sm text-gray-500">No sale yet. Calculate, then add.</p>}
+                {sales.length === 0 && <p className="text-sm text-gray-500">No sales yet.</p>}
                 {sales.map((s) => (
                   <div key={s.id} className="flex justify-between text-sm bg-gray-800 rounded-xl px-3 py-2">
                     <span>{s.kg.toFixed(2)} kg</span>
-                    <span>{naira(s.gasCost)}{s.change ? ` · ch ${naira(s.change)}` : ""}</span>
+                    <span>{naira(s.gasCost)}{s.change ? ` · change ${naira(s.change)}` : ""}</span>
                   </div>
                 ))}
               </div>

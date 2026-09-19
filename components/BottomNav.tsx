@@ -13,7 +13,7 @@ export default function BottomNav() {
     { href: '/', icon: Flame, label: 'Gas' },
     { href: '/orders', icon: ClipboardList, label: 'Orders' },
     { href: '/chat', icon: MessageSquare, label: 'Chat' },
-    { href: '/seller/dashboard', icon: Store, label: 'Desk' },
+    { href: '/seller/dashboard', icon: Store, label: 'Sell' },
     { href: '/profile', icon: User, label: 'Me' },
   ];
 
