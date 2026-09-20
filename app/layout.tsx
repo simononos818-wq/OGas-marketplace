@@ -44,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       >
         <AuthProvider>
           <div className="ogas-phone">
-            <main className="min-h-dvh pb-24 [&:has(.ogas-chat-thread)]:pb-0"<ErrorBoundary>{children}</ErrorBoundary></main>
+            <main className="min-h-dvh pb-24 [&:has(.ogas-chat-thread)]:pb-0"><ErrorBoundary>{children}</ErrorBoundary></main>
             <BottomNav />
             <InstallApp />
             <NotificationManager />
