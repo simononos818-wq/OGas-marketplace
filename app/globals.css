@@ -29,9 +29,7 @@ input, textarea {
 
 .ogas-phone {
   min-height: 100dvh;
-  max-width: 430px;
-  margin: 0 auto;
-  background: #000;
+  width: 100%;
   position: relative;
 }
 
