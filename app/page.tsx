@@ -44,7 +44,7 @@ export default function HomePage() {
   const fmtKm = (d?: number) =>
     typeof d === 'number' && d < 900 ? (d < 1 ? `${Math.round(d * 1000)}m` : `${d.toFixed(1)}km`) : null;
 
-  const eta = (d?: number) => `~${15 + Math.round((d ?? 1) * 30)} min`;
+  const eta = (d?: number) => (typeof d === 'number' && d >= 0 && d < 100) ? `~${15 + Math.round(d * 30)} min` : null;
 
   return (
     <div className="min-h-dvh bg-[#f4f6f8] pb-20" style={{ maxWidth: 480, margin: '0 auto' }}>
@@ -173,7 +173,7 @@ export default function HomePage() {
                       <div className="text-[9.5px] mt-0.5 flex items-center gap-1" style={{ color: '#8a8f98' }}>
                         <Star size={9} fill="#f5a623" color="#f5a623" /> New ·
                         {km && <><MapPin size={9} /> {km} ·</>}
-                        <Clock size={9} /> {eta(s.distanceKm)} ·
+                        {eta(s.distanceKm) && <><Clock size={9} /> {eta(s.distanceKm)} ·</>}
                         <span style={{ color: '#0fa958', fontWeight: 700 }}>OPEN</span>
                       </div>
                     </div>
