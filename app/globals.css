@@ -1,21 +1,9 @@
 @import "tailwindcss";
 
-@theme {
-  --color-orange-500: #f97316;
-  --color-orange-400: #fb923c;
-  --color-orange-900: #7c2d12;
-  --color-green-400: #4ade80;
-  --color-green-500: #22c55e;
-  --color-blue-400: #60a5fa;
-  --color-gray-800: #1f2937;
-  --color-gray-900: #111827;
-  --color-gray-950: #030712;
-}
-
 html, body {
   min-height: 100dvh;
-  background: #000;
-  color: #fff;
+  background: #f4f6f8;
+  color: #1a1d23;
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
@@ -23,24 +11,11 @@ html, body {
   touch-action: manipulation;
 }
 
-input, textarea {
-  user-select: text;
-}
+input, textarea { user-select: text; }
 
-.ogas-phone {
-  min-height: 100dvh;
-  width: 100%;
-  position: relative;
-}
+.ogas-phone { min-height: 100dvh; width: 100%; position: relative; }
 
-button, a {
-  -webkit-tap-highlight-color: transparent;
-}
+button, a { -webkit-tap-highlight-color: transparent; }
+button:active, a:active { transform: scale(0.98); }
 
-button:active, a:active {
-  transform: scale(0.98);
-}
-
-@media (display-mode: standalone) {
-  html { background: #000; }
-}
+@media (display-mode: standalone) { html { background: #f4f6f8; } }

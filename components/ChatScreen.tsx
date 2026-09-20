@@ -7,6 +7,9 @@ import { useChat } from '../hooks/useChat';
 import { useAuth } from '../app/hooks/useAuth';
 import { chipsForRole } from '../lib/chat';
 
+const NAVY = '#16305e';
+const TEAL = '#12a5b0';
+
 export default function ChatScreen({ chatId }: { chatId: string }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -38,36 +41,37 @@ export default function ChatScreen({ chatId }: { chatId: string }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f6f8' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: TEAL }} />
       </div>
     );
   }
 
   return (
-    <div className="ogas-chat-thread min-h-screen bg-black flex flex-col">
-      <div className="sticky top-0 bg-black/95 backdrop-blur-lg border-b border-gray-800 z-40 px-4 py-3 flex items-center gap-3">
-        <button onClick={() => router.push('/chat')} className="p-2 -ml-2 hover:bg-gray-900 rounded-lg" aria-label="All chats">
-          <ArrowLeft size={20} className="text-white" />
+    <div className="ogas-chat-thread min-h-screen flex flex-col" style={{ background: '#f4f6f8' }}>
+      <div className="sticky top-0 z-40 px-4 py-3 flex items-center gap-3 bg-white border-b" style={{ borderColor: '#eee' }}>
+        <button onClick={() => router.push('/chat')} className="p-2 -ml-2 rounded-lg" style={{ background: '#f4f6f8' }} aria-label="All chats">
+          <ArrowLeft size={20} style={{ color: NAVY }} />
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="font-bold text-white truncate">{counterpart}</h1>
-          <p className="text-xs text-gray-400 truncate">
+          <h1 className="font-bold truncate" style={{ color: NAVY }}>{counterpart}</h1>
+          <p className="text-xs truncate" style={{ color: '#8a8f98' }}>
             {chatInfo?.productLabel || 'Delivery chat'}
             {chatInfo?.orderId ? ` · #${chatInfo.orderId.slice(-6).toUpperCase()}` : ''}
           </p>
         </div>
         <button
           onClick={() => router.push(role === 'seller' ? '/seller/dashboard' : '/orders')}
-          className="text-xs font-semibold text-orange-400 px-3 py-2 rounded-lg hover:bg-gray-900"
+          className="text-xs font-bold px-3 py-2 rounded-lg text-white"
+          style={{ background: TEAL }}
         >
           {role === 'seller' ? 'Accept' : 'Order'}
         </button>
       </div>
 
-      <div className="px-4 py-2 border-b border-gray-900 bg-gray-950">
-        <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
-          <Shield size={12} className="text-orange-500 shrink-0" />
+      <div className="px-4 py-2 border-b bg-white" style={{ borderColor: '#eee' }}>
+        <p className="text-[11px] flex items-center gap-1.5 font-bold" style={{ color: '#8a8f98' }}>
+          <Shield size={12} style={{ color: TEAL }} className="shrink-0" />
           Numbers stay private. Door Codes are blocked in chat — say them at the door.
         </p>
       </div>
@@ -77,7 +81,7 @@ export default function ChatScreen({ chatId }: { chatId: string }) {
           if (msg.type === 'system' || msg.senderRole === 'system') {
             return (
               <div key={msg.id} className="flex justify-center">
-                <p className="max-w-[90%] text-center text-xs text-gray-500 leading-relaxed">{msg.text}</p>
+                <p className="max-w-[90%] text-center text-xs leading-relaxed" style={{ color: '#8a8f98' }}>{msg.text}</p>
               </div>
             );
           }
@@ -85,17 +89,16 @@ export default function ChatScreen({ chatId }: { chatId: string }) {
           return (
             <div key={msg.id} className={`flex ${me ? 'justify-end' : 'justify-start'}`}>
               <div
-                className={`max-w-[80%] px-4 py-2.5 ${
-                  me
-                    ? 'bg-orange-500 text-black rounded-2xl rounded-br-md'
-                    : 'bg-gray-800 text-white rounded-2xl rounded-bl-md'
-                }`}
+                className="max-w-[80%] px-4 py-2.5"
+                style={me
+                  ? { background: TEAL, color: '#fff', borderRadius: '16px 16px 4px 16px' }
+                  : { background: '#fff', color: '#1a1d23', borderRadius: '16px 16px 16px 4px', boxShadow: '0 1px 3px rgba(20,30,50,.08)' }}
               >
                 {!me && msg.senderRole === 'seller' && (
-                  <p className="mb-1 text-[10px] uppercase tracking-wide text-gray-400">Desk</p>
+                  <p className="mb-1 text-[10px] uppercase tracking-wide font-bold" style={{ color: '#8a8f98' }}>Desk</p>
                 )}
                 <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-                <p className={`text-[10px] mt-1 ${me ? 'text-black/60' : 'text-gray-500'}`}>
+                <p className="text-[10px] mt-1" style={{ color: me ? 'rgba(255,255,255,.7)' : '#8a8f98' }}>
                   {formatTime(msg.timestamp)}
                 </p>
               </div>
@@ -104,22 +107,25 @@ export default function ChatScreen({ chatId }: { chatId: string }) {
         })}
       </div>
 
-      <div className="border-t border-gray-800 bg-black px-3 pt-3 pb-5">
-        {error && <p className="mb-2 text-xs text-red-400">{error}</p>}
-        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-          {chips.map((chip) => (
-            <button
-              key={chip.key}
-              onClick={() => handleSend(chip.body, chip.key)}
-              disabled={sending}
-              className="shrink-0 rounded-full border border-orange-500/40 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-300"
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
+      <div className="border-t bg-white px-3 pt-3 pb-5" style={{ borderColor: '#eee' }}>
+        {error && <p className="mb-2 text-xs font-bold" style={{ color: '#e74c3c' }}>{error}</p>}
+        {chips.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+            {chips.map((chip) => (
+              <button
+                key={chip.key}
+                onClick={() => handleSend(chip.body, chip.key)}
+                disabled={sending}
+                className="shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold"
+                style={{ borderColor: '#bfe6e9', background: '#e6f7f8', color: TEAL }}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-2">
-          <div className="flex-1 bg-gray-900 rounded-2xl px-4 py-3">
+          <div className="flex-1 rounded-2xl px-4 py-3" style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee' }}>
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value.slice(0, 500))}
@@ -130,17 +136,19 @@ export default function ChatScreen({ chatId }: { chatId: string }) {
                 }
               }}
               placeholder="Message about this delivery…"
-              className="w-full bg-transparent text-white text-[15px] resize-none outline-none placeholder-gray-500"
+              className="w-full bg-transparent text-sm font-bold resize-none outline-none"
+              style={{ color: NAVY }}
               rows={1}
             />
           </div>
           <button
             onClick={() => handleSend()}
             disabled={!inputText.trim() || sending}
-            className={`p-3 rounded-xl ${inputText.trim() && !sending ? 'bg-orange-500' : 'bg-gray-800'}`}
+            className="p-3 rounded-xl"
+            style={inputText.trim() ? { background: TEAL } : { background: '#e6e9ee' }}
             aria-label="Send"
           >
-            <Send size={20} className={inputText.trim() ? 'text-black' : 'text-gray-500'} />
+            <Send size={20} color="#fff" />
           </button>
         </div>
       </div>

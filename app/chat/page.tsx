@@ -9,19 +9,19 @@ export default function ChatInboxPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f6f8' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#12a5b0' }} />
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center px-6 text-center">
+      <div className="min-h-screen flex items-center justify-center px-6 text-center" style={{ background: '#f4f6f8' }}>
         <div>
-          <h1 className="text-white text-xl font-bold mb-2">Messages</h1>
-          <p className="text-gray-500 text-sm mb-5">Sign in to see chats for your orders.</p>
-          <Link href="/login" className="inline-block px-6 py-3 bg-orange-500 text-black font-bold rounded-xl">
+          <h1 className="text-xl font-bold mb-2" style={{ color: '#16305e' }}>Messages</h1>
+          <p className="text-sm mb-5" style={{ color: '#8a8f98' }}>Sign in to see chats for your orders.</p>
+          <Link href="/login" className="inline-block px-6 py-3 text-white font-bold rounded-xl" style={{ background: '#12a5b0' }}>
             Sign in
           </Link>
         </div>

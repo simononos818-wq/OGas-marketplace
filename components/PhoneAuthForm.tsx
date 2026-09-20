@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { useAuthContext } from '@/app/context/AuthContext';
 import { isNgPhone, normalizeNgPhone } from '@/lib/phone';
 
+const NAVY = '#16305e';
+const TEAL = '#12a5b0';
+
 export default function PhoneAuthForm({
   asSeller = false,
   submitLabel = 'Send code',
@@ -57,10 +60,13 @@ export default function PhoneAuthForm({
     }
   };
 
+  const inputCls = "w-full rounded-xl px-4 py-3 text-sm font-bold focus:outline-none";
+  const inputStyle = { background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY };
+
   return (
     <form onSubmit={step === 'phone' ? send : confirm} className="space-y-4">
       {error && (
-        <div className="bg-red-900/30 border border-red-500 rounded-xl p-3 text-red-400 text-sm text-center">
+        <div className="border rounded-xl p-3 text-sm text-center font-bold" style={{ background: '#fdeceb', borderColor: '#f5b3ae', color: '#e74c3c' }}>
           {error}
         </div>
       )}
@@ -71,7 +77,8 @@ export default function PhoneAuthForm({
             placeholder="Your name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+            className={inputCls}
+            style={inputStyle}
           />
           <input
             type="tel"
@@ -79,39 +86,43 @@ export default function PhoneAuthForm({
             placeholder="0803 123 4567"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+            className={inputCls}
+            style={inputStyle}
             required
           />
-          <p className="text-xs text-gray-500">
+          <p className="text-xs" style={{ color: '#8a8f98' }}>
             We will text a one-time code to {phone ? normalizeNgPhone(phone) : 'your phone'}.
           </p>
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-orange-500 text-black font-bold py-3 rounded-xl hover:bg-orange-400 transition disabled:opacity-50"
+            className="w-full text-white font-bold py-3 rounded-xl transition disabled:opacity-50"
+            style={{ background: TEAL }}
           >
             {loading ? 'Sending code…' : submitLabel}
           </button>
         </>
       ) : (
         <>
-          <p className="text-sm text-gray-400 text-center">
+          <p className="text-sm text-center font-bold" style={{ color: '#8a8f98' }}>
             Code sent to {normalizeNgPhone(phone)}
           </p>
           <input
             type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
-            placeholder="6-digit code"
+            placeholder="••••••"
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white text-center tracking-[0.4em] text-xl placeholder-gray-500 focus:outline-none focus:border-orange-500"
+            className={inputCls + " text-center tracking-[0.4em] text-xl"}
+            style={inputStyle}
             required
           />
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-orange-500 text-black font-bold py-3 rounded-xl hover:bg-orange-400 transition disabled:opacity-50"
+            className="w-full text-white font-bold py-3 rounded-xl transition disabled:opacity-50"
+            style={{ background: TEAL }}
           >
             {loading ? 'Verifying…' : 'Verify and continue'}
           </button>
@@ -122,7 +133,8 @@ export default function PhoneAuthForm({
               setCode('');
               setError('');
             }}
-            className="w-full text-sm text-gray-400"
+            className="w-full text-sm font-bold"
+            style={{ color: '#8a8f98' }}
           >
             Use a different number
           </button>

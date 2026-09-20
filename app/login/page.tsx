@@ -9,6 +9,9 @@ import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
 import PhoneAuthForm from '@/components/PhoneAuthForm';
 
+const NAVY = '#16305e';
+const TEAL = '#12a5b0';
+
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<'phone' | 'email'>('phone');
@@ -31,7 +34,7 @@ export default function LoginPage() {
     if (sellerDoc.exists() || role === 'seller' || fallbackSeller) {
       router.push(sellerDoc.exists() ? '/seller/dashboard' : '/seller/register');
     } else {
-      router.push('/buy');
+      router.push('/');
     }
   };
 
@@ -63,31 +66,36 @@ export default function LoginPage() {
     }
   };
 
+  const inputCls = "w-full rounded-xl px-4 py-3 text-sm font-bold focus:outline-none";
+  const inputStyle = { background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY };
+
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#f4f6f8' }}>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <img src="/ogas-logo.svg" alt="OGas" className="h-12 w-auto" />
+            <img src="/ogas-icon.svg" alt="OGas" className="h-16 w-16 rounded-full bg-white object-cover" style={{ boxShadow: '0 4px 12px rgba(20,30,50,.12)' }} />
           </div>
-          <h1 className="text-3xl font-bold">OGas</h1>
-          <p className="text-gray-400 mt-1">
+          <h1 className="text-3xl font-extrabold" style={{ color: NAVY }}>OGas</h1>
+          <p className="mt-1 text-sm font-bold" style={{ color: '#8a8f98' }}>
             {mode === 'phone' ? 'Sign in with your phone' : isRegister ? 'Create your account' : 'Welcome back'}
           </p>
         </div>
 
-        <div className="flex bg-gray-900 rounded-xl p-1 mb-6">
+        <div className="flex rounded-xl p-1 mb-6 bg-white" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
           <button
             type="button"
             onClick={() => setMode('phone')}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium ${mode === 'phone' ? 'bg-orange-500 text-black' : 'text-gray-400'}`}
+            className="flex-1 py-2 rounded-lg text-sm font-bold"
+            style={mode === 'phone' ? { background: NAVY, color: '#fff' } : { color: '#8a8f98' }}
           >
             Phone OTP
           </button>
           <button
             type="button"
             onClick={() => setMode('email')}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium ${mode === 'email' ? 'bg-orange-500 text-black' : 'text-gray-400'}`}
+            className="flex-1 py-2 rounded-lg text-sm font-bold"
+            style={mode === 'email' ? { background: NAVY, color: '#fff' } : { color: '#8a8f98' }}
           >
             Email
           </button>
@@ -102,7 +110,7 @@ export default function LoginPage() {
         ) : (
           <>
             {error && (
-              <div className="bg-red-900/30 border border-red-500 rounded-xl p-3 mb-4 text-red-400 text-sm text-center">
+              <div className="border rounded-xl p-3 mb-4 text-sm text-center font-bold" style={{ background: '#fdeceb', borderColor: '#f5b3ae', color: '#e74c3c' }}>
                 {error}
               </div>
             )}
@@ -113,14 +121,16 @@ export default function LoginPage() {
                     placeholder="Full Name"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                    className={inputCls}
+                    style={inputStyle}
                     required
                   />
                   <input
                     placeholder="Phone Number"
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                    className={inputCls}
+                    style={inputStyle}
                     required
                   />
                 </>
@@ -130,7 +140,8 @@ export default function LoginPage() {
                 placeholder="Email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                className={inputCls}
+                style={inputStyle}
                 required
               />
               <div className="relative">
@@ -139,24 +150,27 @@ export default function LoginPage() {
                   placeholder="Password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500 pr-12"
+                  className={inputCls + " pr-12"}
+                  style={inputStyle}
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color: '#8a8f98' }}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
               {isRegister && (
-                <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                <label className="flex items-center gap-2 text-sm font-bold" style={{ color: '#8a8f98' }}>
                   <input
                     type="checkbox"
                     checked={form.isSeller}
                     onChange={(e) => setForm({ ...form, isSeller: e.target.checked })}
-                    className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-orange-500"
+                    className="w-4 h-4 rounded"
+                    style={{ accentColor: TEAL }}
                   />
                   I want to sell gas on OGas
                 </label>
@@ -164,19 +178,21 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-orange-500 text-black font-bold py-3 rounded-xl hover:bg-orange-400 transition disabled:opacity-50"
+                className="w-full text-white font-bold py-3 rounded-xl transition disabled:opacity-50"
+                style={{ background: TEAL }}
               >
                 {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Login'}
               </button>
             </form>
-            <p className="text-center text-gray-500 mt-6 text-sm">
+            <p className="text-center mt-6 text-sm font-bold" style={{ color: '#8a8f98' }}>
               {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
               <button
                 onClick={() => {
                   setIsRegister(!isRegister);
                   setError('');
                 }}
-                className="text-orange-400 font-medium"
+                className="font-bold"
+                style={{ color: TEAL }}
               >
                 {isRegister ? 'Login' : 'Register'}
               </button>
@@ -184,11 +200,11 @@ export default function LoginPage() {
           </>
         )}
 
-        <p className="text-center text-gray-500 mt-4 text-sm">
-          Selling gas? <Link href="/seller/login" className="text-orange-400">Seller desk</Link>
+        <p className="text-center mt-4 text-sm font-bold" style={{ color: '#8a8f98' }}>
+          Selling gas? <Link href="/seller/login" style={{ color: TEAL }}>Seller desk</Link>
         </p>
-        <p className="text-center text-gray-500 mt-2 text-sm">
-          <Link href="/buy" className="text-orange-400">Continue as Guest</Link>
+        <p className="text-center mt-2 text-sm font-bold" style={{ color: '#8a8f98' }}>
+          <Link href="/" style={{ color: TEAL }}>Continue as Guest</Link>
         </p>
       </div>
     </div>
