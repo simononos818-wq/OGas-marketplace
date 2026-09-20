@@ -7,6 +7,9 @@ import { openOrderChat } from '../../../lib/chat-server';
 import { sellerVerified } from '../../../lib/fields';
 import { isNgPhone, normalizeNgPhone } from '../../../lib/phone';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser(req);

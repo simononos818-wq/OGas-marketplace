@@ -3,6 +3,7 @@ import { adminDb } from '../../../lib/firebase-admin';
 import { requireUser } from '../../../lib/require-user';
 import { markChatRead, openOrderChat, sendChatMessage } from '../../../lib/chat-server';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {

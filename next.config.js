@@ -9,7 +9,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  serverExternalPackages: ['firebase-admin', 'jose', 'jwks-rsa'],
+  serverExternalPackages: ['firebase-admin', 'jose', 'jwks-rsa', '@google-cloud/firestore'],
   async redirects() {
     return [
       {

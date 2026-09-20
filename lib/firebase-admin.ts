@@ -13,10 +13,12 @@ function getAdminApp(): App {
   if (serviceAccountJson) {
     try {
       const serviceAccount = JSON.parse(serviceAccountJson);
-      return initializeApp({
-        credential: cert(serviceAccount),
-        projectId,
-      });
+      if (serviceAccount?.project_id && serviceAccount?.client_email && serviceAccount?.private_key) {
+        return initializeApp({
+          credential: cert(serviceAccount),
+          projectId: serviceAccount.project_id || projectId,
+        });
+      }
     } catch (e) {
       console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', e);
     }

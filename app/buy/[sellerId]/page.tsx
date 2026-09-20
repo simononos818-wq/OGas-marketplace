@@ -6,6 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthContext } from '../../context/AuthContext';
 import { authHeaders, saveBuyerContact } from '@/lib/client-auth';
+import { readApiJson } from '@/lib/read-api-json';
 import { MapPin, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { moneyToKg, SCALE_STEP } from '@/lib/gasCalculator';
@@ -145,7 +146,7 @@ export default function BuyPage() {
           buyerAddress: deliveryType === 'pickup' ? 'Pickup in store' : buyerAddress,
         }),
       });
-      const created = await createRes.json();
+      const created = await readApiJson(createRes);
       if (!created.success || !created.orderId) {
         throw new Error(created.message || 'Failed to place order');
       }
@@ -170,7 +171,7 @@ export default function BuyPage() {
             sellerId: seller.id,
           }),
         });
-        const data = await res.json();
+        const data = await readApiJson(res);
         if (data.success && data.authorization_url) {
           window.location.href = data.authorization_url;
         } else {
