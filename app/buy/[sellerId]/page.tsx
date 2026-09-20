@@ -7,9 +7,12 @@ import { db } from '@/lib/firebase';
 import { useAuthContext } from '../../context/AuthContext';
 import { authHeaders, saveBuyerContact } from '@/lib/client-auth';
 import { readApiJson } from '@/lib/read-api-json';
-import { MapPin, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Lock } from 'lucide-react';
+import { MapPin, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Lock, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { moneyToKg, SCALE_STEP } from '@/lib/gasCalculator';
+
+const NAVY = '#16305e';
+const TEAL = '#12a5b0';
 
 interface Seller {
   id: string;
@@ -48,7 +51,7 @@ export default function BuyPage() {
   const [loading, setLoading] = useState(true);
   const [kg, setKg] = useState(12);
   const [buyMode, setBuyMode] = useState<'money' | 'bottle'>('money');
-  const [money, setMoney] = useState('3000');
+  const [money, setMoney] = useState('');
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('pickup');
   const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'cash'>('cash');
   const [placingOrder, setPlacingOrder] = useState(false);
@@ -83,25 +86,26 @@ export default function BuyPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f4f6f8' }}>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: TEAL }}></div>
       </div>
     );
   }
 
   if (!seller) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-gray-400">
-        Seller not found
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center gap-3" style={{ background: '#f4f6f8', color: '#8a8f98' }}>
+        <p className="font-bold">Seller not found</p>
+        <Link href="/" className="font-bold" style={{ color: TEAL }}>← Back to marketplace</Link>
       </div>
     );
   }
 
   if (!seller.pricePerKg) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-gray-400 px-4 text-center gap-3">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center gap-3" style={{ background: '#f4f6f8', color: '#8a8f98' }}>
         <p>This seller hasn't set a price yet.</p>
-        <Link href="/buy" className="text-orange-400 underline">Browse other sellers</Link>
+        <Link href="/" className="font-bold" style={{ color: TEAL }}>Browse other sellers</Link>
       </div>
     );
   }
@@ -189,14 +193,15 @@ export default function BuyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white max-w-md mx-auto border-x border-gray-900">
-      <div className="sticky top-0 z-10 bg-black/90 backdrop-blur border-b border-gray-800 px-4 py-2.5 flex items-center gap-3">
-        <Link href="/" className="p-1.5 hover:bg-gray-800 rounded-full">
-          <ChevronLeft className="w-5 h-5" />
+    <div className="min-h-screen max-w-md mx-auto" style={{ background: '#f4f6f8' }}>
+      {/* Header */}
+      <div className="sticky top-0 z-10 px-4 py-3 flex items-center gap-3" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e4078)` }}>
+        <Link href="/" className="p-1.5 rounded-full" style={{ background: 'rgba(255,255,255,.12)' }}>
+          <ChevronLeft className="w-5 h-5" color="#fff" />
         </Link>
         <div>
-          <h1 className="font-bold text-sm">{seller.businessName}</h1>
-          <div className="flex items-center gap-1 text-[11px] text-gray-400">
+          <h1 className="font-extrabold text-sm text-white">{seller.businessName}</h1>
+          <div className="flex items-center gap-1 text-[11px]" style={{ color: '#8fa6c9' }}>
             <MapPin className="w-3 h-3" />
             {shortAddress(seller.address)}
           </div>
@@ -205,34 +210,43 @@ export default function BuyPage() {
 
       <div className="p-3 space-y-3">
         {isPendingApproval && (
-          <div className="bg-yellow-500/20 border border-yellow-500 rounded-xl p-2.5 text-center text-yellow-400 text-xs">
+          <div className="rounded-xl p-2.5 text-center text-xs font-bold" style={{ background: '#fff4e0', border: '1px solid #f0d48a', color: '#b35400' }}>
             This store is pending verification and can't take orders yet.
           </div>
         )}
 
-        <div className="bg-gray-900 rounded-xl px-3 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <div className={`w-2 h-2 rounded-full ${seller.isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+        {/* Status + price */}
+        <div className="rounded-xl px-3 py-2.5 flex items-center justify-between bg-white" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
+          <div className="flex items-center gap-2 text-xs" style={{ color: '#8a8f98' }}>
+            <div className={`w-2 h-2 rounded-full ${seller.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></div>
             {seller.isOnline ? 'Online' : 'Offline'}
-            <span className="text-gray-600">·</span>
-            <span className="flex items-center gap-1"><Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />{seller.rating || 4.5}</span>
+            <span style={{ color: '#d3dbe3' }}>·</span>
+            <span className="flex items-center gap-1"><Star className="w-3 h-3" fill="#f5a623" color="#f5a623" />{seller.rating || 4.5}</span>
+            <span className="flex items-center gap-1 ml-1" style={{ color: '#0fa958' }}><ShieldCheck className="w-3 h-3" />Verified</span>
           </div>
-          <div className="text-sm font-bold">{naira(originalPrice)}<span className="text-[11px] text-gray-400 font-normal"> /kg</span></div>
+          <div className="text-sm font-black" style={{ color: NAVY }}>{naira(originalPrice)}<span className="text-[11px] font-semibold" style={{ color: '#8a8f98' }}> /kg</span></div>
         </div>
 
-        <div className="bg-gray-900 rounded-xl p-3 space-y-3">
+        {/* Amount or size */}
+        <div className="rounded-xl p-3 space-y-3 bg-white" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setBuyMode('money')}
-              className={`flex-1 py-2 rounded-lg border text-sm font-bold ${buyMode === 'money' ? 'border-orange-500 bg-orange-500/10 text-white' : 'border-gray-700 bg-gray-800 text-gray-400'}`}
+              className="flex-1 py-2.5 rounded-xl border text-sm font-extrabold"
+              style={buyMode === 'money'
+                ? { borderColor: NAVY, background: NAVY, color: '#fff' }
+                : { borderColor: '#e6e9ee', background: '#fff', color: '#8a8f98' }}
             >
               By amount
             </button>
             <button
               type="button"
               onClick={() => setBuyMode('bottle')}
-              className={`flex-1 py-2 rounded-lg border text-sm font-bold ${buyMode === 'bottle' ? 'border-orange-500 bg-orange-500/10 text-white' : 'border-gray-700 bg-gray-800 text-gray-400'}`}
+              className="flex-1 py-2.5 rounded-xl border text-sm font-extrabold"
+              style={buyMode === 'bottle'
+                ? { borderColor: NAVY, background: NAVY, color: '#fff' }
+                : { borderColor: '#e6e9ee', background: '#fff', color: '#8a8f98' }}
             >
               By size
             </button>
@@ -240,23 +254,24 @@ export default function BuyPage() {
 
           {buyMode === 'money' ? (
             <>
-              <div className="flex items-center bg-gray-800 rounded-lg px-3">
-                <span className="text-gray-400 font-bold">₦</span>
+              <div className="flex items-center rounded-xl px-3" style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee' }}>
+                <span className="font-black text-lg" style={{ color: TEAL }}>₦</span>
                 <input
                   inputMode="numeric"
                   value={money}
                   onChange={(e) => setMoney(e.target.value)}
-                  placeholder="3000"
-                  className="w-full bg-transparent py-2.5 px-2 text-base font-bold text-white placeholder-gray-500 focus:outline-none"
+                  placeholder="Enter amount"
+                  className="w-full bg-transparent py-3 px-2 text-lg font-black focus:outline-none"
+                  style={{ color: NAVY }}
                 />
               </div>
-              <p className="text-[11px] text-gray-400">
+              <p className="text-[11px]" style={{ color: '#8a8f98' }}>
                 {cash > 0 && moneyFill.kg >= SCALE_STEP ? (
-                  <>You'll get <b className="text-white">{moneyFill.kg.toFixed(2)} kg</b> · gas {naira(gasCost)}{change > 0 ? <> · change {naira(change)}</> : null}</>
+                  <>You'll get <b style={{ color: NAVY }}>{moneyFill.kg.toFixed(2)} kg</b> · gas {naira(gasCost)}{change > 0 ? <> · change {naira(change)}</> : null}</>
                 ) : cash > 0 ? (
                   <>Not enough for 0.05kg ({naira(Math.round(originalPrice * SCALE_STEP))}) — add a little more</>
                 ) : (
-                  <>Enter the amount you have</>
+                  <>Enter the amount you have — we calculate the kg</>
                 )}
               </p>
             </>
@@ -267,56 +282,74 @@ export default function BuyPage() {
                   key={sz}
                   type="button"
                   onClick={() => setKg(sz)}
-                  className={`py-2 rounded-lg border text-sm font-bold ${kg === sz ? 'border-orange-500 bg-orange-500/10 text-white' : 'border-gray-700 bg-gray-800 text-gray-400'}`}
+                  className="py-2.5 rounded-xl border text-sm font-extrabold"
+                  style={kg === sz
+                    ? { borderColor: TEAL, background: TEAL, color: '#fff' }
+                    : { borderColor: '#e6e9ee', background: '#fff', color: '#8a8f98' }}
                 >
-                  {sz}
+                  {sz}kg
                 </button>
               ))}
             </div>
           )}
         </div>
 
+        {/* Delivery */}
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setDeliveryType('pickup')}
-            className={`flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 ${deliveryType === 'pickup' ? 'border-orange-500 bg-orange-500/10' : 'border-gray-700 bg-gray-900'}`}
+            className="flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 bg-white"
+            style={deliveryType === 'pickup'
+              ? { borderColor: NAVY, borderWidth: 2, color: NAVY }
+              : { borderColor: '#e6e9ee', color: '#8a8f98' }}
           >
             <Store className="w-4 h-4" />
-            <span className="text-sm font-bold">Pickup <span className="text-[10px] font-normal text-gray-400">Free</span></span>
+            <span className="text-sm font-extrabold">Pickup <span className="text-[10px] font-semibold">Free</span></span>
           </button>
           <button
             type="button"
             onClick={() => setDeliveryType('delivery')}
-            className={`flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 ${deliveryType === 'delivery' ? 'border-orange-500 bg-orange-500/10' : 'border-gray-700 bg-gray-900'}`}
+            className="flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 bg-white"
+            style={deliveryType === 'delivery'
+              ? { borderColor: NAVY, borderWidth: 2, color: NAVY }
+              : { borderColor: '#e6e9ee', color: '#8a8f98' }}
           >
             <Truck className="w-4 h-4" />
-            <span className="text-sm font-bold">Delivery <span className="text-[10px] font-normal text-gray-400">{naira(seller.deliveryFee || 500)}</span></span>
+            <span className="text-sm font-extrabold">Delivery <span className="text-[10px] font-semibold">{naira(seller.deliveryFee || 500)}</span></span>
           </button>
         </div>
 
+        {/* Payment */}
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setPaymentMethod('cash')}
-            className={`flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 ${paymentMethod === 'cash' ? 'border-orange-500 bg-orange-500/10' : 'border-gray-700 bg-gray-900'}`}
+            className="flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 bg-white"
+            style={paymentMethod === 'cash'
+              ? { borderColor: TEAL, borderWidth: 2, color: TEAL }
+              : { borderColor: '#e6e9ee', color: '#8a8f98' }}
           >
             <Banknote className="w-4 h-4" />
-            <span className="text-sm font-bold">Cash</span>
+            <span className="text-sm font-extrabold">Cash</span>
           </button>
           <button
             type="button"
             onClick={() => setPaymentMethod('paystack')}
-            className={`flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 ${paymentMethod === 'paystack' ? 'border-orange-500 bg-orange-500/10' : 'border-gray-700 bg-gray-900'}`}
+            className="flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 bg-white"
+            style={paymentMethod === 'paystack'
+              ? { borderColor: TEAL, borderWidth: 2, color: TEAL }
+              : { borderColor: '#e6e9ee', color: '#8a8f98' }}
           >
             <CreditCard className="w-4 h-4" />
-            <span className="text-sm font-bold">Pay online</span>
+            <span className="text-sm font-extrabold">Pay online</span>
           </button>
         </div>
 
+        {/* Contact */}
         {(!contactSaved || deliveryType === 'delivery') && (
-          <div className="bg-gray-900 rounded-xl p-3 space-y-2">
-            <h3 className="font-bold">{contactSaved ? 'Delivery address' : '4. Your phone number'}</h3>
+          <div className="rounded-xl p-3 space-y-2 bg-white" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
+            <h3 className="font-extrabold text-sm" style={{ color: NAVY }}>{contactSaved ? 'Delivery address' : 'Your phone number'}</h3>
             {!contactSaved && (
               <>
                 <input
@@ -325,14 +358,16 @@ export default function BuyPage() {
                   value={buyerPhone}
                   onChange={(e) => setBuyerPhone(e.target.value)}
                   placeholder="Phone number"
-                  className="w-full bg-gray-800 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full rounded-xl px-3 py-3 text-sm font-bold focus:outline-none"
+                  style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY }}
                 />
                 <input
                   type="text"
                   value={buyerName}
                   onChange={(e) => setBuyerName(e.target.value)}
                   placeholder="Name (optional)"
-                  className="w-full bg-gray-800 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full rounded-xl px-3 py-3 text-sm font-bold focus:outline-none"
+                  style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY }}
                 />
               </>
             )}
@@ -342,22 +377,24 @@ export default function BuyPage() {
                 value={buyerAddress}
                 onChange={(e) => setBuyerAddress(e.target.value)}
                 placeholder="Delivery address"
-                className="w-full bg-gray-800 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full rounded-xl px-3 py-3 text-sm font-bold focus:outline-none"
+                style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY }}
               />
             )}
           </div>
         )}
 
-        <p className="flex items-center justify-center gap-1 text-[10px] text-gray-600 px-2">
+        <p className="flex items-center justify-center gap-1 text-[10px] px-2" style={{ color: '#8a8f98' }}>
           <Lock className="w-3 h-3" />
           Exact location and contact are shared after you order. Chat in-app to talk to the shop.
         </p>
       </div>
 
-      <div className="sticky bottom-16 z-10 bg-gray-950/95 backdrop-blur border-t border-gray-800 px-4 py-3 flex items-center gap-3">
+      {/* Sticky order bar */}
+      <div className="sticky bottom-16 z-10 px-4 py-3 flex items-center gap-3 bg-white border-t" style={{ borderColor: '#eee', boxShadow: '0 -4px 12px rgba(20,30,50,.06)' }}>
         <div className="min-w-0">
-          <div className="font-bold text-lg leading-tight">{naira(totalAmount)}</div>
-          <div className="text-[11px] text-gray-500 truncate">
+          <div className="font-black text-lg leading-tight" style={{ color: NAVY }}>{naira(totalAmount)}</div>
+          <div className="text-[11px] truncate" style={{ color: '#8a8f98' }}>
             {fillKg.toFixed(2)}kg
             {change > 0 ? ` · change ${naira(change)}` : ''}
             {' · '}{deliveryType === 'pickup' ? 'Pickup · Free' : `Delivery · ${naira(deliveryFee)}`}
@@ -367,11 +404,10 @@ export default function BuyPage() {
         <button
           onClick={placeOrder}
           disabled={placingOrder || !isValid}
-          className={`ml-auto px-5 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition ${
-            isValid && !placingOrder
-              ? 'bg-orange-500 text-black hover:bg-orange-400'
-              : 'bg-gray-800 text-gray-500 cursor-not-allowed'
-          }`}
+          className="ml-auto px-5 py-3 rounded-xl font-extrabold text-sm whitespace-nowrap transition text-white"
+          style={isValid && !placingOrder
+            ? { background: TEAL, boxShadow: '0 4px 10px rgba(18,165,176,.4)' }
+            : { background: '#c3cbd4', cursor: 'not-allowed' }}
         >
           {placingOrder ? 'Placing...' : paymentMethod === 'paystack' ? `Pay ${naira(totalAmount)}` : 'Place order'}
         </button>
