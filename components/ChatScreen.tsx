@@ -13,7 +13,7 @@ export default function ChatScreen({ chatId }: { chatId: string }) {
   const { messages, chatInfo, loading, sending, error, role, counterpart, sendMessage } = useChat(chatId);
   const [inputText, setInputText] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
-  const chips = chipsForRole(role);
+  const chips = chipsForRole(role) || [];
 
   useEffect(() => {
     if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
