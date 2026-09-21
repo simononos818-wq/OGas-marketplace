@@ -31,11 +31,16 @@ export default function ChatButton({ orderId, chatId, variant = 'primary', label
 
   const base =
     variant === 'outline'
-      ? 'flex items-center justify-center gap-2 px-4 py-3 border-2 border-orange-500 text-orange-500 rounded-xl font-bold'
-      : 'flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 text-black rounded-xl font-bold';
+      ? 'flex items-center justify-center gap-2 px-4 py-3 border-2 rounded-xl font-bold'
+      : 'flex items-center justify-center gap-2 px-4 py-3 text-white rounded-xl font-bold';
+
+  const style =
+    variant === 'outline'
+      ? { borderColor: '#12a5b0', color: '#12a5b0' }
+      : { background: '#12a5b0' };
 
   return (
-    <button onClick={open} className={`${base} ${variant === 'block' || variant === 'outline' || variant === 'primary' ? 'w-full' : ''} mt-2`}>
+    <button onClick={open} className={`${base} ${variant === 'block' || variant === 'outline' || variant === 'primary' ? 'w-full' : ''} mt-2`} style={style}>
       <MessageSquare size={18} />
       {label}
     </button>
