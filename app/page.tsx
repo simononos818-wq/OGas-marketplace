@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { MapPin, ShieldCheck, Star, Clock, Bike, Flame, Search, Home, Receipt, MessageCircle, User, ChevronRight, Bell } from 'lucide-react';
 import { DEFAULT_PRICE_PER_KG } from '@/lib/gasCalculator';
 import { useSellers } from './hooks/useSellers';
+import SafetyTips from '@/components/SafetyTips';
 
 const NAVY = '#16305e';
 const TEAL = '#12a5b0';
@@ -127,6 +128,11 @@ export default function HomePage() {
           style={{ color: '#9aa0a8', boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
           <Search size={14} /> Search gas sellers near you
         </Link>
+
+        {/* SAFETY TIPS */}
+        <div className="mb-3">
+          <SafetyTips />
+        </div>
 
         {/* SORT PILLS */}
         <div className="flex gap-1.5 mb-3">
