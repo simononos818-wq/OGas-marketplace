@@ -79,6 +79,16 @@ export default function ContactPage() {
         </section>
 
         <section className="bg-white rounded-2xl shadow-sm p-5">
+          <h2 className="font-bold text-gray-900 text-lg">Our products &amp; services</h2>
+          <ul className="mt-3 space-y-2 text-sm text-gray-700 list-disc pl-5">
+            <li>LPG (cooking gas) refill marketplace — order online from verified local gas sellers for pickup or delivery.</li>
+            <li>Escrow-protected payments — money is held safely until the buyer confirms the cylinder is in their hands.</li>
+            <li>Seller tools — free online storefront with live price and stock, order management, and sales records for gas retailers.</li>
+            <li>Same-day gas delivery in Ughelli, Delta State, expanding across Delta.</li>
+          </ul>
+        </section>
+
+        <section className="bg-white rounded-2xl shadow-sm p-5">
           <h2 className="font-bold text-gray-900 text-lg">Business inquiries</h2>
           <p className="mt-2 text-sm text-gray-700 leading-relaxed">
             For partnerships, seller financing, media, or government/institutional
