@@ -47,8 +47,8 @@ export async function sendOtp(phone: string, purpose: "login" | "checkout") {
     pin_placeholder: "< 123456 >",
     message_text:
       purpose === "checkout"
-        ? "OGas: your checkout code is < 123456 >. Valid 5 mins. Do not share it."
-        : "OGas: your login code is < 123456 >. Valid 5 mins. Do not share it.",
+        ? "Your OGas checkout code is < 123456 >. Valid for 5 mins. Do not share it with anyone."
+        : "Your OGas login code is < 123456 >. Valid for 5 mins. Do not share it with anyone.",
   });
 }
 
