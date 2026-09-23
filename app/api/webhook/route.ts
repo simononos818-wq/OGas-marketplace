@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { adminDb } from '../../../lib/firebase-admin';
 import { notifyPaidEscrow } from '../../../lib/escrow';
 import { postSystemMessage } from '../../../lib/chat-server';
+import { notifyOrderEvent } from '../../../lib/notify';
 
 export async function POST(req: NextRequest) {
   try {
@@ -82,6 +83,30 @@ export async function POST(req: NextRequest) {
 
     await notifyPaidEscrow(resolvedOrderId);
     await postSystemMessage(resolvedOrderId, 'Chat is open. Payment is locked in escrow until Door Code or buyer confirm.');
+
+    // SMS buyer + seller via Termii (payment confirmed = order placed)
+    try {
+      const sellerId = order.sellerId || order.vendorId || order.shopId;
+      let sellerPhone: string | undefined;
+      let sellerName: string | undefined = order.sellerName || order.vendorName || order.shopName;
+      if (sellerId) {
+        const vSnap = await adminDb.collection('vendors').doc(String(sellerId)).get();
+        if (vSnap.exists) {
+          const vd: any = vSnap.data()!;
+          sellerPhone = vd.phone || vd.phoneNumber || vd.whatsapp;
+          sellerName = sellerName || vd.businessName || vd.name;
+        }
+      }
+      const buyerPhone = order.buyerPhone || order.customerPhone || order.phone;
+      const kg = Number(order.kg || order.kilograms || 0);
+      const total = Number(order.total || order.totalAmount || (paidKobo ? paidKobo / 100 : 0) || 0);
+      await notifyOrderEvent(
+        { id: resolvedOrderId, buyerPhone, sellerPhone, sellerName, kg, total },
+        'placed'
+      );
+    } catch (smsErr) {
+      console.error('placed SMS failed:', smsErr);
+    }
 
     return NextResponse.json({ received: true });
   } catch (error) {
