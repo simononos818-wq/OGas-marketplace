@@ -83,8 +83,8 @@ export async function POST(req: Request) {
 
   let shopName = "your gas seller";
   try {
-    const shopSnap = await adminDb.collection("shops").doc(shopId).get();
-    const name = shopSnap.data()?.name;
+    const shopSnap = await adminDb.collection("sellers").doc(shopId).get();
+    const name = shopSnap.data()?.businessName;
     if (typeof name === "string" && name.trim()) shopName = name.trim();
   } catch {
     // non-fatal

@@ -7,6 +7,7 @@ import { doc, getDoc, collection, query, where, orderBy, onSnapshot, updateDoc }
 import { useRouter } from 'next/navigation';
 import { Flame, Package, MapPin, CheckCircle, Truck, Star, LogOut, Banknote, KeyRound, MessageSquare, Power, Save, Minus, Plus } from 'lucide-react';
 import ChatButton from '@/components/ChatButton';
+import WalkInSaleButton from '@/components/WalkInSaleButton';
 import { authHeaders } from '@/lib/client-auth';
 import Link from 'next/link';
 
@@ -275,6 +276,11 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
             <Save size={15} /> {saving ? 'Saving…' : savedFlash ? '✓ Saved — Live on marketplace' : 'SAVE CHANGES'}
           </button>
         </div>
+      </div>
+
+      {/* ===== WALK-IN SALE ===== */}
+      <div className="px-4 mt-3">
+        <WalkInSaleButton shopId={userId} />
       </div>
 
       {/* ===== STATS ===== */}
