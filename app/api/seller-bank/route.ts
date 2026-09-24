@@ -59,10 +59,52 @@ export async function POST(req: NextRequest) {
       { merge: true },
     );
 
+    // Payout retry sweep: pay out orders released while seller had no bank
+    // details. Only orders where Paystack holds money (paystackRef present) —
+    // cash orders are excluded so we never double-pay.
+    let retried = 0;
+    let paidNow = 0;
+    try {
+      const ordersSnap = await adminDb
+        .collection('orders')
+        .where('sellerId', '==', user.uid)
+        .get();
+      const stuck = ordersSnap.docs.filter((d) => {
+        const o: any = d.data();
+        return (
+          o.escrowStatus === 'released' &&
+          o.paystackRef &&
+          (o.payoutStatus === 'awaiting_bank' ||
+            o.payoutStatus === 'pending_manual' ||
+            o.payoutStatus === 'failed' ||
+            !o.payoutStatus)
+        );
+      });
+      if (stuck.length > 0) {
+        const escrowMod: any = await import('../../../lib/escrow');
+        const paySellerFromEscrow = escrowMod.paySellerFromEscrow;
+        if (typeof paySellerFromEscrow === 'function') {
+          for (const d of stuck) {
+            retried++;
+            try {
+              const r: any = await paySellerFromEscrow(d.id, 'bank_details_added');
+              if (r && (r.payoutStatus === 'sent' || r.success === true)) paidNow++;
+            } catch (e) {
+              console.error('payout retry failed for', d.id, e);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('payout sweep error', e);
+    }
+
     return NextResponse.json({
       success: true,
       accountName,
       message: 'Payout account saved.',
+      retried,
+      paidNow,
     });
   } catch (error: any) {
     console.error('seller-bank', error);
