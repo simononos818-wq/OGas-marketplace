@@ -50,7 +50,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-dvh bg-[#f4f6f8] pb-20" style={{ maxWidth: 480, margin: '0 auto' }}>
-      <LaunchBanner />
 
       {/* ===== HEADER ===== */}
       <header className="sticky top-0 z-40 px-4 pt-3 pb-3" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e4078)` }}>
@@ -206,6 +205,8 @@ export default function HomePage() {
           </div>
         )}
       </main>
+
+      <LaunchBanner />
 
       {/* ===== BOTTOM NAV =====
           NOTE: if your layout.tsx already renders a bottom nav, DELETE this block */}
