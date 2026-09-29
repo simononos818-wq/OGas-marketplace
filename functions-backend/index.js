@@ -329,3 +329,57 @@ exports.notifyOnOrderChange = onDocumentUpdated('orders/{orderId}', async (event
     }
   }
 });
+
+// ===== REFERRAL ENGINE (90-Day Program) =====
+exports.onReferralFirstOrder = onDocumentUpdated(
+  { document: "orders/{orderId}", region: "europe-west3" },
+  async (event) => {
+    const before = event.data && event.data.before ? event.data.before.data() : null;
+    const after = event.data && event.data.after ? event.data.after.data() : null;
+    if (!after || !before) return;
+    if (after.status !== 'completed' || before.status === 'completed') return;
+
+    const buyerId = after.buyerId;
+    if (!buyerId) return;
+
+    const db = admin.firestore();
+    const buyerSnap = await db.collection('users').doc(buyerId).get();
+    const buyer = buyerSnap.data();
+    if (!buyer) return;
+
+    const sellerId = buyer.referredBy;
+    if (!sellerId) return; // not a referral signup
+
+    // One referral pays exactly once
+    const referralRef = db.collection('referrals').doc(sellerId + '_' + buyerId);
+    const snap = await referralRef.get();
+    if (snap.exists && snap.data() && snap.data().paid) return;
+
+    const batch = db.batch();
+    batch.set(referralRef, {
+      sellerId: sellerId, buyerId: buyerId, orderId: event.params.orderId,
+      amount: 300, paid: true,
+      paidAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    batch.set(db.collection('wallets').doc(sellerId), {
+      balance: admin.firestore.FieldValue.increment(300),
+      totalReferralBonus: admin.firestore.FieldValue.increment(300),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(db.collection('wallets').doc(buyerId), {
+      gasCredit: admin.firestore.FieldValue.increment(300),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(db.collection('walletTransactions').doc(), {
+      userId: sellerId, type: 'referral_bonus', amount: 300,
+      orderId: event.params.orderId, counterparty: buyerId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    batch.set(db.collection('walletTransactions').doc(), {
+      userId: buyerId, type: 'first_order_credit', amount: 300,
+      orderId: event.params.orderId, counterparty: sellerId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+    console.log('Referral paid: ' + sellerId + ' <- ' + buyerId);
+  });
