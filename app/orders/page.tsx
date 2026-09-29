@@ -256,6 +256,12 @@ function OrdersContent() {
           <div className="space-y-4">
             {orders.map((order) => {
               const o = normalizeOrder(order);
+                {order.kgDelivered && (
+                  <div className="flex justify-between py-1 mt-1 border-t" style={{borderColor:"#e6f4f1"}}>
+                    <span className="text-sm font-bold" style={{color:"#0a8f84"}}>⚖️ Weighed on scale</span>
+                    <span className="text-sm font-bold" style={{color:"#0a8f84"}}>{order.kgDelivered}kg</span>
+                  </div>
+                )}
               const st = statusStyle(order.status);
               return (
                 <div key={order.id} className="rounded-2xl p-4 bg-white" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
