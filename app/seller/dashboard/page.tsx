@@ -83,6 +83,8 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
   const [stats, setStats] = useState({ total: 0, pending: 0, confirmed: 0, delivered: 0, revenue: 0 });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'new' | 'active' | 'completed'>('new');
+  const [weighOrder, setWeighOrder] = useState<any | null>(null);
+  const [weighKg, setWeighKg] = useState('');
   const [doorInputs, setDoorInputs] = useState<Record<string, string>>({});
 
   /* --- inventory state (editable) --- */
@@ -148,10 +150,10 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
     return () => unsubscribe();
   }, [userId]);
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+  const updateOrderStatus = async (orderId: string, newStatus: string, kgDelivered?: string) => {
     try {
       const headers = await authHeaders();
-      const res = await fetch('/api/order-status', { method: 'POST', headers, body: JSON.stringify({ orderId, status: newStatus }) });
+      const res = await fetch('/api/order-status', { method: 'POST', headers, body: JSON.stringify({ orderId, status: newStatus, kgDelivered }) });
       const data = await res.json();
       if (!data.success) throw new Error(data.message);
     } catch (err: any) { alert(err.message || 'Failed to update order. Try again.'); }
@@ -203,8 +205,6 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
   };
   const nextAction: Record<string, { label: string; next: string; icon: any }> = {
     paid: { label: 'ACCEPT ORDER', next: 'confirmed', icon: CheckCircle },
-    confirmed: { label: 'Out for Delivery', next: 'out_for_delivery', icon: Truck },
-    out_for_delivery: { label: 'Mark Delivered', next: 'delivered', icon: CheckCircle }
   };
 
   return (
@@ -370,6 +370,29 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
                     <act.icon size={17} /> {act.label}
                   </button>
                 )}
+
+                {st === 'confirmed' && (
+                  <>
+                    <button onClick={() => { setWeighOrder(order); setWeighKg(''); }}
+                      className="mt-3 w-full text-white font-black text-[14px] py-3.5 rounded-xl flex items-center justify-center gap-2"
+                      style={{ background: TEAL, boxShadow: '0 3px 8px rgba(18,165,176,.35)' }}>
+                      ⚖️ Weigh &amp; Fill — Walk-in
+                    </button>
+                    <button onClick={() => updateOrderStatus(order.id, 'out_for_delivery')}
+                      className="mt-2 w-full font-bold text-[12px] py-2.5 rounded-xl flex items-center justify-center gap-1.5"
+                      style={{ background: '#fff', color: NAVY, border: '1.5px solid #c9d6e8' }}>
+                      <Truck size={13} /> Out for Delivery (optional)
+                    </button>
+                  </>
+                )}
+
+                {st === 'out_for_delivery' && (
+                  <button onClick={() => { setWeighOrder(order); setWeighKg(''); }}
+                    className="mt-3 w-full text-white font-black text-[14px] py-3.5 rounded-xl flex items-center justify-center gap-2"
+                    style={{ background: TEAL, boxShadow: '0 3px 8px rgba(18,165,176,.35)' }}>
+                    ⚖️ Weigh &amp; Fill — Delivered
+                  </button>
+                )}
               </div>
 
               {(st === 'pending_payment' || st === 'pending') && (
@@ -424,6 +447,42 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
           );
         })}
       </div>
+
+      {/* ===== WEIGH & FILL MODAL ===== */}
+      {weighOrder && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(10,25,40,.55)' }} onClick={() => setWeighOrder(null)}>
+          <div className="w-full max-w-[480px] bg-white rounded-t-3xl p-5 pb-8" onClick={(e) => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ background: '#dde4ea' }} />
+            <h3 className="font-black text-[16px] mb-1" style={{ color: NAVY }}>⚖️ Weigh &amp; Fill</h3>
+            <p className="text-[11px] mb-4" style={{ color: '#8a8f98' }}>
+              Ordered: {weighOrder.items?.map((i: any) => `${i.quantity}x ${i.size}kg`).join(', ') || (weighOrder.gasSize ? `${weighOrder.gasSize}kg` : '—')} — enter what your scale shows. The buyer sees this number on their receipt.
+            </p>
+            <label className="block text-[10px] font-extrabold uppercase tracking-wider mb-1.5" style={{ color: TEAL }}>KG on scale</label>
+            <input
+              type="number" inputMode="decimal" step="0.01"
+              value={weighKg}
+              onChange={(e) => setWeighKg(e.target.value)}
+              placeholder="e.g. 12.55"
+              autoFocus
+              className="w-full rounded-xl px-4 py-3.5 text-[22px] font-black outline-none mb-3"
+              style={{ background: '#f4f6f8', border: '2px solid #e6e9ee', color: NAVY }}
+            />
+            <button
+              onClick={async () => {
+                if (!weighKg || Number(weighKg) <= 0) { alert('Enter the kg on the scale'); return; }
+                await updateOrderStatus(weighOrder.id, 'delivered', weighKg);
+                setWeighOrder(null);
+              }}
+              className="w-full text-white font-black text-[15px] py-4 rounded-xl"
+              style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.4)' }}>
+              Confirm {weighKg ? `${weighKg}kg` : 'kg'} — Mark Delivered
+            </button>
+            <button onClick={() => setWeighOrder(null)} className="w-full text-center text-[11px] font-bold py-3" style={{ color: '#8a8f98' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ===== FOOTER LINKS ===== */}
       <div className="px-4 mt-6 space-y-2">
