@@ -186,7 +186,7 @@ export default function HomePage() {
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-[14px] font-black" style={{ color: NAVY }}>₦{Number(s.pricePerKg).toLocaleString()}</div>
-                      <div className="text-[8.5px] font-semibold" style={{ color: '#8a8f98' }}>per kg</div>
+                      <div className="text-[8.5px] font-semibold" style={{ color: '#8a8f98' }}>LPG per kg</div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t" style={{ borderColor: '#f0f2f5' }}>
@@ -194,9 +194,9 @@ export default function HomePage() {
                       <Bike size={11} /> Delivery fee at checkout
                     </span>
                     <Link href={`/buy/${s.id}`}
-                      className="text-white text-[11px] font-extrabold px-5 py-2 rounded-[10px]"
-                      style={{ background: TEAL, boxShadow: '0 3px 8px rgba(18,165,176,.35)' }}>
-                      ORDER NOW
+                      className="text-white text-[11px] font-extrabold px-4 py-2 rounded-[10px] flex items-center gap-1"
+                      style={{ background: `linear-gradient(135deg, ${NAVY}, #245089)`, boxShadow: '0 3px 8px rgba(22,48,94,.35)', border: '1.5px solid rgba(45,212,194,.5)' }}>
+                      <Flame size={11} color="#2dd4c2" /> REFILL NOW
                     </Link>
                   </div>
                 </div>
