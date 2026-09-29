@@ -53,6 +53,7 @@ export default function LoginPage() {
           role: form.isSeller ? 'seller' : 'buyer',
           createdAt: new Date(),
           addresses: [],
+          referredBy: localStorage.getItem('ogas_ref') || null,
         });
         await afterAuth(userCredential.user.uid, form.isSeller);
       } else {
