@@ -7,7 +7,8 @@ const db = admin.firestore();
 
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET || '';
 const TERMII_API_KEY = process.env.TERMII_API_KEY || '';
-const TERMII_SENDER_ID = 'N-Alert';
+// Swap to 'OGAS' once Termii approves the sender ID; until then 'N-Alert' works on DND.
+const TERMII_SENDER_ID = process.env.TERMII_SENDER_ID || 'N-Alert';
 const OGAS_COMMISSION_PERCENT = 10;
 
 async function sendSMS(to: string, message: string) {
@@ -29,16 +30,33 @@ async function sendSMS(to: string, message: string) {
   }
 }
 
+/** Fire-and-forget FCM push to a user's saved device token. Never throws. */
+async function sendPushToUser(
+  uid: string,
+  title: string,
+  body: string,
+  data: Record<string, string> = {}
+) {
+  try {
+    const userDoc = await db.collection('users').doc(uid).get();
+    const token = userDoc.data()?.fcmToken;
+    if (!token) return;
+    await admin.messaging().send({ token, notification: { title, body }, data });
+  } catch (e) {
+    console.error('Push failed for', uid, e);
+  }
+}
+
 export const paystackWebhook = functions.https.onRequest(async (req, res) => {
   const event = req.body;
-  
+
   if (event.event === 'charge.success') {
     const data = event.data;
     const reference = data.reference;
-    
+
     if (reference && reference.startsWith('OGAS_')) {
       const orderId = reference.split('_')[1];
-      
+
       try {
         await db.collection('orders').doc(orderId).update({
           status: 'paid',
@@ -48,16 +66,23 @@ export const paystackWebhook = functions.https.onRequest(async (req, res) => {
           paidAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        
+
         const orderDoc = await db.collection('orders').doc(orderId).get();
         const order = orderDoc.data();
-        
+
         if (order) {
           await sendSMS(
             order.buyerPhone,
             `OGas: Payment confirmed! Order #${orderId.slice(-6)} is being processed.`
           );
-          
+
+          await sendPushToUser(
+            order.buyerId,
+            'Payment confirmed',
+            `Order #${orderId.slice(-6)} is being processed.`,
+            { orderId, type: 'order_status' }
+          );
+
           const sellerDoc = await db.collection('sellers').doc(order.sellerId).get();
           const seller = sellerDoc.data();
           if (seller?.phone) {
@@ -66,8 +91,15 @@ export const paystackWebhook = functions.https.onRequest(async (req, res) => {
               `OGas: New order #${orderId.slice(-6)} from ${order.buyerName}. Amount: N${order.totalAmount}.`
             );
           }
+
+          await sendPushToUser(
+            order.sellerId,
+            'New OGas order',
+            `#${orderId.slice(-6)} — N${order.totalAmount}. Tap to view.`,
+            { orderId, type: 'new_order' }
+          );
         }
-        
+
         res.status(200).send('OK');
         return;
       } catch (e) {
@@ -77,7 +109,7 @@ export const paystackWebhook = functions.https.onRequest(async (req, res) => {
       }
     }
   }
-  
+
   res.status(200).send('OK');
 });
 
@@ -88,13 +120,13 @@ export const createChatOnOrder = functions.region('europe-west3').firestore
     const orderId = context.params.orderId;
     const buyerId = order.buyerId;
     const sellerId = order.sellerId;
-    
+
     if (!buyerId || !sellerId) return;
-    
+
     const chatId = [buyerId, sellerId].sort().join('_');
     const chatRef = db.collection('chats').doc(chatId);
     const chatDoc = await chatRef.get();
-    
+
     if (!chatDoc.exists) {
       await chatRef.set({
         participants: [buyerId, sellerId],
@@ -105,7 +137,7 @@ export const createChatOnOrder = functions.region('europe-west3').firestore
         unreadCount: { [buyerId]: 0, [sellerId]: 0 },
       });
     }
-    
+
     const messagesRef = chatRef.collection('messages');
     await messagesRef.add({
       senderId: 'system',
@@ -113,12 +145,19 @@ export const createChatOnOrder = functions.region('europe-west3').firestore
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       read: false,
     });
-    
+
     await snap.ref.update({ chatId });
-    
+
     await sendSMS(
       order.buyerPhone,
       `OGas: Order #${orderId.slice(-6)} placed! Total: N${order.totalAmount}.`
+    );
+
+    await sendPushToUser(
+      buyerId,
+      'Order placed',
+      `Order #${orderId.slice(-6)} — N${order.totalAmount}.`,
+      { orderId, type: 'order_status' }
     );
   });
 
@@ -127,10 +166,10 @@ export const notifySellerNewOrder = functions.region('europe-west3').firestore
   .onCreate(async (snap, context) => {
     const order = snap.data();
     const orderId = context.params.orderId;
-    
+
     const sellerDoc = await db.collection('sellers').doc(order.sellerId).get();
     const seller = sellerDoc.data();
-    
+
     if (seller?.phone) {
       const items = order.items?.map((i: any) => `${i.quantity}x${i.size}kg`).join(', ');
       await sendSMS(
@@ -138,6 +177,14 @@ export const notifySellerNewOrder = functions.region('europe-west3').firestore
         `OGas NEW ORDER #${orderId.slice(-6)}: ${items}. Total: N${order.totalAmount}. Call: ${order.buyerPhone}`
       );
     }
+
+    const itemsShort = order.items?.map((i: any) => `${i.quantity}x${i.size ?? i.kg}kg`).join(', ');
+    await sendPushToUser(
+      order.sellerId,
+      'New OGas order',
+      `#${orderId.slice(-6)}: ${itemsShort} — N${order.totalAmount}`,
+      { orderId, type: 'new_order' }
+    );
   });
 
 export const notifyOrderStatusUpdate = functions.region('europe-west3').firestore
@@ -146,26 +193,35 @@ export const notifyOrderStatusUpdate = functions.region('europe-west3').firestor
     const before = change.before.data();
     const after = change.after.data();
     const orderId = context.params.orderId;
-    
+
     if (before.status === after.status) return;
-    
+
     const statusMessages: Record<string, string> = {
       paid: 'Payment confirmed! Your order is being processed.',
+      pending_cash: 'Order received! Pay on delivery.',
+      confirmed: 'Your seller confirmed the order. It is being prepared.',
       preparing: 'Your order is being prepared for delivery.',
       out_for_delivery: 'Your gas is on the way! Get ready to receive it.',
       delivered: 'Your gas has been delivered. Please confirm receipt to complete the order.',
       completed: 'Order completed! Thank you for using OGas.',
       cancelled: 'Your order has been cancelled.',
     };
-    
+
     const message = statusMessages[after.status];
     if (message) {
       await sendSMS(
         after.buyerPhone,
         `OGas Order #${orderId.slice(-6)}: ${message}`
       );
+
+      await sendPushToUser(
+        after.buyerId,
+        'Order update',
+        `#${orderId.slice(-6)}: ${message}`,
+        { orderId, type: 'order_status', status: after.status }
+      );
     }
-    
+
     if (after.status === 'delivered' && before.status !== 'delivered') {
       const confirmUrl = `https://www.ogaslpgmarketplace.com/orders/${orderId}/confirm`;
       await sendSMS(
@@ -248,30 +304,30 @@ export const sendMessageNotification = functions.region('europe-west3').firestor
   .onCreate(async (snap, context) => {
     const message = snap.data();
     const chatId = context.params.chatId;
-    
+
     if (message.senderId === 'system') return;
-    
+
     const chatDoc = await db.collection('chats').doc(chatId).get();
     if (!chatDoc.exists) return;
-    
+
     const chat = chatDoc.data()!;
     const recipientId = chat.participants.find((p: string) => p !== message.senderId);
     if (!recipientId) return;
-    
+
     const unreadUpdate: Record<string, any> = {};
     unreadUpdate['unreadCount.' + recipientId] = admin.firestore.FieldValue.increment(1);
     unreadUpdate['lastMessage'] = message.text;
     unreadUpdate['updatedAt'] = admin.firestore.FieldValue.serverTimestamp();
     await chatDoc.ref.update(unreadUpdate);
-    
+
     const userDoc = await db.collection('users').doc(recipientId).get();
     const fcmToken = userDoc.data()?.fcmToken;
     const phone = userDoc.data()?.phoneNumber;
-    
+
     if (fcmToken) {
       const senderDoc = await db.collection('users').doc(message.senderId).get();
       const senderName = senderDoc.data()?.displayName || 'OGas User';
-      
+
       await admin.messaging().send({
         token: fcmToken,
         notification: {
@@ -281,7 +337,7 @@ export const sendMessageNotification = functions.region('europe-west3').firestor
         data: { chatId, type: 'chat_message' },
       });
     }
-    
+
     if (phone) {
       await sendSMS(phone, 'OGas: New message: "' + message.text.substring(0, 100) + '"');
     }
@@ -291,25 +347,25 @@ export const markMessagesAsRead = functions.https.onCall(async (data, context) =
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Login required');
   }
-  
+
   const { chatId } = data;
   const userId = context.auth.uid;
-  
+
   const messagesRef = db.collection('chats').doc(chatId).collection('messages');
   const unreadSnapshot = await messagesRef
     .where('read', '==', false)
     .where('senderId', '!=', userId)
     .get();
-  
+
   const batch = db.batch();
   unreadSnapshot.docs.forEach(doc => {
     batch.update(doc.ref, { read: true });
   });
-  
+
   batch.update(db.collection('chats').doc(chatId), {
     ['unreadCount.' + userId]: 0,
   });
-  
+
   await batch.commit();
   return { success: true, markedRead: unreadSnapshot.size };
 });
@@ -318,28 +374,28 @@ export const updateTypingStatus = functions.https.onCall(async (data, context) =
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Login required');
   }
-  
+
   const { chatId, isTyping } = data;
   const userId = context.auth.uid;
-  
+
   await db.collection('chats').doc(chatId).update({
     ['typing.' + userId]: isTyping ? admin.firestore.FieldValue.serverTimestamp() : null,
   });
-  
+
   return { success: true };
 });
 
 export const cleanupTypingStatus = functions.pubsub.schedule('every 5 minutes').onRun(async () => {
   const fiveMinutesAgo = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
   const chatsSnapshot = await db.collection('chats').get();
-  
+
   const batch = db.batch();
   let operations = 0;
-  
+
   for (const chatDoc of chatsSnapshot.docs) {
     const chat = chatDoc.data();
     const typing = chat.typing || {};
-    
+
     for (const [userId, timestamp] of Object.entries(typing as Record<string, any>)) {
       if (timestamp && timestamp.toDate && timestamp.toDate() < fiveMinutesAgo) {
         batch.update(chatDoc.ref, {
@@ -348,13 +404,13 @@ export const cleanupTypingStatus = functions.pubsub.schedule('every 5 minutes').
         operations++;
       }
     }
-    
+
     if (operations >= 400) {
       await batch.commit();
       operations = 0;
     }
   }
-  
+
   if (operations > 0) {
     await batch.commit();
   }
@@ -373,17 +429,17 @@ export const getPaystackBanks = functions.https.onCall(async () => {
 
 export const verifyBankAccount = functions.https.onCall(async (data) => {
   const { accountNumber, bankCode } = data;
-  
+
   if (!accountNumber || !bankCode) {
     throw new functions.https.HttpsError('invalid-argument', 'Account number and bank code required');
   }
-  
+
   try {
     const response = await axios.get(
       `https://api.paystack.co/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
       { headers: { Authorization: 'Bearer ' + PAYSTACK_SECRET } }
     );
-    
+
     return {
       valid: true,
       accountName: (response.data as any).data?.account_name,
@@ -401,7 +457,7 @@ export const getSellerPayouts = functions.https.onCall(async (data, context) => 
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Login required');
   }
-  
+
   const sellerId = context.auth.uid;
   const payoutsSnapshot = await db
     .collection('payouts')
@@ -409,23 +465,20 @@ export const getSellerPayouts = functions.https.onCall(async (data, context) => 
     .orderBy('createdAt', 'desc')
     .limit(50)
     .get();
-  
+
   const payouts = payoutsSnapshot.docs.map(doc => ({
     id: doc.id,
     ...doc.data(),
   }));
-  
+
   return { payouts };
 });
 
-// ==================== CREATE ORDER (HTTP with CORS) ====================
 export const createOrder = functions.https.onRequest(async (req, res) => {
-  // CORS headers — REQUIRED for browser fetch
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  // Handle browser preflight (OPTIONS)
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
     return;
@@ -446,7 +499,6 @@ export const createOrder = functions.https.onRequest(async (req, res) => {
 
     const firstItem = items[0];
 
-    // Pull buyer details from user profile
     const userDoc = await db.collection('users').doc(buyerId).get();
     const userData = userDoc.exists ? userDoc.data() : {};
 
@@ -472,7 +524,6 @@ export const createOrder = functions.https.onRequest(async (req, res) => {
 
     const docRef = await db.collection('orders').add(orderData);
 
-    // Increment seller order count
     await db.collection('sellers').doc(sellerId).update({
       totalOrders: admin.firestore.FieldValue.increment(1),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
