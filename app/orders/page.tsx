@@ -276,6 +276,12 @@ function OrdersContent() {
                         <span style={{ color: '#1a1d23' }}>₦{(item.unitPrice * item.quantity).toLocaleString()}</span>
                       </div>
                     ))}
+                {order.kgDelivered && (
+                  <div className="flex justify-between py-1 mt-1">
+                    <span className="text-sm font-bold" style={{ color: "#0a8f84" }}>⚖️ Weighed on scale</span>
+                    <span className="text-sm font-bold" style={{ color: "#0a8f84" }}>{order.kgDelivered}kg</span>
+                  </div>
+                )}
                     <div className="flex justify-between text-sm">
                       <span style={{ color: '#8a8f98' }}>Delivery</span>
                       <span style={{ color: '#1a1d23' }}>₦{order.deliveryFee?.toLocaleString() || 0}</span>
