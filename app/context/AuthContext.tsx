@@ -128,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role,
         updatedAt: serverTimestamp(),
         ...(existing.exists() ? {} : { createdAt: serverTimestamp() }),
+        ...(existing.exists() ? {} : { referredBy: localStorage.getItem('ogas_ref') || null }),
       },
       { merge: true },
     );
