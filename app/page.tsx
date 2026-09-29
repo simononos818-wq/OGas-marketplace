@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import LaunchBanner from './components/launch-banner';
 import Link from 'next/link';
 import { MapPin, ShieldCheck, Star, Clock, Bike, Flame, Search, Home, Receipt, MessageCircle, User, ChevronRight, Bell } from 'lucide-react';
 import { DEFAULT_PRICE_PER_KG } from '@/lib/gasCalculator';
@@ -49,6 +50,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-dvh bg-[#f4f6f8] pb-20" style={{ maxWidth: 480, margin: '0 auto' }}>
+      <LaunchBanner />
 
       {/* ===== HEADER ===== */}
       <header className="sticky top-0 z-40 px-4 pt-3 pb-3" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e4078)` }}>
