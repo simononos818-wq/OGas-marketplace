@@ -1,9 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { MapPin, Search, Flame, ShieldCheck } from 'lucide-react';
+import { Search, Flame, ShieldCheck } from 'lucide-react';
 import { useSellers } from '../hooks/useSellers';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 
 const NAVY = '#16305e';
 const TEAL = '#12a5b0';
@@ -13,6 +16,27 @@ const TOWNS = ['Ughelli', 'Warri', 'Asaba', 'Lokoja', 'Benin', 'Lagos', 'Port Ha
 export default function ShopsPage() {
   const { sellers, loading } = useSellers();
   const [search, setSearch] = useState('');
+  const [uid, setUid] = useState<string | null>(null);
+  const [hasFilled, setHasFilled] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUid(u ? u.uid : null);
+      if (!u) setHasFilled(false);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!uid) return;
+    (async () => {
+      try {
+        const q = query(collection(db, 'orders'), where('buyerId', '==', uid), limit(1));
+        const snap = await getDocs(q);
+        setHasFilled(!snap.empty);
+      } catch { /* keep FILL */ }
+    })();
+  }, [uid]);
 
   const list = sellers.filter((s) => {
     if (s.id.startsWith('seed_')) return false;
@@ -101,7 +125,7 @@ export default function ShopsPage() {
               </div>
               <span className="text-white font-extrabold text-[11px] px-4 py-2 rounded-[10px] flex items-center gap-1 shrink-0"
                 style={{ background: `linear-gradient(135deg, ${NAVY}, #245089)`, boxShadow: '0 3px 8px rgba(22,48,94,.35)', border: '1.5px solid rgba(45,212,194,.5)' }}>
-                <Flame size={11} color="#2dd4c2" /> REFILL
+                <Flame size={11} color="#2dd4c2" /> {hasFilled ? 'REFILL' : 'FILL'}
               </span>
             </Link>
           ))

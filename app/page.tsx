@@ -7,6 +7,9 @@ import { MapPin, ShieldCheck, Star, Clock, Bike, Flame, Search, Home, Receipt, M
 import { DEFAULT_PRICE_PER_KG } from '@/lib/gasCalculator';
 import { useSellers } from './hooks/useSellers';
 import SafetyTips from '@/components/SafetyTips';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 
 const NAVY = '#16305e';
 const TEAL = '#12a5b0';
@@ -17,6 +20,27 @@ export default function HomePage() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [sort, setSort] = useState<SortMode>('nearest');
   const { sellers, loading } = useSellers(coords?.lat ?? null, coords?.lng ?? null);
+  const [uid, setUid] = useState<string | null>(null);
+  const [hasFilled, setHasFilled] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUid(u ? u.uid : null);
+      if (!u) setHasFilled(false);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!uid) return;
+    (async () => {
+      try {
+        const q = query(collection(db, 'orders'), where('buyerId', '==', uid), limit(1));
+        const snap = await getDocs(q);
+        setHasFilled(!snap.empty);
+      } catch { /* keep FILL */ }
+    })();
+  }, [uid]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -196,7 +220,7 @@ export default function HomePage() {
                     <Link href={`/buy/${s.id}`}
                       className="text-white text-[11px] font-extrabold px-4 py-2 rounded-[10px] flex items-center gap-1"
                       style={{ background: `linear-gradient(135deg, ${NAVY}, #245089)`, boxShadow: '0 3px 8px rgba(22,48,94,.35)', border: '1.5px solid rgba(45,212,194,.5)' }}>
-                      <Flame size={11} color="#2dd4c2" /> REFILL NOW
+                      <Flame size={11} color="#2dd4c2" /> {hasFilled ? 'REFILL NOW' : 'FILL NOW'}
                     </Link>
                   </div>
                 </div>
