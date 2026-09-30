@@ -54,6 +54,8 @@ export async function POST(req: NextRequest) {
     }
     update.kgDelivered = kg;
     update.weighedAt = new Date();
+    update.deliveredAt = new Date();
+    update.autoCompleteAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
   }
 
   await snap.ref.update(update);

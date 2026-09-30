@@ -78,6 +78,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, ...result });
     }
 
+    if (action === 'seller_force_complete') {
+      if (order.sellerId !== user.uid) {
+        return NextResponse.json({ success: false, message: 'Only the seller can force-complete' }, { status: 403 });
+      }
+      if (order.status !== 'delivered') {
+        return NextResponse.json({ success: false, message: 'Order must be delivered first' }, { status: 400 });
+      }
+      const autoCompleteAt = order.autoCompleteAt?.toDate?.() || (order.autoCompleteAt ? new Date(order.autoCompleteAt) : null);
+      if (autoCompleteAt && autoCompleteAt.getTime() > Date.now()) {
+        const mins = Math.ceil((autoCompleteAt.getTime() - Date.now()) / 60000);
+        return NextResponse.json({ success: false, message: 'Wait ' + mins + ' min or ask buyer for Door Code' }, { status: 429 });
+      }
+      await adminDb.collection('orders').doc(orderId).update({ status: 'completed', forceCompletedAt: new Date(), updatedAt: new Date() });
+      const result = await paySellerFromEscrow(orderId, 'seller_force_complete');
+      return NextResponse.json({ success: true, ...result });
+    }
+
     if (order.buyerId !== user.uid) {
       return NextResponse.json({ success: false, message: 'Only the buyer can confirm receipt' }, { status: 403 });
     }
