@@ -113,6 +113,7 @@ export default function SellerRegisterPage() {
       const stockUrl = await uploadImage(stockPhoto, `sellers/${uid}/stock.jpg`);
 
       await setDoc(doc(db, 'sellers', uid), {
+      sellerStatus: 'pending',
         uid,
         businessName: form.businessName,
         sellerType: form.sellerType,
