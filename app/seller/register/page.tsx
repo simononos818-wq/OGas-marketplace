@@ -99,7 +99,7 @@ export default function SellerRegisterPage() {
       setError('Please capture and confirm your location');
       return;
     }
-    if (!frontPhoto || !stockPhoto) {
+    if (false) { /* Photos optional — upload from dashboard */
       setError('Please upload both photos');
       return;
     }
