@@ -23,7 +23,8 @@
     ],
     "paths": {
       "@/*": [
-        "./*"
+        "./*",
+        "./app/*"
       ]
     },
     "target": "ES2017"
@@ -37,6 +38,9 @@
     "dist/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "functions",
+    "mobile",
+    "starters"
   ]
 }

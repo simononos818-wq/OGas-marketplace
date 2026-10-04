@@ -14,6 +14,7 @@ const NAVY = '#16305e';
 const TEAL = '#12a5b0';
 
 interface Order {
+  kgDelivered?: number;
   id: string;
   sellerName: string;
   sellerPhone?: string;

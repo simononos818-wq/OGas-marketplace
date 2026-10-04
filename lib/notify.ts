@@ -28,7 +28,7 @@ const BUYER_MSG: Record<OrderEvent, (o: NotifyOrder) => string> = {
   cancelled: (o) => `OGas: your ${o.kg}kg order was cancelled. Any money paid will be refunded. Sorry for the trouble.`,
 };
 
-const SELLER_MSG: Record<OrderEvent, (o: NotifyOrder) => string> = {
+const SELLER_MSG: Partial<Record<OrderEvent, (o: NotifyOrder) => string>> = {
   placed: (o) => `OGas: NEW ORDER #${o.id.slice(0, 6)} — ${o.kg}kg, ${naira(o.total)}. Open Seller Studio to accept.`,
 };
 

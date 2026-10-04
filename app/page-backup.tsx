@@ -23,7 +23,7 @@ export default function HomePage() {
   const best = visible.length
     ? visible.reduce((a, b) => (Number(a.pricePerKg) <= Number(b.pricePerKg) ? a : b))
     : null;
-  const price = Number(best?.pricePerKg) > 0 ? Number(best.pricePerKg) : DEFAULT_PRICE_PER_KG;
+  const price = Number(best?.pricePerKg) > 0 ? Number(best?.pricePerKg) : DEFAULT_PRICE_PER_KG;
 
   return (
     <div className="min-h-dvh bg-black text-white">

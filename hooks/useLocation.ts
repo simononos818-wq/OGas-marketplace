@@ -36,8 +36,8 @@ export function useLocation() {
       setLocation({
         lat: pos.lat,
         lng: pos.lng,
-        city: nearest.city.name,
-        state: nearest.city.state,
+        city: nearest.name,
+        state: nearest.state,
         accuracy: pos.accuracy,
         detected: true,
         loading: false,
@@ -48,8 +48,8 @@ export function useLocation() {
       localStorage.setItem('ogas_location', JSON.stringify({
         lat: pos.lat,
         lng: pos.lng,
-        city: nearest.city.name,
-        state: nearest.city.state,
+        city: nearest.name,
+        state: nearest.state,
         timestamp: Date.now(),
       }));
       

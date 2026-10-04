@@ -39,6 +39,7 @@ export interface Chat {
   lastMessage: string;
   lastMessageAt?: Timestamp;
   lastSenderRole?: string;
+  lastSenderId?: string;
   unreadCount: Record<string, number>;
   updatedAt?: Timestamp;
 }

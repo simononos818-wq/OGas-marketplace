@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/useAuth'; // ← change this if your auth 
-hook has a different name
+import { useAuth } from '@/hooks/useAuth'; // change this if your auth hook has a different name
 import { Loader2, CheckCircle2, Truck, PackageCheck, XCircle, 
 AlertTriangle } from 'lucide-react';
 import { canTransition, OrderStatus } from '@/lib/orderStatus';

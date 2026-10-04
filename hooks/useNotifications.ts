@@ -66,7 +66,7 @@ export function useNotifications() {
           icon: 'https://ogasapp-5a003.web.app/icon-192.png',
           requireInteraction: true,
           vibrate: [200, 100, 200, 100, 500],
-        });
+        } as any);
       }
     });
 

@@ -109,6 +109,9 @@ export default function SellerRegisterPage() {
 
     try {
       const uid = auth.currentUser.uid;
+      if (!frontPhoto || !stockPhoto) {
+        throw new Error('Both photos are required');
+      }
       const frontUrl = await uploadImage(frontPhoto, `sellers/${uid}/front.jpg`);
       const stockUrl = await uploadImage(stockPhoto, `sellers/${uid}/stock.jpg`);
 

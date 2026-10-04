@@ -194,7 +194,7 @@ function MenuItem({ icon, label, href }: { icon: React.ReactNode; label: string;
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, userData, loading, logout, signOut } = useAuthContext();
+  const { user, userData, loading, signOut } = useAuthContext();
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
 
@@ -234,7 +234,7 @@ export default function ProfilePage() {
   if (!user) return null;
 
   const doLogout = async () => {
-    try { await (logout?.() ?? signOut?.()); } catch {}
+    try { await (signOut?.() ?? signOut?.()); } catch {}
     router.push('/');
   };
 

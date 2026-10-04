@@ -11,8 +11,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/useAuth'; // ← change if your auth hook 
-has a different name
+import { useAuth } from '@/hooks/useAuth'; // change if your auth hook has a different name
 
 export interface ChatMessage {
   id: string;
