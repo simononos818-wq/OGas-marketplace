@@ -1,5 +1,7 @@
 'use client';
 
+import SellerEntryCards from "../../../components/SellerEntryCards";
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -189,6 +191,8 @@ export default function SellerRegisterPage() {
   }
 
   return (
+    <>
+      <SellerEntryCards />
     <div className="min-h-screen pb-20" style={{ background: '#f4f6f8' }}>
       <div className="sticky top-0 p-4 z-10 bg-white border-b flex items-center gap-3" style={{ borderColor: '#eee' }}>
         <button onClick={() => router.back()} className="p-1.5 rounded-full" style={{ background: '#f4f6f8' }}>
@@ -288,5 +292,6 @@ export default function SellerRegisterPage() {
         )}
       </div>
     </div>
+    </>
   );
 }
