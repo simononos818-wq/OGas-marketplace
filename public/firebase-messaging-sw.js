@@ -1,29 +1,45 @@
-/* OGas FCM service worker */
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  apiKey: "AIzaSyDWvX8sL_08ecR5sqtQbGTV8RR-NiNHzEc",
+  apiKey: "YOUR_API_KEY",
   authDomain: "ogasapp-5a003.firebaseapp.com",
   projectId: "ogasapp-5a003",
-  storageBucket: "ogasapp-5a003.firebasestorage.app",
+  storageBucket: "ogasapp-5a003.appspot.com",
   messagingSenderId: "233768058710",
-  appId: "1:233768058710:web:a0a378df2be9f453fce0f7"
+  appId: "YOUR_APP_ID",
 });
 
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const n = payload.notification || {};
-  self.registration.showNotification(n.title || 'OGas', {
-    body: n.body || '',
-    icon: '/ogas-icon.svg',
-    badge: '/ogas-icon.svg',
-    data: payload.data || {}
+  const { title, body } = payload.notification || {};
+  
+  // Zoho-level vibration: strong, insistent pattern
+  const vibrationPattern = [500, 200, 500, 200, 800];
+  
+  self.registration.showNotification(title || '🔥 New OGas Order!', {
+    body: body || 'You have a new gas order. Tap to view.',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: payload.data?.orderId || 'new-order',
+    requireInteraction: true,
+    vibrate: vibrationPattern,
+    data: payload.data || {},
+    actions: [
+      { action: 'accept', title: '✅ Accept' },
+      { action: 'dismiss', title: '❌ Dismiss' }
+    ],
   });
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(clients.openWindow('/orders'));
+  const { orderId, url } = event.notification.data || {};
+  
+  if (event.action === 'accept') {
+    event.waitUntil(clients.openWindow(`${url || '/seller/dashboard'}?order=${orderId}&action=accept`));
+  } else {
+    event.waitUntil(clients.openWindow(url || '/seller/dashboard'));
+  }
 });

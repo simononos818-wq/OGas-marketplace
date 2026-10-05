@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '../../../lib/firebase-admin';
+import { getMessaging } from 'firebase-admin/messaging';
 import { requireUser } from '../../../lib/require-user';
 import { hashDoorCode, makeDoorCode, formatDoorCode } from '../../../lib/door-code';
 import { sendSms } from '../../../lib/sms';
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
     const deliveryFee = deliveryType === 'pickup' ? 0 : Number(seller.deliveryFee || 500);
     const gasCost = discounted * size * qty;
     const totalAmount = gasCost + deliveryFee;
+    const platformFee = Math.round(totalAmount * 0.10); // 10% OGas commission
     const method = paymentMethod === 'cash' ? 'cash' : 'paystack';
     const isCash = method === 'cash';
 
@@ -99,6 +101,8 @@ export async function POST(req: NextRequest) {
       paymentStatus: isCash ? 'cod' : 'pending',
       escrowStatus: isCash ? 'cod' : 'pending',
       doorCodeHash,
+      platformFee,
+      ogasCommission: platformFee,
       usedSplitPayment: false,
       createdAt: new Date(),
       updatedAt: new Date(),
