@@ -1,3 +1,4 @@
+import Script from "next/script";
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { AuthProvider } from './context/AuthContext';
@@ -38,7 +39,17 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-<head><meta name="google-site-verification" content="kmZSslXHb-lG8NfZY_eQBhB5oMzJXjk3cWnb6Fynu8Q" /></head>
+<head>
+      <Script src="https://www.googletagmanager.com/gtag/js?id=G-JM1N75NXSS" strategy="afterInteractive" />
+      <Script id="google-analytics" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-JM1N75NXSS');
+        `}
+      </Script>
+<meta name="google-site-verification" content="kmZSslXHb-lG8NfZY_eQBhB5oMzJXjk3cWnb6Fynu8Q" /></head>
       <body
         className="bg-black text-white antialiased overscroll-none"
         style={{ fontFamily: 'Roboto, system-ui, -apple-system, sans-serif' }}
