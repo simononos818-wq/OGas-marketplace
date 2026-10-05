@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /checkout
+Disallow: /dashboard
+Disallow: /orders
+Disallow: /api/
+
+Sitemap: https://ogaslpgmarketplace.com/sitemap.xml
