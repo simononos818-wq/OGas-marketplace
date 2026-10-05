@@ -38,6 +38,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
+<head><meta name="google-site-verification" content="kmZSslXHb-lG8NfZY_eQBhB5oMzJXjk3cWnb6Fynu8Q" /></head>
       <body
         className="bg-black text-white antialiased overscroll-none"
         style={{ fontFamily: 'Roboto, system-ui, -apple-system, sans-serif' }}
