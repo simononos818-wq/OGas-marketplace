@@ -148,7 +148,7 @@ export default function HomePage() {
               ].map(([ic, t, d]) => (
                 <div key={t} className="bg-white rounded-xl p-3 text-center" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
                   <div className="text-[18px] mb-1">{ic}</div>
-                  <div className="text-[10.5px] font-extrabold" style={{ color: NAVY }}>{t}</div>
+                  <div className="text-[10.5px] font-extrabold" style={{ color: "#16305e" }}>{t}</div>
                   <div className="text-[8.5px]" style={{ color: '#8a8f98' }}>{d}</div>
                 </div>
               ))}
@@ -171,9 +171,9 @@ export default function HomePage() {
               <div className="bg-white rounded-2xl p-6 text-center mb-3" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
                 <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center mb-3"
                   style={{ background: '#e6f7f8' }}>
-                  <Store size={26} color={TEAL} />
+                  <Store size={26} color="#12a5b0" />
                 </div>
-                <h3 className="font-black text-[15px] mb-1" style={{ color: NAVY }}>No verified LPG seller near you yet</h3>
+                <h3 className="font-black text-[15px] mb-1" style={{ color: "#16305e" }}>No verified LPG seller near you yet</h3>
                 <p className="text-[11px] mb-4" style={{ color: '#8a8f98' }}>
                   We are expanding fast across Nigeria. Help us bring gas closer to your street:
                 </p>
@@ -246,7 +246,7 @@ export default function HomePage() {
                         <div className="flex items-center gap-2.5">
                           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                             style={{ background: 'linear-gradient(135deg,#e6f7f8,#d2f0f2)' }}>
-                            <Flame size={18} color={TEAL} />
+                            <Flame size={18} color="#12a5b0" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -264,7 +264,7 @@ export default function HomePage() {
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="text-[14px] font-black" style={{ color: NAVY }}>₦{Number(s.pricePerKg).toLocaleString()}</div>
+                            <div className="text-[14px] font-black" style={{ color: "#16305e" }}>₦{Number(s.pricePerKg).toLocaleString()}</div>
                             <div className="text-[8.5px] font-semibold" style={{ color: '#8a8f98' }}>LPG per kg</div>
                           </div>
                         </div>
@@ -273,6 +273,20 @@ export default function HomePage() {
                             <Bike size={11} /> Delivery fee at checkout
                           </span>
                           <Link href={`/buy/${s.id}`}
+        {/* CALCULATE */}
+        <Link href="/calculator"
+          className="w-full flex items-center gap-3 rounded-2xl p-3.5 mb-3 bg-white"
+          style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
+          <span className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: '#e6f7f8' }}>
+            <Calculator size={22} color="#12a5b0" />
+          </span>
+          <span className="flex-1 text-left">
+            <span className="block font-black text-[16px] tracking-wide" style={{ color: "#16305e" }}>CALCULATE</span>
+            <span className="block text-[10px] mt-0.5" style={{ color: '#8a8f98' }}>Cost - kg to litres - profit</span>
+          </span>
+          <ChevronRight size={18} color="#9aa0a8" />
+        </Link>
+
                             className="text-white text-[11px] font-extrabold px-4 py-2 rounded-[10px] flex items-center gap-1"
                             style={{ background: `linear-gradient(135deg, ${NAVY}, #245089)`, boxShadow: '0 3px 8px rgba(22,48,94,.35)', border: '1.5px solid rgba(45,212,194,.5)' }}>
                             <Flame size={11} color="#2dd4c2" /> {hasFilled ? 'REFILL NOW' : 'FILL NOW'}
