@@ -273,24 +273,6 @@ export default function HomePage() {
                             <Bike size={11} /> Delivery fee at checkout
                           </span>
                           <Link href={`/buy/${s.id}`}
-        {/* CALCULATE */}
-        <Link href="/calculator"
-          className="w-full flex items-center gap-3 rounded-2xl p-3.5 mb-3 bg-white"
-        {/* CALCULATE */}
-        <Link href="/calculator"
-          className="w-full flex items-center gap-3 rounded-2xl p-3.5 mb-3 bg-white"
-          style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
-          <span className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: '#e6f7f8' }}>
-            <Calculator size={22} color="#12a5b0" />
-          </span>
-          <span className="flex-1 text-left">
-            <span className="block font-black text-[16px] tracking-wide" style={{ color: "#16305e" }}>CALCULATE</span>
-            <span className="block text-[10px] mt-0.5" style={{ color: '#8a8f98' }}>Cost - kg to litres - profit</span>
-          </span>
-          <ChevronRight size={18} color="#9aa0a8" />
-        </Link>
-
-                          </Link>
                         </div>
                       </div>
                     );
