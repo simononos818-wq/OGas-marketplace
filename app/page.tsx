@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { MapPin, ShieldCheck, Star, Clock, Bike, Flame, Search, Home, Receipt, MessageCircle, User, ChevronRight, Bell, Navigation, Store, Users } from 'lucide-react';
+import { MapPin, ShieldCheck, Star, Clock, Bike, Flame, Search, Home, Receipt, MessageCircle, User, ChevronRight, Bell, Navigation, Store, Users, Calculator } from 'lucide-react';
 import { useSellers } from './hooks/useSellers';
 import SafetyTips from '@/components/SafetyTips';
 import LaunchBanner from './components/launch-banner';
@@ -276,6 +276,9 @@ export default function HomePage() {
         {/* CALCULATE */}
         <Link href="/calculator"
           className="w-full flex items-center gap-3 rounded-2xl p-3.5 mb-3 bg-white"
+        {/* CALCULATE */}
+        <Link href="/calculator"
+          className="w-full flex items-center gap-3 rounded-2xl p-3.5 mb-3 bg-white"
           style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
           <span className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: '#e6f7f8' }}>
             <Calculator size={22} color="#12a5b0" />
@@ -287,9 +290,6 @@ export default function HomePage() {
           <ChevronRight size={18} color="#9aa0a8" />
         </Link>
 
-                            className="text-white text-[11px] font-extrabold px-4 py-2 rounded-[10px] flex items-center gap-1"
-                            style={{ background: `linear-gradient(135deg, ${NAVY}, #245089)`, boxShadow: '0 3px 8px rgba(22,48,94,.35)', border: '1.5px solid rgba(45,212,194,.5)' }}>
-                            <Flame size={11} color="#2dd4c2" /> {hasFilled ? 'REFILL NOW' : 'FILL NOW'}
                           </Link>
                         </div>
                       </div>
