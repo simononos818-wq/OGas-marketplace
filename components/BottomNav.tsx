@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flame, User, ClipboardList, MessageSquare } from 'lucide-react';
+import { Flame, User, ClipboardList, MessageSquare, Fuel } from 'lucide-react';
 import { useChatList } from '@/hooks/useChat';
 
 export default function BottomNav() {
@@ -12,6 +12,7 @@ export default function BottomNav() {
   const navItems = [
     { href: '/', icon: Flame, label: 'Gas' },
     { href: '/orders', icon: ClipboardList, label: 'Orders' },
+    { href: '/tank', icon: Fuel, label: 'Tank' },
     { href: '/chat', icon: MessageSquare, label: 'Chat' },
     { href: '/profile', icon: User, label: 'Me' },
   ];
