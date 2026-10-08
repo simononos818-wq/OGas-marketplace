@@ -7,7 +7,7 @@ import { db } from '@/lib/firebase';
 import { useAuthContext } from '../../context/AuthContext';
 import { authHeaders, saveBuyerContact } from '@/lib/client-auth';
 import { readApiJson } from '@/lib/read-api-json';
-import { MapPin, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Lock, ShieldCheck } from 'lucide-react';
+import { MapPin, Star, Truck, Store, CreditCard, Banknote, ChevronLeft, Lock, ShieldCheck, Flame } from 'lucide-react';
 import Link from 'next/link';
 import { moneyToKg, SCALE_STEP } from '@/lib/gasCalculator';
 
@@ -34,6 +34,10 @@ interface Seller {
 
 const BOTTLE_SIZES = [3, 6, 12, 12.5];
 
+// Gas Points can cover at most 10% of an order (OGas commission absorbs it)
+const MAX_POINTS_SHARE = 0.10;
+const MIN_CHARGE = 100;
+
 // Show area level only — the exact street stays private until an order exists
 const shortAddress = (addr: string) => {
   if (!addr) return '';
@@ -59,6 +63,8 @@ export default function BuyPage() {
   const [buyerName, setBuyerName] = useState('');
   const [buyerAddress, setBuyerAddress] = useState('');
   const [contactSaved, setContactSaved] = useState(false);
+  const [gpBalance, setGpBalance] = useState(0);
+  const [usePoints, setUsePoints] = useState(true);
 
   useEffect(() => {
     if (!sellerId) return;
@@ -81,6 +87,8 @@ export default function BuyPage() {
         setBuyerName(d.name || d.displayName || user.displayName || '');
         setContactSaved(true);
       }
+      const gp = Math.floor(Number(d.gasPoints) || 0);
+      setGpBalance(Math.max(0, gp));
     });
   }, [user?.uid]);
 
@@ -119,8 +127,16 @@ export default function BuyPage() {
   const change = buyMode === 'money' ? moneyFill.change : 0;
   const deliveryFee = deliveryType === 'pickup' ? 0 : (seller.deliveryFee || 500);
   const totalAmount = gasCost + deliveryFee;
-  const totalDiscount = 0;
   const isPendingApproval = seller.isApproved === false;
+
+  // Gas Points: whole-naira discount, capped at 10% of the order
+  const maxPoints = Math.max(
+    0,
+    Math.min(gpBalance, Math.floor(totalAmount * MAX_POINTS_SHARE), Math.floor(totalAmount - MIN_CHARGE)),
+  );
+  const pointsApplied = paymentMethod === 'paystack' && usePoints ? maxPoints : 0;
+  const payable = totalAmount - pointsApplied;
+
   const isValid =
     fillKg >= SCALE_STEP &&
     fillKg <= 50 &&
@@ -173,6 +189,7 @@ export default function BuyPage() {
             email: user?.email || '',
             name: buyerName || user?.displayName || '',
             sellerId: seller.id,
+            pointsToUse: pointsApplied,
           }),
         });
         const data = await readApiJson(res);
@@ -346,6 +363,47 @@ export default function BuyPage() {
           </button>
         </div>
 
+        {/* Gas Points */}
+        {gpBalance > 0 && paymentMethod === 'paystack' && maxPoints > 0 && (
+          <button
+            type="button"
+            onClick={() => setUsePoints(!usePoints)}
+            className="w-full rounded-xl p-3 flex items-center gap-3 text-left"
+            style={{
+              background: usePoints ? 'linear-gradient(135deg,#0d3b3f,#123f4a)' : '#fff',
+              border: `1.5px solid ${usePoints ? '#2dd4c2' : '#e6e9ee'}`,
+              boxShadow: usePoints ? '0 3px 10px rgba(18,165,176,.3)' : '0 1px 3px rgba(20,30,50,.06)',
+            }}
+          >
+            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: usePoints ? 'rgba(45,212,194,.2)' : '#e6f7f8' }}>
+              <Flame size={16} color={usePoints ? '#2dd4c2' : TEAL} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-extrabold" style={{ color: usePoints ? '#fff' : NAVY }}>
+                Gas Points · {gpBalance.toLocaleString()} GP
+              </p>
+              <p className="text-[10.5px] font-semibold" style={{ color: usePoints ? '#9ad9d4' : '#8a8f98' }}>
+                Use {maxPoints.toLocaleString()} GP → save {naira(maxPoints)} on this order
+              </p>
+            </div>
+            <div
+              className="w-11 h-6 rounded-full relative shrink-0 transition-all"
+              style={{ background: usePoints ? '#2dd4c2' : '#d3dbe3' }}
+            >
+              <div
+                className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all"
+                style={{ left: usePoints ? 22 : 2, boxShadow: '0 1px 3px rgba(0,0,0,.25)' }}
+              />
+            </div>
+          </button>
+        )}
+        {gpBalance > 0 && paymentMethod === 'cash' && (
+          <p className="text-[10.5px] font-bold text-center" style={{ color: '#8a8f98' }}>
+            You have {gpBalance.toLocaleString()} Gas Points — choose Pay online to spend them.
+          </p>
+        )}
+
         {/* Contact */}
         {(!contactSaved || deliveryType === 'delivery') && (
           <div className="rounded-xl p-3 space-y-2 bg-white" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
@@ -393,11 +451,17 @@ export default function BuyPage() {
       {/* Sticky order bar */}
       <div className="sticky bottom-16 z-10 px-4 py-3 flex items-center gap-3 bg-white border-t" style={{ borderColor: '#eee', boxShadow: '0 -4px 12px rgba(20,30,50,.06)' }}>
         <div className="min-w-0">
-          <div className="font-black text-lg leading-tight" style={{ color: NAVY }}>{naira(totalAmount)}</div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-black text-lg leading-tight" style={{ color: NAVY }}>{naira(payable)}</span>
+            {pointsApplied > 0 && (
+              <span className="text-[11px] font-bold line-through" style={{ color: '#c3cbd4' }}>{naira(totalAmount)}</span>
+            )}
+          </div>
           <div className="text-[11px] truncate" style={{ color: '#8a8f98' }}>
             {fillKg.toFixed(2)}kg
             {change > 0 ? ` · change ${naira(change)}` : ''}
             {' · '}{deliveryType === 'pickup' ? 'Pickup · Free' : `Delivery · ${naira(deliveryFee)}`}
+            {pointsApplied > 0 ? ` · −${naira(pointsApplied)} GP` : ''}
             {paymentMethod === 'paystack' ? ' · Escrow protected' : ''}
           </div>
         </div>
@@ -409,7 +473,7 @@ export default function BuyPage() {
             ? { background: TEAL, boxShadow: '0 4px 10px rgba(18,165,176,.4)' }
             : { background: '#c3cbd4', cursor: 'not-allowed' }}
         >
-          {placingOrder ? 'Placing...' : paymentMethod === 'paystack' ? `Pay ${naira(totalAmount)}` : 'Place order'}
+          {placingOrder ? 'Placing...' : paymentMethod === 'paystack' ? `Pay ${naira(payable)}` : 'Place order'}
         </button>
       </div>
     </div>
