@@ -8,6 +8,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  setDoc,
   Timestamp,
   where,
 } from 'firebase/firestore';
@@ -98,10 +99,20 @@ export function useChat(chatId: string) {
     return () => unsub();
   }, [chatId, user]);
 
+  // Mark as read — direct Firestore write (rules allow any signed-in user to
+  // write chats). This never depends on the API, so badges clear instantly and
+  // reliably, even on flaky connections. API 'read' kept as a fallback.
   useEffect(() => {
     if (!chatId || !user || !chatInfo) return;
-    chatAction({ action: 'read', chatId }).catch(() => {});
-  }, [chatId, user, chatInfo?.id, messages.length]);
+    if ((chatInfo.unreadCount?.[user.uid] || 0) === 0) return;
+    setDoc(
+      doc(db, 'chats', chatId),
+      { [`unreadCount.${user.uid}`]: 0 },
+      { merge: true },
+    ).catch(() => {
+      chatAction({ action: 'read', chatId }).catch(() => {});
+    });
+  }, [chatId, user, chatInfo?.id, chatInfo?.unreadCount?.[user?.uid || ''], messages.length]);
 
   const sendMessage = useCallback(
     async (text: string, quickKey?: string) => {
@@ -110,6 +121,12 @@ export function useChat(chatId: string) {
       setError(null);
       try {
         await chatAction({ action: 'send', chatId, text, quickKey });
+        // Clear own unread immediately (server also does this, but don't wait)
+        setDoc(
+          doc(db, 'chats', chatId),
+          { [`unreadCount.${user.uid}`]: 0 },
+          { merge: true },
+        ).catch(() => {});
       } catch (e: any) {
         setError(e.message || 'Could not send');
         throw e;
