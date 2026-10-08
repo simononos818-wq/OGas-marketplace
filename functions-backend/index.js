@@ -13,6 +13,11 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const OGas_EMAIL = 'support@ogaslpgmarketplace.com';
 const COMMISSION_RATE = 0.10;
 
+// October launch promo: order 10kg or more, get 1kg free gas in your Tank.
+const PROMO_MIN_KG = 10;
+const PROMO_BONUS_KG = 1;
+const PROMO_END = new Date('2026-11-01T00:00:00+01:00'); // ends midnight Oct 31 WAT
+
 // ═══════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════
@@ -370,6 +375,10 @@ exports.onReferralFirstOrder = onDocumentUpdated(
       gasCredit: admin.firestore.FieldValue.increment(300),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
+    // Mirror buyer gas credit onto the user doc (Kitchen page reads it there)
+    batch.set(db.collection('users').doc(buyerId), {
+      gasCredit: admin.firestore.FieldValue.increment(300),
+    }, { merge: true });
     batch.set(db.collection('walletTransactions').doc(), {
       userId: sellerId, type: 'referral_bonus', amount: 300,
       orderId: event.params.orderId, counterparty: buyerId,
@@ -381,5 +390,64 @@ exports.onReferralFirstOrder = onDocumentUpdated(
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     await batch.commit();
+
+    await sendPush(sellerId, 'Referral Bonus!', 'N300 has entered your Earnings Tank.', { type: 'referral' });
+    await sendPush(buyerId, 'Welcome Bonus!', 'N300 gas credit has entered your Gas Tank.', { type: 'referral' });
     console.log('Referral paid: ' + sellerId + ' <- ' + buyerId);
+  });
+
+// ===== OCTOBER LAUNCH PROMO: order 10kg+, get 1kg free gas =====
+// Runs on every order completion until Oct 31 2026 (WAT). One bonus per order,
+// repeat orders qualify — we WANT heavy users this month.
+exports.onPromoFreeKg = onDocumentUpdated(
+  { document: "orders/{orderId}", region: "europe-west3" },
+  async (event) => {
+    const before = event.data && event.data.before ? event.data.before.data() : null;
+    const after = event.data && event.data.after ? event.data.after.data() : null;
+    if (!after || !before) return;
+    if (after.status !== 'completed' || before.status === 'completed') return;
+
+    if (new Date() >= PROMO_END) return;
+
+    const kg = Number(after.kgDelivered || after.kgAmount || after.kg || 0);
+    if (kg < PROMO_MIN_KG) return;
+
+    const buyerId = after.buyerId;
+    if (!buyerId) return;
+
+    const db = admin.firestore();
+    const orderId = event.params.orderId;
+
+    // Idempotency: one promo credit per order
+    const promoRef = db.collection('promos').doc('oct2026_' + orderId);
+    const promoSnap = await promoRef.get();
+    if (promoSnap.exists) return;
+
+    const batch = db.batch();
+    batch.set(promoRef, {
+      orderId, buyerId, promo: 'oct2026_1kg_free',
+      kgOrdered: kg, bonusKg: PROMO_BONUS_KG,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    batch.set(db.collection('users').doc(buyerId), {
+      promoKg: admin.firestore.FieldValue.increment(PROMO_BONUS_KG),
+    }, { merge: true });
+    batch.set(db.collection('wallets').doc(buyerId), {
+      promoKg: admin.firestore.FieldValue.increment(PROMO_BONUS_KG),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(db.collection('walletTransactions').doc(), {
+      userId: buyerId, type: 'promo_free_kg', amount: 0, bonusKg: PROMO_BONUS_KG,
+      orderId, note: 'October promo: 1kg free gas for ordering 10kg+',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+
+    await sendPush(
+      buyerId,
+      'Free 1kg Gas!',
+      `Your ${kg}kg order earned you 1kg free gas in your Tank. Promo ends Oct 31.`,
+      { type: 'promo', orderId }
+    );
+    console.log(`Promo 1kg credited: ${buyerId} (order ${orderId}, ${kg}kg)`);
   });
