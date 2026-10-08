@@ -19,3 +19,30 @@ button, a { -webkit-tap-highlight-color: transparent; }
 button:active, a:active { transform: scale(0.98); }
 
 @media (display-mode: standalone) { html { background: #f4f6f8; } }
+
+/* ─── Native app feel ─── */
+
+/* Momentum scrolling everywhere, no rubber-band at page level */
+* { -webkit-overflow-scrolling: touch; }
+body { position: fixed; inset: 0; width: 100%; overflow: hidden; }
+.ogas-phone { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+/* No image dragging / ghosting like a webpage */
+img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
+input, textarea { pointer-events: auto; }
+a img, button img { pointer-events: none; }
+
+/* Hide scrollbars on horizontal pill rows (feels native, stays scrollable) */
+.hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Respect device notches */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Smooth card presses */
+.pressable { transition: transform .12s ease, opacity .12s ease; }
+.pressable:active { transform: scale(.97); opacity: .85; }
+
+/* Prevent iOS auto-zoom on inputs (font must be ≥16px while focused) */
+input, textarea, select { font-size: 16px !important; }
