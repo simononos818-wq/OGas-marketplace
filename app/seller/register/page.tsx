@@ -51,25 +51,45 @@ export default function SellerRegisterPage() {
     setError('');
 
     if (!navigator.geolocation) {
-      setError('Geolocation is not supported by your browser');
+      setError('Location is not supported by this browser. Please open this page in Chrome and try again.');
       setLocating(false);
       return;
     }
 
+    const onSuccess = (pos: GeolocationPosition) => {
+      setLocation({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+      });
+      setLocating(false);
+    };
+
+    const failWith = (err: GeolocationPositionError) => {
+      let msg = 'Unable to get location. Please check that location is ON and try again.';
+      if (err.code === err.PERMISSION_DENIED) {
+        msg = 'Location permission is blocked. Browser: tap the lock icon in the address bar, allow Location, then retry. App: go to Settings → Apps → OGas → Permissions → Location → Allow, then retry.';
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        msg = 'GPS signal not found. Step outside or near a window and tap Capture again.';
+      } else if (err.code === err.TIMEOUT) {
+        msg = 'GPS is taking too long. Move to an open area and tap Capture again.';
+      }
+      setError(msg);
+      setLocating(false);
+    };
+
+    // Attempt 1: high accuracy, but accept a recent cached fix (max 1 min old)
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-        });
-        setLocating(false);
-      },
+      onSuccess,
       () => {
-        setError('Unable to get location. Please enable GPS and try again.');
-        setLocating(false);
+        // Attempt 2 (fallback): network/Wi-Fi location is accurate enough to pin a shop
+        navigator.geolocation.getCurrentPosition(
+          onSuccess,
+          (err2) => failWith(err2),
+          { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
     );
   };
 
@@ -231,10 +251,10 @@ export default function SellerRegisterPage() {
         {step === 2 && (
           <div className="space-y-4">
             <h2 className="text-lg font-extrabold flex items-center gap-2" style={{ color: NAVY }}><MapPin size={20} style={{ color: TEAL }} /> Accurate Location</h2>
-            <p className="text-sm font-bold" style={{ color: '#8a8f98' }}>You must be physically at your selling location right now. We capture high-accuracy GPS.</p>
+            <p className="text-sm font-bold" style={{ color: '#8a8f98' }}>Be at or near your selling location. We capture your GPS so buyers nearby can find you.</p>
             {!location ? (
               <button onClick={captureLocation} disabled={locating} className="w-full text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2" style={{ background: NAVY }}>
-                {locating ? (<><Loader2 className="animate-spin" size={20} /> Getting precise location...</>) : (<><MapPin size={20} /> I am at my selling location — Capture GPS</>)}
+                {locating ? (<><Loader2 className="animate-spin" size={20} /> Getting location... (up to 30 secs)</>) : (<><MapPin size={20} /> I am at my selling location — Capture GPS</>)}
               </button>
             ) : (
               <div className="bg-white border rounded-xl p-4 space-y-3" style={{ borderColor: '#e6e9ee', boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
