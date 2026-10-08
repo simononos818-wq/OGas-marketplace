@@ -21,17 +21,37 @@ export async function POST(req: NextRequest) {
     if (!bankCode) {
       return NextResponse.json({ success: false, message: 'Select your bank' }, { status: 400 });
     }
-    if (!accountName || accountName.length < 2) {
-      return NextResponse.json({ success: false, message: 'Enter account name' }, { status: 400 });
-    }
 
     const sellerRef = adminDb.collection('sellers').doc(user.uid);
     const sellerSnap = await sellerRef.get();
     if (!sellerSnap.exists) {
       return NextResponse.json({ success: false, message: 'Seller profile not found. Register as a seller first.' }, { status: 404 });
     }
+    const existing = sellerSnap.data()!;
+
+    // PAYOUT LOCK: once a seller has received at least one successful payout,
+    // the payout account cannot be changed in-app (kills account-takeover
+    // bank-swap fraud). Changes go through support after identity checks.
+    const alreadyHasBank = Boolean(existing.accountNumber && existing.bankCode);
+    const isChange = alreadyHasBank && (existing.accountNumber !== accountNumber || existing.bankCode !== bankCode);
+    if (isChange) {
+      const paidSnap = await adminDb
+        .collection('orders')
+        .where('sellerId', '==', user.uid)
+        .where('payoutStatus', '==', 'sent')
+        .limit(1)
+        .get();
+      if (!paidSnap.empty || existing.bankLocked === true) {
+        return NextResponse.json({
+          success: false,
+          locked: true,
+          message: 'Payout account is locked after your first payout. To change it, contact OGas support for identity verification.',
+        }, { status: 423 });
+      }
+    }
 
     const secret = process.env.PAYSTACK_SECRET_KEY;
+    let resolved = false;
     if (secret) {
       try {
         const r = await fetch(
@@ -41,10 +61,15 @@ export async function POST(req: NextRequest) {
         const j = await r.json();
         if (j.status && j.data?.account_name) {
           accountName = String(j.data.account_name).trim();
+          resolved = true;
         }
       } catch (err) {
         console.error('bank resolve failed', err);
       }
+    }
+
+    if (!accountName || accountName.length < 2) {
+      return NextResponse.json({ success: false, message: 'Could not verify account name. Check the details and try again.' }, { status: 400 });
     }
 
     await sellerRef.set(
@@ -53,8 +78,10 @@ export async function POST(req: NextRequest) {
         bankCode,
         bankName,
         accountName,
+        bankResolved: resolved,
         bankUpdatedAt: new Date(),
         paystackRecipientCode: null,
+        'gates.bankLinked': true,
       },
       { merge: true },
     );
@@ -88,7 +115,11 @@ export async function POST(req: NextRequest) {
             retried++;
             try {
               const r: any = await paySellerFromEscrow(d.id, 'bank_details_added');
-              if (r && (r.payoutStatus === 'sent' || r.success === true)) paidNow++;
+              if (r && (r.payoutStatus === 'sent' || r.success === true)) {
+                paidNow++;
+                // First successful payout locks the bank account
+                await sellerRef.set({ bankLocked: true }, { merge: true });
+              }
             } catch (e) {
               console.error('payout retry failed for', d.id, e);
             }
@@ -129,6 +160,7 @@ export async function GET(req: NextRequest) {
       bankCode: s.bankCode || '',
       bankName: s.bankName || '',
       accountName: s.accountName || '',
+      bankLocked: Boolean(s.bankLocked),
       hasBank: Boolean(s.accountNumber && s.bankCode),
     });
   } catch (error: any) {
