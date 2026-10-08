@@ -13,9 +13,13 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const OGas_EMAIL = 'support@ogaslpgmarketplace.com';
 const COMMISSION_RATE = 0.10;
 
-// October launch promo: order 10kg or more, get 1kg free gas in your Tank.
+// Gas Points: 1 GP = N1, spendable only inside the app (max 10% of an order).
+const REFERRAL_GP = 300;
+
+// October launch promo: order 10kg or more, get 1,500 GP (≈ 1kg free gas).
 const PROMO_MIN_KG = 10;
 const PROMO_BONUS_KG = 1;
+const PROMO_GP = 1500;
 const PROMO_END = new Date('2026-11-01T00:00:00+01:00'); // ends midnight Oct 31 WAT
 
 // ═══════════════════════════════════════════════════════════════
@@ -335,7 +339,12 @@ exports.notifyOnOrderChange = onDocumentUpdated('orders/{orderId}', async (event
   }
 });
 
-// ===== REFERRAL ENGINE (90-Day Program) =====
+// ===== REFERRAL ENGINE (Gas Points) =====
+// Buyer's first completed order:
+//   - buyer gets 300 GP (in-app credit, spendable up to 10% off any order)
+//   - referrer gets 300 GP too — UNLESS the referrer is a registered seller,
+//     who keeps the N300 cash bonus in the Earnings Tank (wallet).
+// Pays exactly once per buyer (referrals/{referrerId}_{buyerId} idempotency).
 exports.onReferralFirstOrder = onDocumentUpdated(
   { document: "orders/{orderId}", region: "europe-west3" },
   async (event) => {
@@ -352,51 +361,71 @@ exports.onReferralFirstOrder = onDocumentUpdated(
     const buyer = buyerSnap.data();
     if (!buyer) return;
 
-    const sellerId = buyer.referredBy;
-    if (!sellerId) return; // not a referral signup
+    const referrerId = buyer.referredBy;
+    if (!referrerId) return; // not a referral signup
 
     // One referral pays exactly once
-    const referralRef = db.collection('referrals').doc(sellerId + '_' + buyerId);
+    const referralRef = db.collection('referrals').doc(referrerId + '_' + buyerId);
     const snap = await referralRef.get();
     if (snap.exists && snap.data() && snap.data().paid) return;
 
+    // Sellers earn cash; everyone else earns Gas Points
+    const referrerSellerSnap = await db.collection('sellers').doc(referrerId).get();
+    const referrerIsSeller = referrerSellerSnap.exists;
+
     const batch = db.batch();
     batch.set(referralRef, {
-      sellerId: sellerId, buyerId: buyerId, orderId: event.params.orderId,
-      amount: 300, paid: true,
+      referrerId: referrerId, buyerId: buyerId, orderId: event.params.orderId,
+      amount: REFERRAL_GP, currency: referrerIsSeller ? 'NGN' : 'GP', paid: true,
       paidAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    batch.set(db.collection('wallets').doc(sellerId), {
-      balance: admin.firestore.FieldValue.increment(300),
-      totalReferralBonus: admin.firestore.FieldValue.increment(300),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
-    batch.set(db.collection('wallets').doc(buyerId), {
-      gasCredit: admin.firestore.FieldValue.increment(300),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    // Mirror buyer gas credit onto the user doc (Kitchen page reads it there)
+
+    if (referrerIsSeller) {
+      batch.set(db.collection('wallets').doc(referrerId), {
+        balance: admin.firestore.FieldValue.increment(REFERRAL_GP),
+        totalReferralBonus: admin.firestore.FieldValue.increment(REFERRAL_GP),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      batch.set(db.collection('walletTransactions').doc(), {
+        userId: referrerId, type: 'referral_bonus', amount: REFERRAL_GP,
+        orderId: event.params.orderId, counterparty: buyerId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      batch.set(db.collection('users').doc(referrerId), {
+        gasPoints: admin.firestore.FieldValue.increment(REFERRAL_GP),
+      }, { merge: true });
+      batch.set(db.collection('pointsTransactions').doc(), {
+        uid: referrerId, type: 'earn', points: REFERRAL_GP,
+        reason: 'referral', orderId: event.params.orderId, counterparty: buyerId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Buyer welcome bonus: 300 Gas Points
     batch.set(db.collection('users').doc(buyerId), {
-      gasCredit: admin.firestore.FieldValue.increment(300),
+      gasPoints: admin.firestore.FieldValue.increment(REFERRAL_GP),
     }, { merge: true });
-    batch.set(db.collection('walletTransactions').doc(), {
-      userId: sellerId, type: 'referral_bonus', amount: 300,
-      orderId: event.params.orderId, counterparty: buyerId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    batch.set(db.collection('walletTransactions').doc(), {
-      userId: buyerId, type: 'first_order_credit', amount: 300,
-      orderId: event.params.orderId, counterparty: sellerId,
+    batch.set(db.collection('pointsTransactions').doc(), {
+      uid: buyerId, type: 'earn', points: REFERRAL_GP,
+      reason: 'referral_buyer', orderId: event.params.orderId, counterparty: referrerId,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     await batch.commit();
 
-    await sendPush(sellerId, 'Referral Bonus!', 'N300 has entered your Earnings Tank.', { type: 'referral' });
-    await sendPush(buyerId, 'Welcome Bonus!', 'N300 gas credit has entered your Gas Tank.', { type: 'referral' });
-    console.log('Referral paid: ' + sellerId + ' <- ' + buyerId);
+    await sendPush(
+      referrerId,
+      'Referral Bonus!',
+      referrerIsSeller
+        ? 'N300 has entered your Earnings Tank.'
+        : `${REFERRAL_GP} Gas Points have entered your tank.`,
+      { type: 'referral' }
+    );
+    await sendPush(buyerId, 'Welcome Bonus!', `${REFERRAL_GP} Gas Points have entered your tank.`, { type: 'referral' });
+    console.log('Referral paid: ' + referrerId + ' <- ' + buyerId + (referrerIsSeller ? ' (cash)' : ' (GP)'));
   });
 
-// ===== OCTOBER LAUNCH PROMO: order 10kg+, get 1kg free gas =====
+// ===== OCTOBER LAUNCH PROMO: order 10kg+, get 1kg free gas (1,500 GP) =====
 // Runs on every order completion until Oct 31 2026 (WAT). One bonus per order,
 // repeat orders qualify — we WANT heavy users this month.
 exports.onPromoFreeKg = onDocumentUpdated(
@@ -426,19 +455,17 @@ exports.onPromoFreeKg = onDocumentUpdated(
     const batch = db.batch();
     batch.set(promoRef, {
       orderId, buyerId, promo: 'oct2026_1kg_free',
-      kgOrdered: kg, bonusKg: PROMO_BONUS_KG,
+      kgOrdered: kg, bonusKg: PROMO_BONUS_KG, bonusGP: PROMO_GP,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     batch.set(db.collection('users').doc(buyerId), {
       promoKg: admin.firestore.FieldValue.increment(PROMO_BONUS_KG),
+      gasPoints: admin.firestore.FieldValue.increment(PROMO_GP),
     }, { merge: true });
-    batch.set(db.collection('wallets').doc(buyerId), {
-      promoKg: admin.firestore.FieldValue.increment(PROMO_BONUS_KG),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    batch.set(db.collection('walletTransactions').doc(), {
-      userId: buyerId, type: 'promo_free_kg', amount: 0, bonusKg: PROMO_BONUS_KG,
-      orderId, note: 'October promo: 1kg free gas for ordering 10kg+',
+    batch.set(db.collection('pointsTransactions').doc(), {
+      uid: buyerId, type: 'earn', points: PROMO_GP,
+      reason: 'promo_oct2026', orderId,
+      note: 'October promo: 1kg free gas for ordering 10kg+',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     await batch.commit();
@@ -446,8 +473,8 @@ exports.onPromoFreeKg = onDocumentUpdated(
     await sendPush(
       buyerId,
       'Free 1kg Gas!',
-      `Your ${kg}kg order earned you 1kg free gas in your Tank. Promo ends Oct 31.`,
+      `Your ${kg}kg order earned you ${PROMO_GP.toLocaleString()} Gas Points (1kg free). Promo ends Oct 31.`,
       { type: 'promo', orderId }
     );
-    console.log(`Promo 1kg credited: ${buyerId} (order ${orderId}, ${kg}kg)`);
+    console.log(`Promo credited: ${buyerId} +${PROMO_GP}GP (order ${orderId}, ${kg}kg)`);
   });
