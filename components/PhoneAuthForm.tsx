@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { useAuthContext } from '@/app/context/AuthContext';
 import { isNgPhone, normalizeNgPhone } from '@/lib/phone';
+import { signInWithCustomToken } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 
 const NAVY = '#16305e';
 const TEAL = '#12a5b0';
@@ -23,6 +26,8 @@ export default function PhoneAuthForm({
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Which channel actually delivered the code — decides how we verify
+  const [channel, setChannel] = useState<'termii' | 'firebase'>('termii');
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,10 +38,35 @@ export default function PhoneAuthForm({
     }
     setLoading(true);
     try {
+      // Preferred: Termii OTP (reliable for Nigerian numbers, works in the app)
+      const res = await fetch('/api/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, purpose: 'login' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setChannel('termii');
+        setStep('code');
+        return;
+      }
+      // Termii unavailable (not configured / not approved yet) — fall back to Firebase SMS
+      if (res.status === 429) {
+        setError(data.error || 'Too many codes sent. Try again later.');
+        return;
+      }
       await sendPhoneCode(phone);
+      setChannel('firebase');
       setStep('code');
     } catch (err: any) {
-      setError(err.message?.replace('Firebase: ', '') || 'Could not send SMS. Try again.');
+      // Last resort: Firebase phone auth
+      try {
+        await sendPhoneCode(phone);
+        setChannel('firebase');
+        setStep('code');
+      } catch (err2: any) {
+        setError(err2.message?.replace('Firebase: ', '') || 'Could not send SMS. Try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -51,8 +81,42 @@ export default function PhoneAuthForm({
     }
     setLoading(true);
     try {
-      const user = await confirmPhoneCode(code, { name, asSeller });
-      onVerified(user.uid);
+      let uid: string;
+      if (channel === 'termii') {
+        const res = await fetch('/api/otp/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, pin: code.trim() }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok || !data.token) {
+          throw new Error(data.error || 'Wrong or expired code');
+        }
+        const cred = await signInWithCustomToken(auth, data.token);
+        uid = cred.user.uid;
+
+        // Ensure the user profile exists (name, role, referral credit)
+        const uref = doc(db, 'users', uid);
+        const existing = await getDoc(uref);
+        const prevRole = existing.data()?.role;
+        const role = prevRole === 'admin' ? 'admin' : prevRole === 'seller' || asSeller ? 'seller' : prevRole || 'buyer';
+        await setDoc(
+          uref,
+          {
+            phone: normalizeNgPhone(phone),
+            name: name || existing.data()?.name || '',
+            role,
+            updatedAt: serverTimestamp(),
+            ...(existing.exists() ? {} : { createdAt: serverTimestamp() }),
+            ...(existing.exists() ? {} : { referredBy: localStorage.getItem('ogas_ref') || null }),
+          },
+          { merge: true },
+        );
+      } else {
+        const user = await confirmPhoneCode(code, { name, asSeller });
+        uid = user.uid;
+      }
+      onVerified(uid);
     } catch (err: any) {
       setError(err.message?.replace('Firebase: ', '') || 'Wrong or expired code');
     } finally {
