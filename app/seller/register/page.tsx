@@ -4,13 +4,79 @@ import SellerEntryCards from "../../../components/SellerEntryCards";
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../../../lib/firebase';
 import { MapPin, Camera, CheckCircle, Loader2, AlertCircle, ChevronLeft } from 'lucide-react';
 
 const NAVY = '#16305e';
 const TEAL = '#12a5b0';
+
+// ---------- Verification helpers ----------
+
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Minimal JPEG EXIF GPS extractor (no dependency). Returns null if no GPS data.
+async function extractExifGps(file: File): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    if (buf[0] !== 0xff || buf[1] !== 0xd8) return null; // not JPEG
+    let offset = 2;
+    while (offset < buf.length - 4) {
+      if (buf[offset] !== 0xff) return null;
+      const marker = buf[offset + 1];
+      const len = (buf[offset + 2] << 8) | buf[offset + 3];
+      if (marker === 0xe1) {
+        const dv = new DataView(buf.buffer, buf.byteOffset + offset + 4, len - 2);
+        if (dv.getUint32(0) !== 0x45786966) return null; // "Exif\0\0"
+        const tiff = 6;
+        const little = dv.getUint16(tiff) === 0x4949;
+        const u16 = (o: number) => dv.getUint16(tiff + o, little);
+        const u32 = (o: number) => dv.getUint32(tiff + o, little);
+        const ifd0 = u32(4);
+        const entries = u16(ifd0);
+        let gpsPtr = 0;
+        for (let i = 0; i < entries; i++) {
+          const e = ifd0 + 2 + i * 12;
+          if (u16(e) === 0x8825) gpsPtr = u32(e + 8);
+        }
+        if (!gpsPtr) return null;
+        const gEntries = u16(gpsPtr);
+        let latRef = 0, lngRef = 0, latOff = 0, lngOff = 0;
+        for (let i = 0; i < gEntries; i++) {
+          const e = gpsPtr + 2 + i * 12;
+          const tag = u16(e);
+          if (tag === 1) latRef = dv.getUint8(tiff + e + 8);
+          else if (tag === 2) latOff = u32(e + 8);
+          else if (tag === 3) lngRef = dv.getUint8(tiff + e + 8);
+          else if (tag === 4) lngOff = u32(e + 8);
+        }
+        if (!latOff || !lngOff) return null;
+        const rat = (o: number) => u32(o) / (u32(o + 4) || 1);
+        const dms = (o: number) => rat(o) + rat(o + 8) / 60 + rat(o + 16) / 3600;
+        let lat = dms(latOff);
+        let lng = dms(lngOff);
+        if (latRef === 0x53) lat = -lat; // S
+        if (lngRef === 0x57) lng = -lng; // W
+        if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+        return { lat, lng };
+      }
+      offset += 2 + len;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export default function SellerRegisterPage() {
   const router = useRouter();
@@ -121,10 +187,6 @@ export default function SellerRegisterPage() {
       setError('Please capture and confirm your location');
       return;
     }
-    if (false) { /* Photos optional — upload from dashboard */
-      setError('Please upload both photos');
-      return;
-    }
 
     setLoading(true);
     setError('');
@@ -134,6 +196,43 @@ export default function SellerRegisterPage() {
       if (!frontPhoto || !stockPhoto) {
         throw new Error('Both photos are required');
       }
+
+      // ---- Smart verification checks (run before submit) ----
+      const flags: Record<string, any> = {
+        weakGpsFix: location.accuracy > 150,
+        duplicatePhone: false,
+        frontPhotoGps: null as null | { lat: number; lng: number },
+        stockPhotoGps: null as null | { lat: number; lng: number },
+        photoGpsMismatch: false,
+        checkedAt: new Date().toISOString(),
+      };
+
+      // 1) EXIF GPS cross-check: photo location must be near captured GPS
+      const [frontGps, stockGps] = await Promise.all([
+        extractExifGps(frontPhoto),
+        extractExifGps(stockPhoto),
+      ]);
+      flags.frontPhotoGps = frontGps;
+      flags.stockPhotoGps = stockGps;
+      for (const g of [frontGps, stockGps]) {
+        if (g && haversineMeters(g.lat, g.lng, location.lat, location.lng) > 500) {
+          flags.photoGpsMismatch = true;
+        }
+      }
+
+      // 2) Duplicate phone check (best-effort; rules may limit reads)
+      try {
+        const phoneQ = query(collection(db, 'sellers'), where('phone', '==', form.phone));
+        const phoneSnap = await getDocs(phoneQ);
+        flags.duplicatePhone = phoneSnap.docs.some((d) => d.id !== uid);
+      } catch {
+        /* best-effort */
+      }
+
+      flags.autoChecksPassed = !flags.photoGpsMismatch && !flags.duplicatePhone && !flags.weakGpsFix
+        ? 3
+        : [!flags.photoGpsMismatch, !flags.duplicatePhone, !flags.weakGpsFix].filter(Boolean).length;
+
       const frontUrl = await uploadImage(frontPhoto, `sellers/${uid}/front.jpg`);
       const stockUrl = await uploadImage(stockPhoto, `sellers/${uid}/stock.jpg`);
 
@@ -165,6 +264,15 @@ export default function SellerRegisterPage() {
         isVerified: false,
         isApproved: false,
         isActive: false,
+        level: 0,
+        gates: {
+          profile: true,
+          location: true,
+          photos: true,
+          bankLinked: false,
+          approved: false,
+        },
+        verificationFlags: flags,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -281,6 +389,7 @@ export default function SellerRegisterPage() {
         {step === 3 && (
           <div className="space-y-5">
             <h2 className="text-lg font-extrabold" style={{ color: NAVY }}>Photos & Pricing</h2>
+            <p className="text-xs font-bold" style={{ color: '#8a8f98' }}>Take the photos at your shop — they help us verify you faster.</p>
             <div className="grid grid-cols-2 gap-3">
               <label className="border border-dashed rounded-xl p-4 text-center cursor-pointer" style={{ background: '#fff', borderColor: '#c3cbd4' }}>
                 {frontPreview ? (<img src={frontPreview} alt="Front" className="w-full h-32 object-cover rounded-lg" />) : (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#8a8f98' }}><Camera size={28} /><span className="text-xs mt-2 font-bold">Front of location</span></div>)}
@@ -305,7 +414,7 @@ export default function SellerRegisterPage() {
             <div className="flex gap-3 pt-2">
               <button onClick={() => setStep(2)} className="flex-1 py-3 rounded-xl font-bold" style={{ background: '#e6e9ee', color: NAVY }}>Back</button>
               <button onClick={handleSubmit} disabled={loading || !frontPhoto || !stockPhoto} className="flex-1 text-white font-bold py-3 rounded-xl disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: TEAL }}>
-                {loading ? (<><Loader2 className="animate-spin" size={18} /> Submitting...</>) : 'Submit Application'}
+                {loading ? (<><Loader2 className="animate-spin" size={18} /> Verifying & submitting...</>) : 'Submit Application'}
               </button>
             </div>
           </div>
