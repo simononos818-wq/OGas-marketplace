@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
 import Link from 'next/link';
@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [verifyNotice, setVerifyNotice] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -42,6 +43,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setVerifyNotice('');
     try {
       if (isRegister) {
         const userCredential = await createUserWithEmailAndPassword(auth, form.email, form.password);
@@ -55,6 +57,12 @@ export default function LoginPage() {
           addresses: [],
           referredBy: localStorage.getItem('ogas_ref') || null,
         });
+        try {
+          await sendEmailVerification(userCredential.user);
+          setVerifyNotice('A confirmation email has been sent to ' + form.email + ' — please verify it (check spam too).');
+        } catch {
+          /* verification email is best-effort */
+        }
         await afterAuth(userCredential.user.uid, form.isSeller);
       } else {
         const userCredential = await signInWithEmailAndPassword(auth, form.email, form.password);
@@ -113,6 +121,11 @@ export default function LoginPage() {
             {error && (
               <div className="border rounded-xl p-3 mb-4 text-sm text-center font-bold" style={{ background: '#fdeceb', borderColor: '#f5b3ae', color: '#e74c3c' }}>
                 {error}
+              </div>
+            )}
+            {verifyNotice && (
+              <div className="border rounded-xl p-3 mb-4 text-sm text-center font-bold" style={{ background: '#e7f9ee', borderColor: '#a7e8c4', color: '#0fa958' }}>
+                {verifyNotice}
               </div>
             )}
             <form onSubmit={handleEmail} className="space-y-4">
