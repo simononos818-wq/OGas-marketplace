@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flame, User, ClipboardList, MessageSquare, Fuel } from 'lucide-react';
+import { Flame, User, ClipboardList, MessageSquare, CookingPot } from 'lucide-react';
 import { useChatList } from '@/hooks/useChat';
 
 export default function BottomNav() {
@@ -12,7 +12,7 @@ export default function BottomNav() {
   const navItems = [
     { href: '/', icon: Flame, label: 'Gas' },
     { href: '/orders', icon: ClipboardList, label: 'Orders' },
-    { href: '/tank', icon: Fuel, label: 'Tank' },
+    { href: '/kitchen', icon: CookingPot, label: 'Kitchen' },
     { href: '/chat', icon: MessageSquare, label: 'Chat' },
     { href: '/profile', icon: User, label: 'Me' },
   ];
@@ -32,7 +32,9 @@ export default function BottomNav() {
           const isActive =
             item.href === '/'
               ? pathname === '/' || pathname?.startsWith('/calculator') || pathname?.startsWith('/buy')
-              : pathname === item.href || pathname?.startsWith(item.href + '/');
+              : item.href === '/kitchen'
+                ? pathname === '/kitchen' || pathname?.startsWith('/tank')
+                : pathname === item.href || pathname?.startsWith(item.href + '/');
           return (
             <Link
               key={item.href}
