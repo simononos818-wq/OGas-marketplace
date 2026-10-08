@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/hooks/useAuth';
 import { authHeaders } from '@/lib/client-auth';
-import { ArrowLeft, Banknote, CheckCircle, Loader2, Shield } from 'lucide-react';
+import { ArrowLeft, Banknote, CheckCircle, Loader2, Shield, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 const NIGERIAN_BANKS = [
@@ -44,7 +44,13 @@ export default function SellerBankPage() {
   const [loadingExisting, setLoadingExisting] = useState(true);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
-  const [resolvedNote, setResolvedNote] = useState('');
+  const [bankLocked, setBankLocked] = useState(false);
+
+  // Live account-name resolution state
+  const [resolving, setResolving] = useState(false);
+  const [resolvedName, setResolvedName] = useState('');
+  const [resolveError, setResolveError] = useState('');
+  const resolveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedBank = NIGERIAN_BANKS.find((b) => b.code === form.bankCode);
 
@@ -66,6 +72,8 @@ export default function SellerBankPage() {
             bankName: data.bankName || '',
             accountName: data.accountName || '',
           });
+          setResolvedName(data.accountName || '');
+          setBankLocked(Boolean(data.bankLocked));
         }
       } catch {
         /* ignore */
@@ -78,6 +86,45 @@ export default function SellerBankPage() {
     };
   }, [user]);
 
+  // Live-resolve the account name as soon as bank + 10 digits are present
+  useEffect(() => {
+    setResolvedName('');
+    setResolveError('');
+    if (resolveTimer.current) clearTimeout(resolveTimer.current);
+
+    if (form.accountNumber.length !== 10 || !form.bankCode || !user) {
+      setResolving(false);
+      return;
+    }
+
+    resolveTimer.current = setTimeout(async () => {
+      setResolving(true);
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(
+          `/api/seller-bank/resolve?accountNumber=${form.accountNumber}&bankCode=${encodeURIComponent(form.bankCode)}`,
+          { headers },
+        );
+        const data = await res.json();
+        if (data.success && data.accountName) {
+          setResolvedName(data.accountName);
+          setForm((f) => ({ ...f, accountName: data.accountName }));
+        } else {
+          setResolveError(data.message || 'Could not verify this account.');
+        }
+      } catch {
+        setResolveError('Network issue — could not verify. Try again.');
+      } finally {
+        setResolving(false);
+      }
+    }, 600);
+
+    return () => {
+      if (resolveTimer.current) clearTimeout(resolveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.accountNumber, form.bankCode, user]);
+
   const handleSave = async () => {
     if (!form.accountNumber || form.accountNumber.length !== 10) {
       setError('Enter a valid 10-digit account number');
@@ -87,13 +134,12 @@ export default function SellerBankPage() {
       setError('Select your bank');
       return;
     }
-    if (!form.accountName.trim()) {
-      setError('Enter account name');
+    if (!resolvedName) {
+      setError('Wait for the account name to verify before saving');
       return;
     }
 
     setError('');
-    setResolvedNote('');
     setLoading(true);
 
     try {
@@ -105,15 +151,13 @@ export default function SellerBankPage() {
           accountNumber: form.accountNumber,
           bankCode: form.bankCode,
           bankName: selectedBank?.name || form.bankName,
-          accountName: form.accountName.trim(),
+          accountName: resolvedName,
         }),
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.message || 'Failed to save');
-
-      if (data.accountName && data.accountName !== form.accountName) {
-        setForm((f) => ({ ...f, accountName: data.accountName }));
-        setResolvedNote(`Verified name: ${data.accountName}`);
+      if (!data.success) {
+        if (data.locked) setBankLocked(true);
+        throw new Error(data.message || 'Failed to save');
       }
       setSaved(true);
     } catch (err: any) {
@@ -169,7 +213,7 @@ export default function SellerBankPage() {
             <div className="text-center py-8">
               <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
               <h3 className="font-semibold text-lg">Bank details saved</h3>
-              {resolvedNote && <p className="text-sm text-green-400 mt-2">{resolvedNote}</p>}
+              {resolvedName && <p className="text-sm text-green-400 mt-2">✔ {resolvedName}</p>}
               <p className="text-sm text-gray-400 mt-2">
                 You will receive payouts here when buyers confirm or enter the Door Code.
               </p>
@@ -179,6 +223,19 @@ export default function SellerBankPage() {
               >
                 Back to dashboard
               </Link>
+            </div>
+          ) : bankLocked ? (
+            <div className="text-center py-8">
+              <Lock className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
+              <h3 className="font-semibold text-lg">Payout account locked</h3>
+              <p className="text-sm text-green-400 mt-2">✔ {form.accountName}</p>
+              <p className="text-sm text-gray-400 mt-2">
+                {form.bankName} · {form.accountNumber}
+              </p>
+              <p className="text-sm text-gray-500 mt-4">
+                For your security, the payout account cannot be changed after payouts have started.
+                To change it, contact OGas support for identity verification.
+              </p>
             </div>
           ) : (
             <>
@@ -220,16 +277,23 @@ export default function SellerBankPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Account name</label>
-                  <input
-                    type="text"
-                    className="w-full p-3 border border-gray-700 rounded-xl bg-gray-950 text-white"
-                    placeholder="Name as on the account"
-                    value={form.accountName}
-                    onChange={(e) => setForm({ ...form, accountName: e.target.value })}
-                  />
-                </div>
+                {(resolving || resolvedName || resolveError) && (
+                  <div className="rounded-xl px-3 py-2.5 text-sm font-semibold border"
+                    style={{
+                      background: resolvedName ? 'rgba(34,197,94,0.08)' : resolveError ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)',
+                      borderColor: resolvedName ? 'rgba(34,197,94,0.3)' : resolveError ? 'rgba(239,68,68,0.3)' : '#374151',
+                      color: resolvedName ? '#4ade80' : resolveError ? '#f87171' : '#9ca3af',
+                    }}
+                  >
+                    {resolving && (
+                      <span className="flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin" /> Verifying account…
+                      </span>
+                    )}
+                    {!resolving && resolvedName && <span>✔ {resolvedName}</span>}
+                    {!resolving && !resolvedName && resolveError && <span>{resolveError}</span>}
+                  </div>
+                )}
 
                 {error && (
                   <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
@@ -239,13 +303,13 @@ export default function SellerBankPage() {
 
                 <button
                   onClick={handleSave}
-                  disabled={loading}
+                  disabled={loading || resolving || !resolvedName}
                   className="w-full py-3.5 bg-orange-500 text-black font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Verifying and saving…
+                      Saving…
                     </>
                   ) : (
                     'Save payout account'
