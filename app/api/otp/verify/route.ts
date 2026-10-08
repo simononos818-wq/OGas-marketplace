@@ -1,8 +1,10 @@
 // POST /api/otp/verify  { phone: "08133110237", pin: "123456" }
 // Finds the phone's latest unverified OTP, max 3 attempts, marks user verified.
+// On success returns a Firebase custom token so the client can sign in
+// without relying on Firebase's own SMS (which is unreliable for NG numbers).
 import { NextResponse } from "next/server";
 import { verifyOtp, toE164Ng } from "@/lib/termii";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 
 export async function POST(req: Request) {
@@ -53,12 +55,18 @@ export async function POST(req: Request) {
     }
 
     await doc.ref.update({ verified: true, verifiedAt: new Date() });
-    await adminDb.collection("users").doc(to).set(
+
+    // Stable Firebase UID keyed to the phone number, so repeat logins land
+    // on the same account regardless of which OTP channel was used.
+    const uid = `tel_${to}`;
+    await adminDb.collection("users").doc(uid).set(
       { phone: to, phoneVerified: true, verifiedAt: new Date() },
       { merge: true }
     );
 
-    return NextResponse.json({ ok: true });
+    const token = await adminAuth.createCustomToken(uid, { phone: to });
+
+    return NextResponse.json({ ok: true, token, uid });
   } catch (e) {
     console.error("otp/verify:", e);
     return NextResponse.json({ ok: false, error: "Could not check code. Try again." }, { status: 500 });
