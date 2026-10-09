@@ -23,6 +23,8 @@ const REASON_LABELS: Record<string, string> = {
   referral_buyer: 'Welcome bonus',
   promo_oct2026: 'October promo · free gas',
   order_discount: 'Order discount',
+  order_cashback: 'GasBack · order reward',
+  daily_checkin: 'Daily check-in',
 };
 
 const REASON_ICONS: Record<string, string> = {
@@ -30,6 +32,8 @@ const REASON_ICONS: Record<string, string> = {
   referral_buyer: '🎉',
   promo_oct2026: '🎁',
   order_discount: '🔥',
+  order_cashback: '💸',
+  daily_checkin: '☀️',
 };
 
 // 1,500 GP ≈ 1kg of free gas at typical street prices
@@ -43,6 +47,9 @@ export default function TankPage() {
   const [balance, setBalance] = useState(0);
   const [history, setHistory] = useState<PointEntry[]>([]);
   const [copied, setCopied] = useState(false);
+  const [streak, setStreak] = useState(0);
+  const [checkedInToday, setCheckedInToday] = useState(false);
+  const [checkinLoading, setCheckinLoading] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -63,6 +70,9 @@ export default function TankPage() {
         const snap = await getDoc(doc(db, 'users', user.uid));
         const gp = Math.floor(Number(snap.data()?.gasPoints) || 0);
         setBalance(Math.max(0, gp));
+        setStreak(Number(snap.data()?.checkInStreak) || 0);
+        const todayWAT = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 10);
+        setCheckedInToday(snap.data()?.lastCheckIn === todayWAT);
 
         const q = query(collection(db, 'pointsTransactions'), where('uid', '==', user.uid));
         const txSnap = await getDocs(q);
@@ -85,6 +95,28 @@ export default function TankPage() {
       }
     })();
   }, [authReady, user]);
+
+  const doCheckIn = async () => {
+    if (!user || checkinLoading || checkedInToday) return;
+    setCheckinLoading(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/points/checkin', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBalance(data.balance);
+        setStreak(data.streak);
+        setCheckedInToday(true);
+      }
+    } catch {
+      /* silent — balance stays as-is */
+    } finally {
+      setCheckinLoading(false);
+    }
+  };
 
   const referralLink = useMemo(() => {
     if (!user?.uid) return '';
@@ -216,6 +248,35 @@ export default function TankPage() {
 
         {user && !loading && (
           <>
+            {/* Daily check-in */}
+            <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)' }}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Flame size={15} color={TEAL} />
+                <p className="text-[13px] font-extrabold text-white">Daily check-in</p>
+                {streak > 0 && (
+                  <span className="ml-auto text-[10.5px] font-black px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,166,35,.15)', color: '#f5a623' }}>
+                    {streak}-day streak
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] mb-3" style={{ color: '#8fa6c9' }}>
+                Open the app every day and your tank grows. Longer streaks pay more — every 7th day is a +50 GP bonus.
+              </p>
+              <button
+                onClick={doCheckIn}
+                disabled={checkinLoading || checkedInToday}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-extrabold text-[13px]"
+                style={{
+                  background: checkedInToday ? 'rgba(255,255,255,.12)' : TEAL,
+                  color: checkedInToday ? '#8fa6c9' : '#062a2b',
+                  transition: 'background .2s',
+                }}
+              >
+                {checkinLoading ? <Loader2 size={16} className="animate-spin" /> : checkedInToday ? <Check size={16} /> : <Flame size={16} />}
+                {checkedInToday ? 'Collected — come back tomorrow' : 'Collect today’s Gas Points'}
+              </button>
+            </div>
+
             {/* Invite card */}
             <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)' }}>
               <div className="flex items-center gap-2 mb-1.5">
@@ -258,9 +319,19 @@ export default function TankPage() {
                 </div>
                 <div className="flex-1">
                   <p className="text-[12px] font-bold text-white">October promo</p>
-                  <p className="text-[10.5px]" style={{ color: '#8fa6c9' }}>Order 10kg+ before Oct 31</p>
+                  <p className="text-[10.5px]" style={{ color: '#8fa6c9' }}>Order 5kg+ before Oct 31</p>
                 </div>
-                <span className="text-[12px] font-black" style={{ color: '#f5a623' }}>+1,500 GP</span>
+                <span className="text-[12px] font-black" style={{ color: '#f5a623' }}>+500 GP</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(45,212,194,.12)' }}>
+                  <Flame size={16} color={TEAL} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[12px] font-bold text-white">GasBack on every order</p>
+                  <p className="text-[10.5px]" style={{ color: '#8fa6c9' }}>Pay online, get 2% back in GP — spending earns too</p>
+                </div>
+                <span className="text-[12px] font-black" style={{ color: TEAL }}>+2%</span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(45,212,194,.12)' }}>
