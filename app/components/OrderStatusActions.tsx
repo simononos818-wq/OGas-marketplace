@@ -3,9 +3,8 @@
 import { useState } from 'react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/useAuth'; // change this if your auth hook has a different name
-import { Loader2, CheckCircle2, Truck, PackageCheck, XCircle, 
-AlertTriangle } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { Loader2, CheckCircle2, Truck, PackageCheck, XCircle, AlertTriangle } from 'lucide-react';
 import { canTransition, OrderStatus } from '@/lib/orderStatus';
 
 interface Props {
@@ -43,13 +42,10 @@ export default function OrderStatusActions({
         updatedAt: serverTimestamp(),
       };
 
-      if (next === 'accepted') payload.sellerAcceptedAt = 
-serverTimestamp();
-      if (next === 'out_for_delivery') payload.outForDeliveryAt = 
-serverTimestamp();
+      if (next === 'accepted') payload.sellerAcceptedAt = serverTimestamp();
+      if (next === 'out_for_delivery') payload.outForDeliveryAt = serverTimestamp();
       if (next === 'delivered') payload.deliveredAt = serverTimestamp();
-      if (next === 'completed') payload.buyerConfirmedAt = 
-serverTimestamp();
+      if (next === 'completed') payload.buyerConfirmedAt = serverTimestamp();
       if (next === 'cancelled') payload.cancelledAt = serverTimestamp();
 
       await updateDoc(doc(db, 'orders', orderId), payload);
@@ -62,8 +58,7 @@ serverTimestamp();
     }
   };
 
-  const buttons: { status: OrderStatus; label: string; icon: any; color: 
-string }[] = [];
+  const buttons: { status: OrderStatus; label: string; icon: any; color: string }[] = [];
 
   if (role === 'seller') {
     if (currentStatus === 'pending') {
@@ -71,7 +66,7 @@ string }[] = [];
         status: 'accepted',
         label: 'Accept Order',
         icon: CheckCircle2,
-        color: 'bg-green-600 hover:bg-green-500',
+        color: 'bg-green-600 hover:bg-green-500 text-white',
       });
     }
     if (currentStatus === 'accepted') {
@@ -79,7 +74,7 @@ string }[] = [];
         status: 'out_for_delivery',
         label: 'Out for Delivery',
         icon: Truck,
-        color: 'bg-blue-600 hover:bg-blue-500',
+        color: 'bg-blue-600 hover:bg-blue-500 text-white',
       });
     }
     if (currentStatus === 'out_for_delivery') {
@@ -87,7 +82,7 @@ string }[] = [];
         status: 'delivered',
         label: 'Mark as Delivered',
         icon: PackageCheck,
-        color: 'bg-orange-500 hover:bg-orange-400 text-black',
+        color: 'bg-[#12a5b0] hover:bg-[#0e8a94] text-white',
       });
     }
   }
@@ -98,7 +93,7 @@ string }[] = [];
         status: 'cancelled',
         label: 'Cancel Order',
         icon: XCircle,
-        color: 'bg-red-600 hover:bg-red-500',
+        color: 'bg-red-600 hover:bg-red-500 text-white',
       });
     }
     if (currentStatus === 'delivered') {
@@ -106,7 +101,7 @@ string }[] = [];
         status: 'completed',
         label: 'Confirm I Received the Gas',
         icon: CheckCircle2,
-        color: 'bg-green-600 hover:bg-green-500',
+        color: 'bg-green-600 hover:bg-green-500 text-white',
       });
     }
     if (['delivered', 'out_for_delivery'].includes(currentStatus)) {
@@ -114,7 +109,7 @@ string }[] = [];
         status: 'disputed',
         label: 'Report a Problem',
         icon: AlertTriangle,
-        color: 'bg-yellow-600 hover:bg-yellow-500 text-black',
+        color: 'bg-yellow-500 hover:bg-yellow-400 text-[#16305e]',
       });
     }
   }
@@ -128,8 +123,7 @@ string }[] = [];
           key={btn.status}
           onClick={() => updateStatus(btn.status)}
           disabled={!!loading}
-          className={`w-full flex items-center justify-center gap-2 
-font-bold py-3.5 rounded-2xl transition ${btn.color} disabled:opacity-50`}
+          className={`w-full flex items-center justify-center gap-2 font-bold py-3.5 rounded-2xl transition ${btn.color} disabled:opacity-50`}
         >
           {loading === btn.status ? (
             <Loader2 className="w-5 h-5 animate-spin" />
