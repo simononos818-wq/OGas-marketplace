@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import axios from 'axios';
 
-admin.initializeApp();
+if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET || '';
