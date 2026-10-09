@@ -9,8 +9,9 @@ import { db } from '@/lib/firebase';
 import { useAuthContext } from '@/app/context/AuthContext';
 import {
   CheckCircle, XCircle, Clock, Store, MapPin, Phone, Mail,
-  Loader2, Shield, AlertTriangle, User, Search
+  Loader2, Shield, AlertTriangle, User, Search, Megaphone
 } from 'lucide-react';
+import { authHeaders } from '@/lib/client-auth';
 
 interface SellerDoc {
   id: string;
@@ -58,6 +59,7 @@ export default function AdminSellersPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [search, setSearch] = useState('');
+  const [notifyLoading, setNotifyLoading] = useState(false);
 
   const isAdmin = userData?.role === 'admin' || ADMIN_EMAILS.includes(user?.email || '') || ADMIN_UIDS.includes(user?.uid || '');
 
@@ -199,6 +201,30 @@ export default function AdminSellersPage() {
     }
   };
 
+  const notifySellers = async (target: 'pending' | 'no_bank') => {
+    const label = target === 'pending' ? 'pending (not yet approved)' : 'approved but missing payout account';
+    if (!confirm(`Send SMS + in-app notification to all ${label} sellers?`)) return;
+    setNotifyLoading(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch('/api/admin/notify-sellers', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ target }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Done! Targeted: ${data.targeted} · SMS sent: ${data.sent} · failed: ${data.failed}`);
+      } else {
+        alert(data.message || 'Broadcast failed');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Broadcast failed');
+    } finally {
+      setNotifyLoading(false);
+    }
+  };
+
   const filtered = sellers.filter((s) => {
     const status = s.sellerStatus || (s.isApproved ? 'approved' : 'pending');
     if (filter !== 'all' && status !== filter) return false;
@@ -288,6 +314,25 @@ export default function AdminSellersPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Broadcast to sellers */}
+        <div className="flex flex-col sm:flex-row gap-2 mb-6">
+          <button
+            onClick={() => notifySellers('pending')}
+            disabled={notifyLoading}
+            className="flex-1 flex items-center justify-center gap-2 bg-orange-500 text-black font-bold px-4 py-3 rounded-xl text-sm disabled:opacity-50"
+          >
+            {notifyLoading ? <Loader2 size={15} className="animate-spin" /> : <Megaphone size={15} />}
+            Message pending sellers ({pendingCount})
+          </button>
+          <button
+            onClick={() => notifySellers('no_bank')}
+            disabled={notifyLoading}
+            className="flex-1 flex items-center justify-center gap-2 bg-gray-900 border border-gray-700 text-gray-300 font-bold px-4 py-3 rounded-xl text-sm disabled:opacity-50"
+          >
+            <Phone size={15} /> Remind: add payout account
+          </button>
         </div>
 
         {loading ? (
