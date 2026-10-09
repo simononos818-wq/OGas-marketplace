@@ -16,10 +16,9 @@ const COMMISSION_RATE = 0.10;
 // Gas Points: 1 GP = N1, spendable only inside the app (max 10% of an order).
 const REFERRAL_GP = 300;
 
-// October launch promo: order 10kg or more, get 1,500 GP (≈ 1kg free gas).
-const PROMO_MIN_KG = 10;
-const PROMO_BONUS_KG = 1;
-const PROMO_GP = 1500;
+// October launch promo: order 5kg or more, get 500 GP (in-app gas credit).
+const PROMO_MIN_KG = 5;
+const PROMO_GP = 500;
 const PROMO_END = new Date('2026-11-01T00:00:00+01:00'); // ends midnight Oct 31 WAT
 
 // ═══════════════════════════════════════════════════════════════
@@ -425,7 +424,7 @@ exports.onReferralFirstOrder = onDocumentUpdated(
     console.log('Referral paid: ' + referrerId + ' <- ' + buyerId + (referrerIsSeller ? ' (cash)' : ' (GP)'));
   });
 
-// ===== OCTOBER LAUNCH PROMO: order 10kg+, get 1kg free gas (1,500 GP) =====
+// ===== OCTOBER LAUNCH PROMO: order 5kg+, get 500 Gas Points =====
 // Runs on every order completion until Oct 31 2026 (WAT). One bonus per order,
 // repeat orders qualify — we WANT heavy users this month.
 exports.onPromoFreeKg = onDocumentUpdated(
@@ -455,25 +454,25 @@ exports.onPromoFreeKg = onDocumentUpdated(
     const batch = db.batch();
     batch.set(promoRef, {
       orderId, buyerId, promo: 'oct2026_1kg_free',
-      kgOrdered: kg, bonusKg: PROMO_BONUS_KG, bonusGP: PROMO_GP,
+      kgOrdered: kg, bonusGP: PROMO_GP,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     batch.set(db.collection('users').doc(buyerId), {
-      promoKg: admin.firestore.FieldValue.increment(PROMO_BONUS_KG),
+      promoKg: admin.firestore.FieldValue.increment(kg),
       gasPoints: admin.firestore.FieldValue.increment(PROMO_GP),
     }, { merge: true });
     batch.set(db.collection('pointsTransactions').doc(), {
       uid: buyerId, type: 'earn', points: PROMO_GP,
       reason: 'promo_oct2026', orderId,
-      note: 'October promo: 1kg free gas for ordering 10kg+',
+      note: 'October promo: 500 Gas Points for ordering 5kg+',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     await batch.commit();
 
     await sendPush(
       buyerId,
-      'Free 1kg Gas!',
-      `Your ${kg}kg order earned you ${PROMO_GP.toLocaleString()} Gas Points (1kg free). Promo ends Oct 31.`,
+      '500 Gas Points Earned!',
+      `Your ${kg}kg order earned you ${PROMO_GP.toLocaleString()} Gas Points. Promo ends Oct 31.`,
       { type: 'promo', orderId }
     );
     console.log(`Promo credited: ${buyerId} +${PROMO_GP}GP (order ${orderId}, ${kg}kg)`);
