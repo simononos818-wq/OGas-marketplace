@@ -36,7 +36,7 @@ export default function KitchenPage() {
   const [loading, setLoading] = useState(true);
 
   const [displayName, setDisplayName] = useState('');
-  const [gasCredit, setGasCredit] = useState(0);
+  const [gasPoints, setGasPoints] = useState(0);
   const [lastRefill, setLastRefill] = useState<LastRefill | null>(null);
   const [recentRefills, setRecentRefills] = useState<LastRefill[]>([]);
   const [sellers, setSellers] = useState<SellerRow[]>([]);
@@ -66,12 +66,12 @@ export default function KitchenPage() {
     }
     (async () => {
       try {
-        // Profile: name + gas credit (Tank balance)
+        // Profile: name + Gas Points balance
         const uSnap = await getDoc(doc(db, 'users', user.uid));
         if (uSnap.exists()) {
           const u: any = uSnap.data();
           setDisplayName(u.displayName || u.name || '');
-          setGasCredit(Number(u.gasCredit || 0));
+          setGasPoints(Math.max(0, Math.floor(Number(u.gasPoints || 0))));
         }
 
         // Refill history (completed, weighed orders)
@@ -327,13 +327,13 @@ export default function KitchenPage() {
               )}
             </Card>
 
-            {/* Gas Tank balance */}
-            <Card id="tank" icon={Fuel} title="My Gas Tank">
+            {/* Gas Points balance */}
+            <Card id="tank" icon={Fuel} title="Gas Points">
               <div className="pt-1 text-center">
-                <p className="text-3xl font-extrabold" style={{ color: gasCredit > 0 ? '#0fa958' : NAVY }}>₦{gasCredit.toLocaleString()}</p>
-                <p className="text-xs font-bold mt-1" style={{ color: ASH }}>Gas credit from referrals and promos — spendable on gas only</p>
-                <button onClick={() => router.push('/profile')} className="mt-3 px-5 py-2.5 rounded-xl text-sm font-extrabold border" style={{ borderColor: TEAL, color: TEAL }}>
-                  Invite friends, earn ₦300
+                <p className="text-3xl font-extrabold" style={{ color: gasPoints > 0 ? '#0fa958' : NAVY }}>{gasPoints.toLocaleString()}<span className="text-base font-bold ml-1" style={{ color: ASH }}>GP</span></p>
+                <p className="text-xs font-bold mt-1" style={{ color: ASH }}>1 GP = ₦1 of free gas — spend up to 10% off any order</p>
+                <button onClick={() => router.push('/tank')} className="mt-3 px-5 py-2.5 rounded-xl text-sm font-extrabold border" style={{ borderColor: TEAL, color: TEAL }}>
+                  Open my Gas Points
                 </button>
               </div>
             </Card>
