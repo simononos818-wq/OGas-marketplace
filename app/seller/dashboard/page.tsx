@@ -207,6 +207,20 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
     paid: { label: 'ACCEPT ORDER', next: 'confirmed', icon: CheckCircle },
   };
 
+  /* --- Seller Level (Moniepoint-style progression) --- */
+  const hasProfile = !!sellerData?.businessName;
+  const hasLocation = !!(sellerData?.location?.lat ?? sellerData?.lat);
+  const hasPhotos = !!(sellerData?.photos?.front || sellerData?.shopPhotoUrl);
+  const hasBank = !!(sellerData?.gates?.bankLinked || sellerData?.bankLocked || sellerData?.bankCode);
+  const approved = !!(sellerData?.isApproved || sellerData?.verified || sellerData?.isVerified || sellerData?.status === 'approved');
+  const sellerLevel = hasBank ? 4 : hasPhotos ? 3 : hasLocation ? 2 : hasProfile ? 1 : 0;
+  const LEVEL_NAMES = ['STARTER', 'PROFILED', 'LOCATED', 'VERIFIED', 'PAYOUT-READY'];
+  const levelCta = sellerLevel < 3
+    ? { href: '/seller/register', label: 'Continue setup →' }
+    : sellerLevel === 3
+    ? { href: '/seller/bank', label: 'Link payout → Level 4' }
+    : null;
+
   return (
     <div className="min-h-screen pb-10" style={{ background: '#f4f6f8', paddingTop: 'env(safe-area-inset-top)' }}>
 
@@ -241,6 +255,51 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
             <span className="absolute top-1 w-5 h-5 rounded-full bg-white transition-all" style={{ left: isOpen ? 26 : 4 }} />
           </span>
         </button>
+      </div>
+
+      {/* ===== SELLER LEVEL ===== */}
+      <div className="px-4 pt-3">
+        <div className="bg-white rounded-2xl p-4 flex items-center gap-4" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
+          {/* progress ring */}
+          <div className="relative shrink-0" style={{ width: 64, height: 64 }}>
+            <svg width="64" height="64" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="26" fill="none" stroke="#e6e9ee" strokeWidth="7" />
+              <circle
+                cx="32" cy="32" r="26" fill="none"
+                stroke={sellerLevel >= 4 ? '#0fa958' : TEAL}
+                strokeWidth="7" strokeLinecap="round"
+                strokeDasharray={`${(sellerLevel / 4) * 163.4} 163.4`}
+                transform="rotate(-90 32 32)"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[15px] font-black leading-none" style={{ color: NAVY }}>{sellerLevel}</span>
+              <span className="text-[7px] font-bold" style={{ color: '#8a8f98' }}>of 4</span>
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="text-[12px] font-extrabold" style={{ color: NAVY }}>
+                Level {sellerLevel} · {LEVEL_NAMES[sellerLevel]}
+              </p>
+              {approved && <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full" style={{ background: '#e7f9ee', color: '#0fa958' }}>🎖 APPROVED</span>}
+            </div>
+            <p className="text-[10px] mt-0.5" style={{ color: '#8a8f98' }}>
+              {sellerLevel >= 4
+                ? 'Top level — payouts active. Keep the orders flowing.'
+                : sellerLevel === 3
+                ? 'One step left — link your payout account to receive money.'
+                : 'Finish setup to start receiving orders.'}
+            </p>
+            {levelCta && (
+              <Link href={levelCta.href}
+                className="inline-block mt-2 text-[10.5px] font-extrabold px-3 py-1.5 rounded-lg text-white"
+                style={{ background: TEAL }}>
+                {levelCta.label}
+              </Link>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ===== INVENTORY PANEL ===== */}
