@@ -244,7 +244,7 @@ export default function AdminSellersPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-orange-500">
+      <div className="min-h-screen bg-[#f4f6f8] flex items-center justify-center text-[#12a5b0]">
         <Loader2 className="animate-spin mr-2" size={20} /> Loading...
       </div>
     );
@@ -252,14 +252,14 @@ export default function AdminSellersPage() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-white p-6">
+      <div className="min-h-screen bg-[#f4f6f8] flex items-center justify-center text-[#16305e] p-6">
         <div className="text-center">
           <AlertTriangle size={48} className="text-red-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-2">Access Denied</h1>
-          <p className="text-gray-400">You do not have admin privileges.</p>
+          <p className="text-[#8a8f98]">You do not have admin privileges.</p>
           <button
             onClick={() => router.push('/')}
-            className="mt-4 bg-orange-500 text-black font-bold px-6 py-2 rounded-xl"
+            className="mt-4 bg-[#12a5b0] text-white font-bold px-6 py-2 rounded-xl"
           >
             Go Home
           </button>
@@ -269,20 +269,20 @@ export default function AdminSellersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white pb-20">
-      <div className="sticky top-0 bg-black border-b border-gray-800 p-4 z-10">
+    <div className="min-h-screen bg-[#f4f6f8] text-[#16305e] pb-20">
+      <div className="sticky top-0 bg-[#f4f6f8] border-b border-[#e6e9ee] p-4 z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Shield size={24} className="text-orange-500" />
+            <Shield size={24} className="text-[#12a5b0]" />
             <div>
               <h1 className="text-xl font-bold">OGas Admin</h1>
-              <p className="text-xs text-gray-400">Seller Onboarding Control</p>
+              <p className="text-xs text-[#8a8f98]">Seller Onboarding Control</p>
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <span className="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full">{pendingCount} pending</span>
-            <span className="bg-green-500/20 text-green-400 px-3 py-1 rounded-full">{approvedCount} approved</span>
-            <span className="bg-red-500/20 text-red-400 px-3 py-1 rounded-full">{rejectedCount} rejected</span>
+            <span className="bg-amber-500/20 text-amber-600 px-3 py-1 rounded-full">{pendingCount} pending</span>
+            <span className="bg-green-500/20 text-green-600 px-3 py-1 rounded-full">{approvedCount} approved</span>
+            <span className="bg-red-500/20 text-red-600 px-3 py-1 rounded-full">{rejectedCount} rejected</span>
           </div>
         </div>
       </div>
@@ -291,12 +291,12 @@ export default function AdminSellersPage() {
         {/* Search & Filter */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8f98]" />
             <input
               placeholder="Search sellers..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-sm"
+              className="w-full bg-white border border-[#e6e9ee] rounded-xl pl-9 pr-4 py-2.5 text-sm"
             />
           </div>
           <div className="flex gap-2">
@@ -306,8 +306,8 @@ export default function AdminSellersPage() {
                 onClick={() => setFilter(f)}
                 className={`px-4 py-2 rounded-xl text-sm font-medium capitalize ${
                   filter === f
-                    ? 'bg-orange-500 text-black'
-                    : 'bg-gray-900 border border-gray-700 text-gray-400 hover:text-white'
+                    ? 'bg-[#12a5b0] text-white'
+                    : 'bg-white border border-[#e6e9ee] text-[#8a8f98] hover:text-[#16305e]'
                 }`}
               >
                 {f}
@@ -321,7 +321,7 @@ export default function AdminSellersPage() {
           <button
             onClick={() => notifySellers('pending')}
             disabled={notifyLoading}
-            className="flex-1 flex items-center justify-center gap-2 bg-orange-500 text-black font-bold px-4 py-3 rounded-xl text-sm disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-2 bg-[#12a5b0] text-white font-bold px-4 py-3 rounded-xl text-sm disabled:opacity-50"
           >
             {notifyLoading ? <Loader2 size={15} className="animate-spin" /> : <Megaphone size={15} />}
             Message pending sellers ({pendingCount})
@@ -329,7 +329,7 @@ export default function AdminSellersPage() {
           <button
             onClick={() => notifySellers('no_bank')}
             disabled={notifyLoading}
-            className="flex-1 flex items-center justify-center gap-2 bg-gray-900 border border-gray-700 text-gray-300 font-bold px-4 py-3 rounded-xl text-sm disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-2 bg-white border border-[#e6e9ee] text-[#8a8f98] font-bold px-4 py-3 rounded-xl text-sm disabled:opacity-50"
           >
             <Phone size={15} /> Remind: add payout account
           </button>
@@ -337,10 +337,10 @@ export default function AdminSellersPage() {
 
         {loading ? (
           <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-orange-500" size={32} />
+            <Loader2 className="animate-spin text-[#12a5b0]" size={32} />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">
+          <div className="text-center py-20 text-[#8a8f98]">
             <Store size={48} className="mx-auto mb-4 opacity-50" />
             <p>No sellers found.</p>
           </div>
@@ -355,7 +355,7 @@ export default function AdminSellersPage() {
               return (
                 <div
                   key={seller.id}
-                  className={`bg-gray-900 border rounded-xl p-4 ${
+                  className={`bg-white border rounded-xl p-4 ${
                     isPending
                       ? 'border-amber-500/30'
                       : isRejected
@@ -368,17 +368,17 @@ export default function AdminSellersPage() {
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-bold text-lg">{seller.businessName || 'Unnamed'}</h3>
                         {isPending && (
-                          <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                          <span className="bg-amber-500/20 text-amber-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
                             Pending
                           </span>
                         )}
                         {isApproved && (
-                          <span className="bg-green-500/20 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                          <span className="bg-green-500/20 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
                             Approved
                           </span>
                         )}
                         {isRejected && (
-                          <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                          <span className="bg-red-500/20 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
                             Rejected
                           </span>
                         )}
@@ -390,7 +390,7 @@ export default function AdminSellersPage() {
                         </p>
                       )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-400">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-[#8a8f98]">
                         {seller.ownerName && (
                           <p className="flex items-center gap-1.5">
                             <User size={14} /> {seller.ownerName}
@@ -418,7 +418,7 @@ export default function AdminSellersPage() {
                           </p>
                         )}
                         {seller.location && (
-                          <p className="text-xs font-mono text-gray-500 sm:col-span-2">
+                          <p className="text-xs font-mono text-[#8a8f98] sm:col-span-2">
                             GPS: {seller.location.lat?.toFixed(6)}, {seller.location.lng?.toFixed(6)}
                           </p>
                         )}
