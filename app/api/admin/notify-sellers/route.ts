@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '../../../lib/firebase-admin';
-import { requireUser } from '../../../lib/require-user';
-import { sendSms } from '../../../lib/sms';
+import { adminDb } from '@/lib/firebase-admin';
+import { requireUser } from '@/lib/require-user';
+import { sendSms } from '@/lib/sms';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
