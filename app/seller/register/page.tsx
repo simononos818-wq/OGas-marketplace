@@ -2,7 +2,7 @@
 
 import SellerEntryCards from "../../../components/SellerEntryCards";
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -103,9 +103,15 @@ export default function SellerRegisterPage() {
     lat: number;
     lng: number;
     accuracy: number;
+    manual?: boolean;
   } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locationConfirmed, setLocationConfirmed] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [mapLoading, setMapLoading] = useState(false);
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const leafletMapRef = useRef<any>(null);
+  const leafletMarkerRef = useRef<any>(null);
 
   const [frontPhoto, setFrontPhoto] = useState<File | null>(null);
   const [stockPhoto, setStockPhoto] = useState<File | null>(null);
@@ -159,6 +165,74 @@ export default function SellerRegisterPage() {
     );
   };
 
+  // Manual pin fallback — for phones with broken/blocked GPS (common on
+  // budget devices). Seller drags a pin to their shop; flagged 'manual'
+  // for admin review. Photo-GPS cross-check still runs at submit.
+  const openManualMap = async () => {
+    setError('');
+    setManualMode(true);
+    setMapLoading(true);
+    try {
+      if (!(window as any).L) {
+        await new Promise<void>((resolve, reject) => {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+          document.head.appendChild(link);
+          const sc = document.createElement('script');
+          sc.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+          sc.onload = () => resolve();
+          sc.onerror = () => reject(new Error('map failed to load'));
+          document.body.appendChild(sc);
+        });
+      }
+      // Best-effort: center near the seller with a coarse fix, else Ughelli
+      let center: [number, number] = [5.5007, 6.0024]; // Ughelli, Delta State
+      try {
+        const pos = await new Promise<GeolocationPosition>((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, {
+            enableHighAccuracy: false, timeout: 5000, maximumAge: 600000,
+          })
+        );
+        center = [pos.coords.latitude, pos.coords.longitude];
+      } catch { /* keep Ughelli default */ }
+
+      const L = (window as any).L;
+      setTimeout(() => {
+        if (!mapDivRef.current || leafletMapRef.current) { setMapLoading(false); return; }
+        const map = L.map(mapDivRef.current).setView(center, 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        const marker = L.marker(center, { draggable: true }).addTo(map);
+        leafletMapRef.current = map;
+        leafletMarkerRef.current = marker;
+        setMapLoading(false);
+      }, 60);
+    } catch {
+      setMapLoading(false);
+      setManualMode(false);
+      setError('Map could not load. Check your data connection and try again.');
+    }
+  };
+
+  const cancelManualMap = () => {
+    try { leafletMapRef.current?.remove(); } catch { /* noop */ }
+    leafletMapRef.current = null;
+    leafletMarkerRef.current = null;
+    setManualMode(false);
+  };
+
+  const confirmManualPin = () => {
+    const m = leafletMarkerRef.current;
+    if (!m) return;
+    const p = m.getLatLng();
+    try { leafletMapRef.current?.remove(); } catch { /* noop */ }
+    leafletMapRef.current = null;
+    leafletMarkerRef.current = null;
+    setLocation({ lat: p.lat, lng: p.lng, accuracy: 9999, manual: true });
+    setLocationConfirmed(false);
+    setManualMode(false);
+  };
+
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>, type: 'front' | 'stock') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -199,7 +273,8 @@ export default function SellerRegisterPage() {
 
       // ---- Smart verification checks (run before submit) ----
       const flags: Record<string, any> = {
-        weakGpsFix: location.accuracy > 150,
+        weakGpsFix: !location.manual && location.accuracy > 150,
+        manualLocation: Boolean(location.manual),
         duplicatePhone: false,
         frontPhotoGps: null as null | { lat: number; lng: number },
         stockPhotoGps: null as null | { lat: number; lng: number },
@@ -248,6 +323,7 @@ export default function SellerRegisterPage() {
           lat: location.lat,
           lng: location.lng,
           accuracy: location.accuracy,
+          source: location.manual ? 'manual_pin' : 'gps',
           confirmedAt: new Date().toISOString(),
         },
         stockKg: Number(form.stockKg) || 0,
@@ -361,21 +437,41 @@ export default function SellerRegisterPage() {
             <h2 className="text-lg font-extrabold flex items-center gap-2" style={{ color: NAVY }}><MapPin size={20} style={{ color: TEAL }} /> Accurate Location</h2>
             <p className="text-sm font-bold" style={{ color: '#8a8f98' }}>Be at or near your selling location. We capture your GPS so buyers nearby can find you.</p>
             {!location ? (
-              <button onClick={captureLocation} disabled={locating} className="w-full text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2" style={{ background: NAVY }}>
-                {locating ? (<><Loader2 className="animate-spin" size={20} /> Getting location... (up to 30 secs)</>) : (<><MapPin size={20} /> I am at my selling location — Capture GPS</>)}
-              </button>
+              <>
+                <button onClick={captureLocation} disabled={locating} className="w-full text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2" style={{ background: NAVY }}>
+                  {locating ? (<><Loader2 className="animate-spin" size={20} /> Getting location... (up to 30 secs)</>) : (<><MapPin size={20} /> I am at my selling location — Capture GPS</>)}
+                </button>
+                <div className="text-center">
+                  <button type="button" onClick={openManualMap} className="text-xs font-bold underline" style={{ color: TEAL }}>
+                    GPS not working? Set your pin on a map instead
+                  </button>
+                </div>
+              </>
             ) : (
               <div className="bg-white border rounded-xl p-4 space-y-3" style={{ borderColor: '#e6e9ee', boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
                 <div className="text-sm font-bold" style={{ color: '#5b616b' }}>
                   <p><span style={{ color: '#8a8f98' }}>Latitude:</span> {location.lat.toFixed(6)}</p>
                   <p><span style={{ color: '#8a8f98' }}>Longitude:</span> {location.lng.toFixed(6)}</p>
-                  <p><span style={{ color: '#8a8f98' }}>Accuracy:</span> ±{Math.round(location.accuracy)} meters</p>
+                  <p><span style={{ color: '#8a8f98' }}>Accuracy:</span> {location.manual ? 'Manual pin (set on map)' : `±${Math.round(location.accuracy)} meters`}</p>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={captureLocation} className="flex-1 py-2 rounded-lg text-sm font-bold" style={{ background: '#f4f6f8', color: NAVY }}>Recapture</button>
                   <button onClick={() => setLocationConfirmed(true)} className="flex-1 py-2 rounded-lg text-sm font-bold text-white" style={locationConfirmed ? { background: '#0fa958' } : { background: TEAL }}>
                     {locationConfirmed ? '✓ Confirmed' : 'Confirm this is correct'}
                   </button>
+                </div>
+              </div>
+            )}
+            {manualMode && (
+              <div className="bg-white border rounded-xl p-3 space-y-3" style={{ borderColor: '#e6e9ee' }}>
+                <p className="text-xs font-bold" style={{ color: '#5b616b' }}>
+                  Zoom in and drag the pin to your exact shop location, then confirm. Buyers near this pin will find your shop.
+                </p>
+                <div ref={mapDivRef} className="w-full rounded-lg" style={{ height: 260, background: '#f4f6f8' }} />
+                {mapLoading && <p className="text-xs font-bold" style={{ color: '#8a8f98' }}>Loading map…</p>}
+                <div className="flex gap-2">
+                  <button onClick={cancelManualMap} className="flex-1 py-2 rounded-lg text-sm font-bold" style={{ background: '#e6e9ee', color: NAVY }}>Cancel</button>
+                  <button onClick={confirmManualPin} disabled={mapLoading} className="flex-1 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40" style={{ background: TEAL }}>Use this pin location</button>
                 </div>
               </div>
             )}
