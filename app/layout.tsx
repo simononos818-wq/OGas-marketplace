@@ -6,6 +6,8 @@ import BottomNav from '@/components/BottomNav';
 import InstallApp from '@/components/InstallApp';
 import NotificationManager from '@/components/NotificationManager';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import CaptureRef from '@/components/CaptureRef';
+import { Suspense } from 'react';
 
 export const metadata: Metadata = {
   title: 'OGas',
@@ -56,6 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </Script>
 
         <AuthProvider>
+          <Suspense fallback={null}><CaptureRef /></Suspense>
           <div className="ogas-phone">
             <main className="min-h-dvh pb-24 [&:has(.ogas-chat-thread)]:pb-0"><ErrorBoundary>{children}</ErrorBoundary></main>
             <BottomNav />
