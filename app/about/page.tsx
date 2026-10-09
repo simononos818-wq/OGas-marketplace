@@ -9,15 +9,15 @@ export const metadata = {
 export default function AboutPage() {
   return (
     <main className="min-h-screen bg-gray-50 pb-24">
-      <section className="bg-[#1a7a3c] text-white px-4 py-10">
+      <section className="bg-[#16305e] text-white px-4 py-10">
         <div className="max-w-2xl mx-auto">
-          <p className="text-sm font-semibold uppercase tracking-wide text-green-200">
+          <p className="text-sm font-semibold uppercase tracking-wide text-[#2dd4c2]">
             About OGas Ventures
           </p>
           <h1 className="text-2xl font-bold mt-2 leading-snug">
             The digital marketplace for Nigeria's cooking gas trade
           </h1>
-          <p className="mt-3 text-green-50 text-sm leading-relaxed">
+          <p className="mt-3 text-[#c9d9e6] text-sm leading-relaxed">
             OGas Ventures is a registered Nigerian digital marketplace (internet services
             business) that connects buyers of Liquefied Petroleum Gas (LPG) with independent,
             verified sellers — from neighbourhood shops to licensed gas plants.
@@ -48,17 +48,17 @@ export default function AboutPage() {
           <h2 className="font-bold text-gray-900 text-lg">How it works</h2>
           <ol className="mt-3 space-y-3 text-sm text-gray-700">
             <li>
-              <span className="font-semibold text-[#1a7a3c]">1. Find a seller.</span> Open the
+              <span className="font-semibold text-[#16305e]">1. Find a seller.</span> Open the
               marketplace to see verified sellers near you, their live prices, and delivery
               options.
             </li>
             <li>
-              <span className="font-semibold text-[#1a7a3c]">2. Order &amp; pay securely.</span>{' '}
+              <span className="font-semibold text-[#16305e]">2. Order &amp; pay securely.</span>{' '}
               Pay with Paystack. Your money is held in escrow — the seller only receives it
               when you confirm delivery with your Door Code.
             </li>
             <li>
-              <span className="font-semibold text-[#1a7a3c]">3. Collect your gas.</span> Meet
+              <span className="font-semibold text-[#16305e]">3. Collect your gas.</span> Meet
               the seller, confirm your order, and release your payment with your private code.
             </li>
           </ol>
@@ -106,11 +106,11 @@ export default function AboutPage() {
               <dt className="font-semibold">Contact</dt>
               <dd>
                 WhatsApp:{' '}
-                <a href="https://wa.me/2349133110237" className="text-[#1a7a3c] font-semibold">
+                <a href="https://wa.me/2349133110237" className="text-[#16305e] font-semibold">
                   0913 311 0237
                 </a>{' '}
                 &bull; Email:{' '}
-                <a href="mailto:support@ogaslpgmarketplace.com" className="text-[#1a7a3c] font-semibold">
+                <a href="mailto:support@ogaslpgmarketplace.com" className="text-[#16305e] font-semibold">
                   support@ogaslpgmarketplace.com
                 </a>
               </dd>
@@ -118,11 +118,11 @@ export default function AboutPage() {
           </dl>
         </section>
 
-        <section className="bg-[#1a7a3c] text-white rounded-2xl p-5 text-center">
+        <section className="bg-[#16305e] text-white rounded-2xl p-5 text-center">
           <p className="font-bold text-lg">Ready to buy or sell gas the smart way?</p>
           <Link
             href="/"
-            className="inline-block mt-3 bg-white text-[#1a7a3c] font-bold px-6 py-2.5 rounded-xl"
+            className="inline-block mt-3 bg-white text-[#16305e] font-bold px-6 py-2.5 rounded-xl"
           >
             Open the marketplace
           </Link>

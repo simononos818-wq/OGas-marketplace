@@ -2,11 +2,11 @@ import Link from 'next/link'
 
 export default function Footer() {
   return (
-    <footer className="w-full bg-[#0d3b1e] text-white mt-8">
+    <footer className="w-full bg-[#16305e] text-white mt-8">
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="mb-6">
           <p className="text-lg font-bold">OGas LPG Marketplace</p>
-          <p className="text-sm text-green-100 mt-1">
+          <p className="text-sm text-[#c9d9e6] mt-1">
             Nigeria's digital marketplace connecting cooking gas buyers with verified
             independent sellers — transparent per-kg prices, secure escrow payments, and
             doorstep or pickup delivery.
@@ -15,8 +15,8 @@ export default function Footer() {
 
         <div className="grid grid-cols-2 gap-6 text-sm">
           <div>
-            <p className="font-semibold text-green-200 mb-2">Company</p>
-            <ul className="space-y-1 text-green-100">
+            <p className="font-semibold text-[#2dd4c2] mb-2">Company</p>
+            <ul className="space-y-1 text-[#c9d9e6]">
               <li><Link href="/about" className="hover:underline">About OGas</Link></li>
               <li><Link href="/contact" className="hover:underline">Contact Us</Link></li>
               <li><Link href="/support" className="hover:underline">Support</Link></li>
@@ -25,8 +25,8 @@ export default function Footer() {
             </ul>
           </div>
           <div>
-            <p className="font-semibold text-green-200 mb-2">Contact</p>
-            <ul className="space-y-1 text-green-100">
+            <p className="font-semibold text-[#2dd4c2] mb-2">Contact</p>
+            <ul className="space-y-1 text-[#c9d9e6]">
               <li>OGas Ventures (Mega Think Success)</li>
               <li>20 Ejumeghere Street, Isodje, Oteri,</li>
               <li>Ughelli, Delta State, Nigeria</li>
@@ -44,7 +44,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-green-800 mt-6 pt-4 text-xs text-green-200 space-y-1">
+        <div className="border-t border-[#2a4a7a] mt-6 pt-4 text-xs text-[#2dd4c2] space-y-1">
           <p>
             OGas Ventures is a registered digital marketplace (internet services business)
             connecting LPG buyers with independent verified sellers across Nigeria.

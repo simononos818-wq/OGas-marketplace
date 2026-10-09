@@ -7,13 +7,13 @@ export const metadata = {
 export default function ContactPage() {
   return (
     <main className="min-h-screen bg-gray-50 pb-24">
-      <section className="bg-[#1a7a3c] text-white px-4 py-10">
+      <section className="bg-[#16305e] text-white px-4 py-10">
         <div className="max-w-2xl mx-auto">
-          <p className="text-sm font-semibold uppercase tracking-wide text-green-200">
+          <p className="text-sm font-semibold uppercase tracking-wide text-[#2dd4c2]">
             Contact Us
           </p>
           <h1 className="text-2xl font-bold mt-2">Talk to OGas Ventures</h1>
-          <p className="mt-3 text-green-50 text-sm leading-relaxed">
+          <p className="mt-3 text-[#c9d9e6] text-sm leading-relaxed">
             Questions about an order, becoming a seller, or partnering with us? We are one
             message away.
           </p>
@@ -28,7 +28,7 @@ export default function ContactPage() {
               <p className="font-semibold text-gray-900">💬 WhatsApp (fastest)</p>
               <a
                 href="https://wa.me/2349133110237"
-                className="text-[#1a7a3c] font-semibold text-base"
+                className="text-[#16305e] font-semibold text-base"
               >
                 0913 311 0237
               </a>
@@ -38,14 +38,14 @@ export default function ContactPage() {
               <p className="font-semibold text-gray-900">✉️ Email</p>
               <a
                 href="mailto:support@ogaslpgmarketplace.com"
-                className="text-[#1a7a3c] font-semibold"
+                className="text-[#16305e] font-semibold"
               >
                 support@ogaslpgmarketplace.com
               </a>
             </div>
             <div>
               <p className="font-semibold text-gray-900">🛟 Order support</p>
-              <a href="/support" className="text-[#1a7a3c] font-semibold">
+              <a href="/support" className="text-[#16305e] font-semibold">
                 Visit our support page →
               </a>
             </div>
@@ -93,7 +93,7 @@ export default function ContactPage() {
           <p className="mt-2 text-sm text-gray-700 leading-relaxed">
             For partnerships, seller financing, media, or government/institutional
             collaborations, contact the founder directly at{' '}
-            <a href="mailto:support@ogaslpgmarketplace.com" className="text-[#1a7a3c] font-semibold">
+            <a href="mailto:support@ogaslpgmarketplace.com" className="text-[#16305e] font-semibold">
               support@ogaslpgmarketplace.com
             </a>{' '}
             with the subject line &ldquo;Partnership&rdquo;.
