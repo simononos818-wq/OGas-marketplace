@@ -120,6 +120,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── GasBack: every paid order earns GP (2% back, max 500 GP/order) ──
+    if (!order.pointsEarned && order.buyerId && expectedNaira > 0) {
+      const earnRef = adminDb.collection('users').doc(order.buyerId);
+      const earnLogRef = adminDb.collection('pointsTransactions').doc();
+      try {
+        await adminDb.runTransaction(async (tx) => {
+          const oSnap = await tx.get(orderRef);
+          if (oSnap.data()?.pointsEarned) return;
+          const earn = Math.min(500, Math.floor(expectedNaira * 0.02));
+          tx.update(orderRef, { pointsEarned: true, pointsEarnedCount: earn });
+          if (earn <= 0) return;
+          const uSnap = await tx.get(earnRef);
+          const bal = Math.max(0, Math.floor(Number(uSnap.data()?.gasPoints) || 0));
+          tx.set(earnRef, { gasPoints: bal + earn }, { merge: true });
+          tx.set(earnLogRef, {
+            uid: order.buyerId,
+            type: 'earn',
+            points: earn,
+            reason: 'order_cashback',
+            orderId: resolvedOrderId,
+            createdAt: new Date(),
+          });
+        });
+      } catch (earnErr) {
+        // Payment is already confirmed — never fail the order over points.
+        console.error('GasBack failed (payment still valid):', earnErr);
+      }
+    }
+
     await notifyPaidEscrow(resolvedOrderId);
     await postSystemMessage(resolvedOrderId, 'Chat is open. Payment is locked in escrow until Door Code or buyer confirm.');
 
