@@ -2,10 +2,10 @@
 
 import SellerEntryCards from "../../../components/SellerEntryCards";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../../../lib/firebase';
 import { MapPin, Camera, CheckCircle, Loader2, AlertCircle, ChevronLeft, Lock, Store, BadgeCheck, Banknote } from 'lucide-react';
 
@@ -18,6 +18,8 @@ const LEVELS = [
   { n: 3, name: 'VERIFIED', icon: BadgeCheck, tag: 'Trusted with the badge' },
   { n: 4, name: 'PAYOUT-READY', icon: Banknote, tag: 'Money flows to you' },
 ];
+
+const DRAFT_KEY = 'ogas_seller_reg_draft_v1';
 
 // ---------- Verification helpers ----------
 
@@ -85,23 +87,24 @@ async function extractExifGps(file: File): Promise<{ lat: number; lng: number } 
   }
 }
 
-// Downscale photos before upload — phone-camera JPEGs are 3–8MB and stall on
-// slow networks. ~1280px / q0.82 lands around 300–500KB, ~10x faster upload.
+// Aggressive downscale for 3G networks — phone-camera JPEGs are 3–8MB and
+// stall on slow links. 1024px / q0.7 lands around 100–200KB, small enough to
+// upload even on a weak 3G connection in seconds.
 // GPS/EXIF is read from the ORIGINAL file before this runs, so the
 // verification cross-check is unaffected.
 async function compressImage(file: File): Promise<File> {
   try {
     const bitmap = await createImageBitmap(file);
-    const MAX = 1280;
+    const MAX = 1024;
     const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
-    if (scale >= 1 && file.size < 1500000) return file;
+    if (scale >= 1 && file.size < 600000) return file;
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * scale);
     canvas.height = Math.round(bitmap.height * scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) return file;
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.82));
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.7));
     if (!blob) return file;
     return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
   } catch {
@@ -109,12 +112,55 @@ async function compressImage(file: File): Promise<File> {
   }
 }
 
-// Hard timeout so a stalled network can never spin the button forever
-function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(msg)), ms)),
-  ]);
+// Resumable upload with live progress + automatic retries — built for
+// flaky 3G/4G. Each attempt is resumable, so a dropped connection resumes
+// from where it stopped instead of starting over. Retries up to 3 times.
+function uploadOnce(
+  file: File,
+  path: string,
+  onProgress: (pct: number) => void
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const storageRef = ref(storage, path);
+    const task = uploadBytesResumable(storageRef, file);
+    task.on(
+      'state_changed',
+      (snap) => {
+        if (snap.totalBytes > 0) {
+          onProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+        }
+      },
+      (err) => reject(err),
+      async () => {
+        try {
+          resolve(await getDownloadURL(task.snapshot.ref));
+        } catch (e) {
+          reject(e);
+        }
+      }
+    );
+  });
+}
+
+async function uploadWithRetry(
+  file: File,
+  path: string,
+  onProgress: (pct: number, attempt: number) => void,
+  maxAttempts = 3
+): Promise<string> {
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await uploadOnce(file, path, (pct) => onProgress(pct, attempt));
+    } catch (e) {
+      lastErr = e;
+      // brief pause before retrying (lets a dropped radio reconnect)
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  throw new Error(
+    'Upload could not finish on this network. Your photos are small and ready — move to a spot with better signal and tap again. Nothing was lost.'
+  );
 }
 
 export default function SellerRegisterPage() {
@@ -122,6 +168,7 @@ export default function SellerRegisterPage() {
   const [step, setStep] = useState(1);
   const [celebrating, setCelebrating] = useState(0); // level just completed (0 = none)
   const [loading, setLoading] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState(''); // live progress on the button
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
@@ -160,6 +207,33 @@ export default function SellerRegisterPage() {
   // GPS read from the ORIGINAL photo at pick time (compression strips EXIF)
   const [frontGps, setFrontGps] = useState<{ lat: number; lng: number } | null>(null);
   const [stockGps, setStockGps] = useState<{ lat: number; lng: number } | null>(null);
+  // Already-uploaded URLs survive a failed submit — a retry skips the upload
+  const [frontUrl, setFrontUrl] = useState('');
+  const [stockUrl, setStockUrl] = useState('');
+
+  // ---- Draft autosave: never lose typed data on a dead connection ----
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft.form) setForm((f) => ({ ...f, ...draft.form }));
+        if (draft.location) setLocation(draft.location);
+        if (draft.locationConfirmed) setLocationConfirmed(true);
+        if (draft.frontUrl) setFrontUrl(draft.frontUrl);
+        if (draft.stockUrl) setStockUrl(draft.stockUrl);
+      }
+    } catch { /* noop */ }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ form, location, locationConfirmed, frontUrl, stockUrl })
+      );
+    } catch { /* noop */ }
+  }, [form, location, locationConfirmed, frontUrl, stockUrl]);
 
   const captureLocation = () => {
     setLocating(true);
@@ -286,21 +360,13 @@ export default function SellerRegisterPage() {
       setFrontPhoto(compressed);
       setFrontPreview(preview);
       setFrontGps(gps);
+      setFrontUrl(''); // new photo invalidates a previously uploaded URL
     } else {
       setStockPhoto(compressed);
       setStockPreview(preview);
       setStockGps(gps);
+      setStockUrl('');
     }
-  };
-
-  const uploadImage = async (file: File, path: string) => {
-    const storageRef = ref(storage, path);
-    await withTimeout(
-      uploadBytes(storageRef, file),
-      90000,
-      'Upload is taking too long — check your network and tap the button again.'
-    );
-    return getDownloadURL(storageRef);
   };
 
   // Level-up ceremony: show the celebration, then advance
@@ -325,11 +391,15 @@ export default function SellerRegisterPage() {
 
     setLoading(true);
     setError('');
+    setSubmitStatus('Checking details…');
 
     try {
       const uid = auth.currentUser.uid;
-      if (!frontPhoto || !stockPhoto) {
-        throw new Error('Both photos are required');
+      if (!frontPhoto && !frontUrl) {
+        throw new Error('Front-of-shop photo is required');
+      }
+      if (!stockPhoto && !stockUrl) {
+        throw new Error('Stock photo is required');
       }
 
       // ---- Smart verification checks (run before submit) ----
@@ -363,8 +433,40 @@ export default function SellerRegisterPage() {
         ? 3
         : [!flags.photoGpsMismatch, !flags.duplicatePhone, !flags.weakGpsFix].filter(Boolean).length;
 
-      const frontUrl = await uploadImage(frontPhoto, `sellers/${uid}/front.jpg`);
-      const stockUrl = await uploadImage(stockPhoto, `sellers/${uid}/stock.jpg`);
+      // ---- Uploads: resumable + auto-retry, progress shown on the button.
+      // URLs are saved to the draft as soon as each upload finishes, so a
+      // failed submit never re-uploads a photo that already made it.
+      let finalFrontUrl = frontUrl;
+      if (!finalFrontUrl && frontPhoto) {
+        finalFrontUrl = await uploadWithRetry(
+          frontPhoto,
+          `sellers/${uid}/front.jpg`,
+          (pct, attempt) =>
+            setSubmitStatus(
+              attempt > 1
+                ? `Photo 1/2 · ${pct}% (retry ${attempt}/3)`
+                : `Uploading photo 1 of 2 · ${pct}%`
+            )
+        );
+        setFrontUrl(finalFrontUrl);
+      }
+
+      let finalStockUrl = stockUrl;
+      if (!finalStockUrl && stockPhoto) {
+        finalStockUrl = await uploadWithRetry(
+          stockPhoto,
+          `sellers/${uid}/stock.jpg`,
+          (pct, attempt) =>
+            setSubmitStatus(
+              attempt > 1
+                ? `Photo 2/2 · ${pct}% (retry ${attempt}/3)`
+                : `Uploading photo 2 of 2 · ${pct}%`
+            )
+        );
+        setStockUrl(finalStockUrl);
+      }
+
+      setSubmitStatus('Saving your store…');
 
       await setDoc(doc(db, 'sellers', uid), {
       sellerStatus: 'pending',
@@ -389,7 +491,7 @@ export default function SellerRegisterPage() {
         },
         hours: form.hours,
         offersDelivery: form.delivery,
-        photos: { front: frontUrl, stock: stockUrl },
+        photos: { front: finalFrontUrl, stock: finalStockUrl },
         status: 'pending',
         verified: false,
         isVerified: false,
@@ -414,12 +516,14 @@ export default function SellerRegisterPage() {
         { merge: true }
       );
 
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
       setSuccess(true);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Failed to submit. Please try again.');
+      setError(err.message || 'Failed to submit. Please try again — your details and uploaded photos are saved on this phone.');
     } finally {
       setLoading(false);
+      setSubmitStatus('');
     }
   };
 
@@ -666,11 +770,11 @@ export default function SellerRegisterPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="border border-dashed rounded-xl p-4 text-center cursor-pointer" style={{ background: '#fff', borderColor: '#c3cbd4' }}>
-                {frontPreview ? (<img src={frontPreview} alt="Front" className="w-full h-32 object-cover rounded-lg" />) : (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#8a8f98' }}><Camera size={28} /><span className="text-xs mt-2 font-bold">Front of location</span></div>)}
+                {frontPreview ? (<img src={frontPreview} alt="Front" className="w-full h-32 object-cover rounded-lg" />) : frontUrl ? (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#0fa958' }}><CheckCircle size={28} /><span className="text-xs mt-2 font-bold">Front photo uploaded ✓</span></div>) : (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#8a8f98' }}><Camera size={28} /><span className="text-xs mt-2 font-bold">Front of location</span></div>)}
                 <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhoto(e, 'front')} />
               </label>
               <label className="border border-dashed rounded-xl p-4 text-center cursor-pointer" style={{ background: '#fff', borderColor: '#c3cbd4' }}>
-                {stockPreview ? (<img src={stockPreview} alt="Stock" className="w-full h-32 object-cover rounded-lg" />) : (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#8a8f98' }}><Camera size={28} /><span className="text-xs mt-2 font-bold">Your gas stock</span></div>)}
+                {stockPreview ? (<img src={stockPreview} alt="Stock" className="w-full h-32 object-cover rounded-lg" />) : stockUrl ? (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#0fa958' }}><CheckCircle size={28} /><span className="text-xs mt-2 font-bold">Stock photo uploaded ✓</span></div>) : (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#8a8f98' }}><Camera size={28} /><span className="text-xs mt-2 font-bold">Your gas stock</span></div>)}
                 <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhoto(e, 'stock')} />
               </label>
             </div>
@@ -687,10 +791,15 @@ export default function SellerRegisterPage() {
             </label>
             <div className="flex gap-3 pt-2">
               <button onClick={() => setStep(2)} className="flex-1 py-3 rounded-xl font-bold" style={{ background: '#e6e9ee', color: NAVY }}>Back</button>
-              <button onClick={handleSubmit} disabled={loading || !frontPhoto || !stockPhoto} className="flex-1 text-white font-bold py-3 rounded-xl disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.3)' }}>
-                {loading ? (<><Loader2 className="animate-spin" size={18} /> Verifying & submitting...</>) : 'Reach Level 3 🎖'}
+              <button onClick={handleSubmit} disabled={loading || (!frontPhoto && !frontUrl) || (!stockPhoto && !stockUrl)} className="flex-1 text-white font-bold py-3 rounded-xl disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.3)' }}>
+                {loading ? (<><Loader2 className="animate-spin" size={18} /> {submitStatus || 'Working…'}</>) : 'Reach Level 3 🎖'}
               </button>
             </div>
+            {loading && (
+              <p className="text-center text-[11px] font-bold" style={{ color: '#8a8f98' }}>
+                Slow network? No problem — uploads resume automatically. Keep this page open.
+              </p>
+            )}
           </div>
         )}
       </div>
