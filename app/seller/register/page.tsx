@@ -85,6 +85,38 @@ async function extractExifGps(file: File): Promise<{ lat: number; lng: number } 
   }
 }
 
+// Downscale photos before upload — phone-camera JPEGs are 3–8MB and stall on
+// slow networks. ~1280px / q0.82 lands around 300–500KB, ~10x faster upload.
+// GPS/EXIF is read from the ORIGINAL file before this runs, so the
+// verification cross-check is unaffected.
+async function compressImage(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const MAX = 1280;
+    const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
+    if (scale >= 1 && file.size < 1500000) return file;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.82));
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
+// Hard timeout so a stalled network can never spin the button forever
+function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(msg)), ms)),
+  ]);
+}
+
 export default function SellerRegisterPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -125,6 +157,9 @@ export default function SellerRegisterPage() {
   const [stockPhoto, setStockPhoto] = useState<File | null>(null);
   const [frontPreview, setFrontPreview] = useState('');
   const [stockPreview, setStockPreview] = useState('');
+  // GPS read from the ORIGINAL photo at pick time (compression strips EXIF)
+  const [frontGps, setFrontGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [stockGps, setStockGps] = useState<{ lat: number; lng: number } | null>(null);
 
   const captureLocation = () => {
     setLocating(true);
@@ -241,22 +276,30 @@ export default function SellerRegisterPage() {
     setManualMode(false);
   };
 
-  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>, type: 'front' | 'stock') => {
+  const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>, type: 'front' | 'stock') => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const preview = URL.createObjectURL(file);
+    const gps = await extractExifGps(file); // ORIGINAL file — before compression strips EXIF
+    const compressed = await compressImage(file);
+    const preview = URL.createObjectURL(compressed);
     if (type === 'front') {
-      setFrontPhoto(file);
+      setFrontPhoto(compressed);
       setFrontPreview(preview);
+      setFrontGps(gps);
     } else {
-      setStockPhoto(file);
+      setStockPhoto(compressed);
       setStockPreview(preview);
+      setStockGps(gps);
     }
   };
 
   const uploadImage = async (file: File, path: string) => {
     const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, file);
+    await withTimeout(
+      uploadBytes(storageRef, file),
+      90000,
+      'Upload is taking too long — check your network and tap the button again.'
+    );
     return getDownloadURL(storageRef);
   };
 
@@ -294,19 +337,13 @@ export default function SellerRegisterPage() {
         weakGpsFix: !location.manual && location.accuracy > 150,
         manualLocation: Boolean(location.manual),
         duplicatePhone: false,
-        frontPhotoGps: null as null | { lat: number; lng: number },
-        stockPhotoGps: null as null | { lat: number; lng: number },
+        frontPhotoGps: frontGps,
+        stockPhotoGps: stockGps,
         photoGpsMismatch: false,
         checkedAt: new Date().toISOString(),
       };
 
       // 1) EXIF GPS cross-check: photo location must be near captured GPS
-      const [frontGps, stockGps] = await Promise.all([
-        extractExifGps(frontPhoto),
-        extractExifGps(stockPhoto),
-      ]);
-      flags.frontPhotoGps = frontGps;
-      flags.stockPhotoGps = stockGps;
       for (const g of [frontGps, stockGps]) {
         if (g && haversineMeters(g.lat, g.lng, location.lat, location.lng) > 500) {
           flags.photoGpsMismatch = true;
