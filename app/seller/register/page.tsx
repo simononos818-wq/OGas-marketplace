@@ -21,6 +21,55 @@ const LEVELS = [
 
 const DRAFT_KEY = 'ogas_seller_reg_draft_v1';
 
+// ---------- Photo survival store (IndexedDB) ----------
+// Low-RAM Android phones KILL the browser tab when the camera app opens —
+// the page reloads and in-memory File objects are gone. localStorage can't
+// hold photos, so we park the COMPRESSED photo blobs (~100-200KB) in
+// IndexedDB the moment they're picked. If the tab dies, photos come back.
+const idb = {
+  open(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('ogas-reg', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('photos');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async set(key: string, blob: Blob): Promise<void> {
+    const d = await idb.open();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('photos', 'readwrite');
+      tx.objectStore('photos').put(blob, key);
+      tx.oncomplete = () => { d.close(); resolve(); };
+      tx.onerror = () => { d.close(); reject(tx.error); };
+    });
+  },
+  async get(key: string): Promise<Blob | null> {
+    try {
+      const d = await idb.open();
+      return await new Promise((resolve) => {
+        const tx = d.transaction('photos', 'readonly');
+        const req = tx.objectStore('photos').get(key);
+        req.onsuccess = () => { d.close(); resolve((req.result as Blob) || null); };
+        req.onerror = () => { d.close(); resolve(null); };
+      });
+    } catch {
+      return null;
+    }
+  },
+  async clear(): Promise<void> {
+    try {
+      const d = await idb.open();
+      return await new Promise((resolve) => {
+        const tx = d.transaction('photos', 'readwrite');
+        tx.objectStore('photos').clear();
+        tx.oncomplete = () => { d.close(); resolve(); };
+        tx.onerror = () => { d.close(); resolve(); };
+      });
+    } catch { /* noop */ }
+  },
+};
+
 // ---------- Verification helpers ----------
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -171,6 +220,7 @@ export default function SellerRegisterPage() {
   const [submitStatus, setSubmitStatus] = useState(''); // live progress on the button
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [restored, setRestored] = useState(false);
 
   const [form, setForm] = useState({
     businessName: '',
@@ -211,29 +261,50 @@ export default function SellerRegisterPage() {
   const [frontUrl, setFrontUrl] = useState('');
   const [stockUrl, setStockUrl] = useState('');
 
-  // ---- Draft autosave: never lose typed data on a dead connection ----
+  // ---- Draft restore: form + step + GPS + photos, even after a tab kill ----
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (raw) {
-        const draft = JSON.parse(raw);
-        if (draft.form) setForm((f) => ({ ...f, ...draft.form }));
-        if (draft.location) setLocation(draft.location);
-        if (draft.locationConfirmed) setLocationConfirmed(true);
-        if (draft.frontUrl) setFrontUrl(draft.frontUrl);
-        if (draft.stockUrl) setStockUrl(draft.stockUrl);
-      }
-    } catch { /* noop */ }
+    (async () => {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft.form) setForm((f) => ({ ...f, ...draft.form }));
+          if (draft.location) setLocation(draft.location);
+          if (draft.locationConfirmed) setLocationConfirmed(true);
+          if (draft.frontUrl) setFrontUrl(draft.frontUrl);
+          if (draft.stockUrl) setStockUrl(draft.stockUrl);
+          if (draft.frontGps) setFrontGps(draft.frontGps);
+          if (draft.stockGps) setStockGps(draft.stockGps);
+          if (draft.step && draft.step >= 1 && draft.step <= 3) setStep(draft.step);
+        }
+        // Photos live in IndexedDB (compressed blobs survive tab kills)
+        const fBlob = await idb.get('front');
+        if (fBlob) {
+          const f = new File([fBlob], 'front.jpg', { type: 'image/jpeg' });
+          setFrontPhoto(f);
+          setFrontPreview(URL.createObjectURL(f));
+        }
+        const sBlob = await idb.get('stock');
+        if (sBlob) {
+          const f = new File([sBlob], 'stock.jpg', { type: 'image/jpeg' });
+          setStockPhoto(f);
+          setStockPreview(URL.createObjectURL(f));
+        }
+      } catch { /* noop */ }
+      setRestored(true);
+    })();
   }, []);
 
+  // ---- Draft autosave (only after restore, so we never wipe on load) ----
   useEffect(() => {
+    if (!restored || success) return;
     try {
       localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify({ form, location, locationConfirmed, frontUrl, stockUrl })
+        JSON.stringify({ form, step, location, locationConfirmed, frontUrl, stockUrl, frontGps, stockGps })
       );
     } catch { /* noop */ }
-  }, [form, location, locationConfirmed, frontUrl, stockUrl]);
+  }, [form, step, location, locationConfirmed, frontUrl, stockUrl, frontGps, stockGps, restored, success]);
 
   const captureLocation = () => {
     setLocating(true);
@@ -356,6 +427,8 @@ export default function SellerRegisterPage() {
     const gps = await extractExifGps(file); // ORIGINAL file — before compression strips EXIF
     const compressed = await compressImage(file);
     const preview = URL.createObjectURL(compressed);
+    // Park the compressed blob in IndexedDB immediately — survives tab kills
+    try { await idb.set(type, compressed); } catch { /* noop */ }
     if (type === 'front') {
       setFrontPhoto(compressed);
       setFrontPreview(preview);
@@ -517,6 +590,7 @@ export default function SellerRegisterPage() {
       );
 
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+      try { await idb.clear(); } catch { /* noop */ }
       setSuccess(true);
     } catch (err: any) {
       console.error(err);
