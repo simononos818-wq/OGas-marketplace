@@ -154,6 +154,38 @@ export default function HomePage() {
               ))}
             </div>
 
+            {/* ===== STORY STRIP (for first-time visitors, partners & investors) ===== */}
+            <div className="bg-white rounded-2xl p-4 mb-3" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
+              <p className="text-[12px] font-extrabold mb-1" style={{ color: NAVY }}>
+                Trust, delivered with every kg
+              </p>
+              <p className="text-[10.5px] leading-relaxed mb-3" style={{ color: '#5b616b' }}>
+                OGas is Nigeria&apos;s verified LPG marketplace — escrow-protected payments,
+                weigh-on-scale receipts, and live per-kg prices from independent sellers.
+                No short-filling. No guesswork.
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <Link href="/how-escrow-works"
+                  className="rounded-xl p-2.5 text-center"
+                  style={{ background: '#f4f6f8' }}>
+                  <div className="text-[14px]">🔒</div>
+                  <div className="text-[9px] font-extrabold mt-0.5" style={{ color: NAVY }}>How escrow works</div>
+                </Link>
+                <Link href="/about"
+                  className="rounded-xl p-2.5 text-center"
+                  style={{ background: '#f4f6f8' }}>
+                  <div className="text-[14px]">🏢</div>
+                  <div className="text-[9px] font-extrabold mt-0.5" style={{ color: NAVY }}>About OGas</div>
+                </Link>
+                <Link href="/partners"
+                  className="rounded-xl p-2.5 text-center"
+                  style={{ background: '#f4f6f8' }}>
+                  <div className="text-[14px]">🤝</div>
+                  <div className="text-[9px] font-extrabold mt-0.5" style={{ color: NAVY }}>Partners &amp; investors</div>
+                </Link>
+              </div>
+            </div>
+
             <div className="mb-3">
               <SafetyTips />
             </div>
