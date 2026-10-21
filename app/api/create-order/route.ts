@@ -35,6 +35,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Phone number is required' }, { status: 400 });
     }
 
+    const rlRef = adminDb.collection('rateLimits').doc('order_' + user.uid);
+    const allowed = await adminDb.runTransaction(async (tx) => {
+      const snap = await tx.get(rlRef);
+      const d: any = snap.data() || {};
+      const now = Date.now();
+      let start = Number(d.start) || 0;
+      let count = Number(d.count) || 0;
+      if (now - start > 60 * 60 * 1000) {
+        start = now;
+        count = 0;
+      }
+      if (count >= 8) return false;
+      tx.set(rlRef, { start, count: count + 1 });
+      return true;
+    });
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, message: 'Too many orders. Please wait a while and try again.' },
+        { status: 429 },
+      );
+    }
+
     const sellerSnap = await adminDb.collection('sellers').doc(sellerId).get();
     if (!sellerSnap.exists) {
       return NextResponse.json({ success: false, message: 'Seller not found' }, { status: 404 });
@@ -48,7 +70,7 @@ export async function POST(req: NextRequest) {
     if (!size || size < 0.05 || size > 50) {
       return NextResponse.json({ success: false, message: 'Gas size must be at least 0.05kg' }, { status: 400 });
     }
-    const qty = Number(quantity) || 1;
+    const qty = Math.min(20, Math.max(1, Math.floor(Number(quantity) || 1)));
     const original = Number(seller.pricePerKg) || 0;
     if (!original) {
       return NextResponse.json({ success: false, message: 'Seller has not set a price' }, { status: 400 });

@@ -47,6 +47,19 @@ export async function POST(req: NextRequest) {
     if (buyerId !== user.uid) {
       return NextResponse.json({ success: false, message: 'Not your order' }, { status: 403 });
     }
+    if (
+      order.paymentStatus === 'paid' ||
+      order.status === 'paid' ||
+      order.status === 'cancelled' ||
+      order.escrowStatus === 'held' ||
+      order.escrowStatus === 'released' ||
+      order.paymentMethod === 'cash'
+    ) {
+      return NextResponse.json(
+        { success: false, message: 'This order is already paid or does not need online payment' },
+        { status: 409 },
+      );
+    }
     const resolvedSellerId = sellerId || order.sellerId;
 
     const expected = orderTotal(order);
@@ -71,7 +84,29 @@ export async function POST(req: NextRequest) {
     const requestedPoints = Math.max(0, Math.floor(Number(body.pointsToUse) || 0));
     if (requestedPoints > 0) {
       const userSnap = await adminDb.collection('users').doc(user.uid).get();
-      const balance = Math.max(0, Math.floor(Number(userSnap.data()?.gasPoints) || 0));
+      const rawBalance = Math.max(0, Math.floor(Number(userSnap.data()?.gasPoints) || 0));
+      // Points promised to this buyer's other unpaid orders (last 2h) cannot be spent twice.
+      // If this check fails, no points discount is given (payment still works).
+      let reserved = rawBalance;
+      try {
+        let held = 0;
+        const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+        const pendingSnap = await adminDb
+          .collection('orders')
+          .where('buyerId', '==', user.uid)
+          .where('paymentStatus', '==', 'pending')
+          .get();
+        pendingSnap.forEach((d) => {
+          if (d.id === orderId) return;
+          const o: any = d.data();
+          const ts = o.updatedAt?.toMillis ? o.updatedAt.toMillis() : new Date(o.updatedAt || 0).getTime();
+          if (ts >= cutoff) held += Math.max(0, Math.floor(Number(o.pointsRedeemed) || 0));
+        });
+        reserved = held;
+      } catch (reserveErr) {
+        console.error('points reservation check failed (no discount given):', reserveErr);
+      }
+      const balance = Math.max(0, rawBalance - reserved);
       const maxByShare = Math.floor(expected * MAX_POINTS_SHARE);
       const maxByMinCharge = Math.max(0, Math.floor(expected - MIN_CHARGE_NAIRA));
       pointsApplied = Math.min(requestedPoints, balance, maxByShare, maxByMinCharge);
