@@ -17,18 +17,12 @@ export async function POST(req: NextRequest) {
     if (!signature) {
       return NextResponse.json({ ok: false }, { status: 401 });
     }
-    if (signature) {
-      const hash = createHmac('sha512', secret).update(rawBody).digest('hex');
-      try {
-        const a = Buffer.from(hash, 'hex');
-        const b = Buffer.from(String(signature), 'hex');
-        if (a.length !== b.length || !timingSafeEqual(a, b)) {
-          console.error('webhook bad signature');
-          return NextResponse.json({ ok: false }, { status: 401 });
-        }
-      } catch {
-        console.error('webhook signature parse');
-      }
+    const hash = createHmac('sha512', secret).update(rawBody).digest('hex');
+    const sigA = Buffer.from(hash, 'hex');
+    const sigB = Buffer.from(signature, 'hex');
+    if (sigA.length !== sigB.length || !timingSafeEqual(sigA, sigB)) {
+      console.error('webhook bad signature');
+      return NextResponse.json({ ok: false }, { status: 401 });
     }
 
     const event = JSON.parse(rawBody);
@@ -73,8 +67,20 @@ export async function POST(req: NextRequest) {
     const expectedNaira = Number(
       order.chargedAmount ?? order.totalAmount ?? order.total ?? order.totalPrice ?? 0,
     );
-    if (expectedNaira > 0 && Math.abs(paidKobo - Math.round(expectedNaira * 100)) > 100) {
+    if (!(expectedNaira > 0) || Math.abs(paidKobo - Math.round(expectedNaira * 100)) > 100) {
       console.error('webhook amount mismatch', { orderId: resolvedOrderId, paidKobo, expectedNaira });
+      try {
+        await adminDb.collection('webhookAlerts').add({
+          type: 'amount_mismatch',
+          orderId: resolvedOrderId,
+          reference,
+          paidKobo,
+          expectedNaira,
+          createdAt: new Date(),
+        });
+      } catch (alertErr) {
+        console.error('webhook alert write failed:', alertErr);
+      }
       return NextResponse.json({ received: true, skipped: 'amount_mismatch' });
     }
 
@@ -179,6 +185,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('Webhook error:', error);
-    return NextResponse.json({ received: true, error: 'logged' });
+    return NextResponse.json({ error: 'processing_failed' }, { status: 500 });
   }
 }
