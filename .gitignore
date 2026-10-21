@@ -26,3 +26,5 @@ functions/.env.ogasapp-5a003
 ogas-deploy.zip
 ogas-codebase-dump.txt
 ogas_audit.txt
+fix_*.py
+*.backup-*
