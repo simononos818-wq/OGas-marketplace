@@ -7,7 +7,7 @@ import { db } from '@/lib/firebase';
 import { useAuthContext } from '@/app/context/AuthContext';
 import {
   User, LogOut, Package, MapPin, Phone, Mail, ChevronRight,
-  Store, Shield, Clock, XCircle, CheckCircle, Wrench, Loader2
+  Store, Shield, Clock, XCircle, CheckCircle, Wrench, Loader2, Gift
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -278,6 +278,7 @@ export default function ProfilePage() {
 
         <div className="space-y-2 mb-6">
           <MenuItem icon={<Package size={18} />} label="My Orders" href="/orders" />
+          <MenuItem icon={<Gift size={18} />} label="Gas Points — invite & earn" href="/tank" />
           <MenuItem icon={<MapPin size={18} />} label="Saved Addresses" href="#" />
           <MenuItem icon={<Mail size={18} />} label="Support" href="mailto:support@ogaslpgmarketplace.com" />
         </div>

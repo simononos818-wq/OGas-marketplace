@@ -2,15 +2,73 @@
 
 import SellerEntryCards from "../../../components/SellerEntryCards";
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../../../lib/firebase';
-import { MapPin, Camera, CheckCircle, Loader2, AlertCircle, ChevronLeft } from 'lucide-react';
+import { MapPin, Camera, CheckCircle, Loader2, AlertCircle, ChevronLeft, Lock, Store, BadgeCheck, Banknote } from 'lucide-react';
 
 const NAVY = '#16305e';
 const TEAL = '#12a5b0';
+
+const LEVELS = [
+  { n: 1, name: 'PROFILED', icon: Store, tag: 'Your shop has a name' },
+  { n: 2, name: 'LOCATED', icon: MapPin, tag: 'Buyers nearby can find you' },
+  { n: 3, name: 'VERIFIED', icon: BadgeCheck, tag: 'Trusted with the badge' },
+  { n: 4, name: 'PAYOUT-READY', icon: Banknote, tag: 'Money flows to you' },
+];
+
+const DRAFT_KEY = 'ogas_seller_reg_draft_v1';
+
+// ---------- Photo survival store (IndexedDB) ----------
+// Low-RAM Android phones KILL the browser tab when the camera app opens —
+// the page reloads and in-memory File objects are gone. localStorage can't
+// hold photos, so we park the COMPRESSED photo blobs (~100-200KB) in
+// IndexedDB the moment they're picked. If the tab dies, photos come back.
+const idb = {
+  open(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('ogas-reg', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('photos');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async set(key: string, blob: Blob): Promise<void> {
+    const d = await idb.open();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('photos', 'readwrite');
+      tx.objectStore('photos').put(blob, key);
+      tx.oncomplete = () => { d.close(); resolve(); };
+      tx.onerror = () => { d.close(); reject(tx.error); };
+    });
+  },
+  async get(key: string): Promise<Blob | null> {
+    try {
+      const d = await idb.open();
+      return await new Promise((resolve) => {
+        const tx = d.transaction('photos', 'readonly');
+        const req = tx.objectStore('photos').get(key);
+        req.onsuccess = () => { d.close(); resolve((req.result as Blob) || null); };
+        req.onerror = () => { d.close(); resolve(null); };
+      });
+    } catch {
+      return null;
+    }
+  },
+  async clear(): Promise<void> {
+    try {
+      const d = await idb.open();
+      return await new Promise((resolve) => {
+        const tx = d.transaction('photos', 'readwrite');
+        tx.objectStore('photos').clear();
+        tx.oncomplete = () => { d.close(); resolve(); };
+        tx.onerror = () => { d.close(); resolve(); };
+      });
+    } catch { /* noop */ }
+  },
+};
 
 // ---------- Verification helpers ----------
 
@@ -78,12 +136,91 @@ async function extractExifGps(file: File): Promise<{ lat: number; lng: number } 
   }
 }
 
+// Aggressive downscale for 3G networks — phone-camera JPEGs are 3–8MB and
+// stall on slow links. 1024px / q0.7 lands around 100–200KB, small enough to
+// upload even on a weak 3G connection in seconds.
+// GPS/EXIF is read from the ORIGINAL file before this runs, so the
+// verification cross-check is unaffected.
+async function compressImage(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const MAX = 1024;
+    const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
+    if (scale >= 1 && file.size < 600000) return file;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.7));
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
+// Resumable upload with live progress + automatic retries — built for
+// flaky 3G/4G. Each attempt is resumable, so a dropped connection resumes
+// from where it stopped instead of starting over. Retries up to 3 times.
+function uploadOnce(
+  file: File,
+  path: string,
+  onProgress: (pct: number) => void
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const storageRef = ref(storage, path);
+    const task = uploadBytesResumable(storageRef, file);
+    task.on(
+      'state_changed',
+      (snap) => {
+        if (snap.totalBytes > 0) {
+          onProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+        }
+      },
+      (err) => reject(err),
+      async () => {
+        try {
+          resolve(await getDownloadURL(task.snapshot.ref));
+        } catch (e) {
+          reject(e);
+        }
+      }
+    );
+  });
+}
+
+async function uploadWithRetry(
+  file: File,
+  path: string,
+  onProgress: (pct: number, attempt: number) => void,
+  maxAttempts = 3
+): Promise<string> {
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await uploadOnce(file, path, (pct) => onProgress(pct, attempt));
+    } catch (e) {
+      lastErr = e;
+      // brief pause before retrying (lets a dropped radio reconnect)
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  throw new Error(
+    'Upload could not finish on this network. Your photos are small and ready — move to a spot with better signal and tap again. Nothing was lost.'
+  );
+}
+
 export default function SellerRegisterPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
+  const [celebrating, setCelebrating] = useState(0); // level just completed (0 = none)
   const [loading, setLoading] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState(''); // live progress on the button
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [restored, setRestored] = useState(false);
 
   const [form, setForm] = useState({
     businessName: '',
@@ -103,14 +240,71 @@ export default function SellerRegisterPage() {
     lat: number;
     lng: number;
     accuracy: number;
+    manual?: boolean;
   } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locationConfirmed, setLocationConfirmed] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [mapLoading, setMapLoading] = useState(false);
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const leafletMapRef = useRef<any>(null);
+  const leafletMarkerRef = useRef<any>(null);
 
   const [frontPhoto, setFrontPhoto] = useState<File | null>(null);
   const [stockPhoto, setStockPhoto] = useState<File | null>(null);
   const [frontPreview, setFrontPreview] = useState('');
   const [stockPreview, setStockPreview] = useState('');
+  // GPS read from the ORIGINAL photo at pick time (compression strips EXIF)
+  const [frontGps, setFrontGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [stockGps, setStockGps] = useState<{ lat: number; lng: number } | null>(null);
+  // Already-uploaded URLs survive a failed submit — a retry skips the upload
+  const [frontUrl, setFrontUrl] = useState('');
+  const [stockUrl, setStockUrl] = useState('');
+
+  // ---- Draft restore: form + step + GPS + photos, even after a tab kill ----
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft.form) setForm((f) => ({ ...f, ...draft.form }));
+          if (draft.location) setLocation(draft.location);
+          if (draft.locationConfirmed) setLocationConfirmed(true);
+          if (draft.frontUrl) setFrontUrl(draft.frontUrl);
+          if (draft.stockUrl) setStockUrl(draft.stockUrl);
+          if (draft.frontGps) setFrontGps(draft.frontGps);
+          if (draft.stockGps) setStockGps(draft.stockGps);
+          if (draft.step && draft.step >= 1 && draft.step <= 3) setStep(draft.step);
+        }
+        // Photos live in IndexedDB (compressed blobs survive tab kills)
+        const fBlob = await idb.get('front');
+        if (fBlob) {
+          const f = new File([fBlob], 'front.jpg', { type: 'image/jpeg' });
+          setFrontPhoto(f);
+          setFrontPreview(URL.createObjectURL(f));
+        }
+        const sBlob = await idb.get('stock');
+        if (sBlob) {
+          const f = new File([sBlob], 'stock.jpg', { type: 'image/jpeg' });
+          setStockPhoto(f);
+          setStockPreview(URL.createObjectURL(f));
+        }
+      } catch { /* noop */ }
+      setRestored(true);
+    })();
+  }, []);
+
+  // ---- Draft autosave (only after restore, so we never wipe on load) ----
+  useEffect(() => {
+    if (!restored || success) return;
+    try {
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ form, step, location, locationConfirmed, frontUrl, stockUrl, frontGps, stockGps })
+      );
+    } catch { /* noop */ }
+  }, [form, step, location, locationConfirmed, frontUrl, stockUrl, frontGps, stockGps, restored, success]);
 
   const captureLocation = () => {
     setLocating(true);
@@ -159,23 +353,103 @@ export default function SellerRegisterPage() {
     );
   };
 
-  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>, type: 'front' | 'stock') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const preview = URL.createObjectURL(file);
-    if (type === 'front') {
-      setFrontPhoto(file);
-      setFrontPreview(preview);
-    } else {
-      setStockPhoto(file);
-      setStockPreview(preview);
+  // Manual pin fallback — for phones with broken/blocked GPS (common on
+  // budget devices). Seller drags a pin to their shop; flagged 'manual'
+  // for admin review. Photo-GPS cross-check still runs at submit.
+  const openManualMap = async () => {
+    setError('');
+    setManualMode(true);
+    setMapLoading(true);
+    try {
+      if (!(window as any).L) {
+        await new Promise<void>((resolve, reject) => {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+          document.head.appendChild(link);
+          const sc = document.createElement('script');
+          sc.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+          sc.onload = () => resolve();
+          sc.onerror = () => reject(new Error('map failed to load'));
+          document.body.appendChild(sc);
+        });
+      }
+      // Best-effort: center near the seller with a coarse fix, else Ughelli
+      let center: [number, number] = [5.5007, 6.0024]; // Ughelli, Delta State
+      try {
+        const pos = await new Promise<GeolocationPosition>((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, {
+            enableHighAccuracy: false, timeout: 5000, maximumAge: 600000,
+          })
+        );
+        center = [pos.coords.latitude, pos.coords.longitude];
+      } catch { /* keep Ughelli default */ }
+
+      const L = (window as any).L;
+      setTimeout(() => {
+        if (!mapDivRef.current || leafletMapRef.current) { setMapLoading(false); return; }
+        const map = L.map(mapDivRef.current).setView(center, 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        const marker = L.marker(center, { draggable: true }).addTo(map);
+        leafletMapRef.current = map;
+        leafletMarkerRef.current = marker;
+        setMapLoading(false);
+      }, 60);
+    } catch {
+      setMapLoading(false);
+      setManualMode(false);
+      setError('Map could not load. Check your data connection and try again.');
     }
   };
 
-  const uploadImage = async (file: File, path: string) => {
-    const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, file);
-    return getDownloadURL(storageRef);
+  const cancelManualMap = () => {
+    try { leafletMapRef.current?.remove(); } catch { /* noop */ }
+    leafletMapRef.current = null;
+    leafletMarkerRef.current = null;
+    setManualMode(false);
+  };
+
+  const confirmManualPin = () => {
+    const m = leafletMarkerRef.current;
+    if (!m) return;
+    const p = m.getLatLng();
+    try { leafletMapRef.current?.remove(); } catch { /* noop */ }
+    leafletMapRef.current = null;
+    leafletMarkerRef.current = null;
+    setLocation({ lat: p.lat, lng: p.lng, accuracy: 9999, manual: true });
+    setLocationConfirmed(false);
+    setManualMode(false);
+  };
+
+  const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>, type: 'front' | 'stock') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const gps = await extractExifGps(file); // ORIGINAL file — before compression strips EXIF
+    const compressed = await compressImage(file);
+    const preview = URL.createObjectURL(compressed);
+    // Park the compressed blob in IndexedDB immediately — survives tab kills
+    try { await idb.set(type, compressed); } catch { /* noop */ }
+    if (type === 'front') {
+      setFrontPhoto(compressed);
+      setFrontPreview(preview);
+      setFrontGps(gps);
+      setFrontUrl(''); // new photo invalidates a previously uploaded URL
+    } else {
+      setStockPhoto(compressed);
+      setStockPreview(preview);
+      setStockGps(gps);
+      setStockUrl('');
+    }
+  };
+
+  // Level-up ceremony: show the celebration, then advance
+  const levelUp = (completedLevel: number) => {
+    setCelebrating(completedLevel);
+    setTimeout(() => {
+      setCelebrating(0);
+      setStep(completedLevel + 1);
+      window.scrollTo(0, 0);
+    }, 1900);
   };
 
   const handleSubmit = async () => {
@@ -190,30 +464,29 @@ export default function SellerRegisterPage() {
 
     setLoading(true);
     setError('');
+    setSubmitStatus('Checking details…');
 
     try {
       const uid = auth.currentUser.uid;
-      if (!frontPhoto || !stockPhoto) {
-        throw new Error('Both photos are required');
+      if (!frontPhoto && !frontUrl) {
+        throw new Error('Front-of-shop photo is required');
+      }
+      if (!stockPhoto && !stockUrl) {
+        throw new Error('Stock photo is required');
       }
 
       // ---- Smart verification checks (run before submit) ----
       const flags: Record<string, any> = {
-        weakGpsFix: location.accuracy > 150,
+        weakGpsFix: !location.manual && location.accuracy > 150,
+        manualLocation: Boolean(location.manual),
         duplicatePhone: false,
-        frontPhotoGps: null as null | { lat: number; lng: number },
-        stockPhotoGps: null as null | { lat: number; lng: number },
+        frontPhotoGps: frontGps,
+        stockPhotoGps: stockGps,
         photoGpsMismatch: false,
         checkedAt: new Date().toISOString(),
       };
 
       // 1) EXIF GPS cross-check: photo location must be near captured GPS
-      const [frontGps, stockGps] = await Promise.all([
-        extractExifGps(frontPhoto),
-        extractExifGps(stockPhoto),
-      ]);
-      flags.frontPhotoGps = frontGps;
-      flags.stockPhotoGps = stockGps;
       for (const g of [frontGps, stockGps]) {
         if (g && haversineMeters(g.lat, g.lng, location.lat, location.lng) > 500) {
           flags.photoGpsMismatch = true;
@@ -233,8 +506,40 @@ export default function SellerRegisterPage() {
         ? 3
         : [!flags.photoGpsMismatch, !flags.duplicatePhone, !flags.weakGpsFix].filter(Boolean).length;
 
-      const frontUrl = await uploadImage(frontPhoto, `sellers/${uid}/front.jpg`);
-      const stockUrl = await uploadImage(stockPhoto, `sellers/${uid}/stock.jpg`);
+      // ---- Uploads: resumable + auto-retry, progress shown on the button.
+      // URLs are saved to the draft as soon as each upload finishes, so a
+      // failed submit never re-uploads a photo that already made it.
+      let finalFrontUrl = frontUrl;
+      if (!finalFrontUrl && frontPhoto) {
+        finalFrontUrl = await uploadWithRetry(
+          frontPhoto,
+          `sellers/${uid}/front.jpg`,
+          (pct, attempt) =>
+            setSubmitStatus(
+              attempt > 1
+                ? `Photo 1/2 · ${pct}% (retry ${attempt}/3)`
+                : `Uploading photo 1 of 2 · ${pct}%`
+            )
+        );
+        setFrontUrl(finalFrontUrl);
+      }
+
+      let finalStockUrl = stockUrl;
+      if (!finalStockUrl && stockPhoto) {
+        finalStockUrl = await uploadWithRetry(
+          stockPhoto,
+          `sellers/${uid}/stock.jpg`,
+          (pct, attempt) =>
+            setSubmitStatus(
+              attempt > 1
+                ? `Photo 2/2 · ${pct}% (retry ${attempt}/3)`
+                : `Uploading photo 2 of 2 · ${pct}%`
+            )
+        );
+        setStockUrl(finalStockUrl);
+      }
+
+      setSubmitStatus('Saving your store…');
 
       await setDoc(doc(db, 'sellers', uid), {
       sellerStatus: 'pending',
@@ -248,6 +553,7 @@ export default function SellerRegisterPage() {
           lat: location.lat,
           lng: location.lng,
           accuracy: location.accuracy,
+          source: location.manual ? 'manual_pin' : 'gps',
           confirmedAt: new Date().toISOString(),
         },
         stockKg: Number(form.stockKg) || 0,
@@ -258,13 +564,13 @@ export default function SellerRegisterPage() {
         },
         hours: form.hours,
         offersDelivery: form.delivery,
-        photos: { front: frontUrl, stock: stockUrl },
+        photos: { front: finalFrontUrl, stock: finalStockUrl },
         status: 'pending',
         verified: false,
         isVerified: false,
         isApproved: false,
         isActive: false,
-        level: 0,
+        level: 3,
         gates: {
           profile: true,
           location: true,
@@ -283,33 +589,146 @@ export default function SellerRegisterPage() {
         { merge: true }
       );
 
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+      try { await idb.clear(); } catch { /* noop */ }
       setSuccess(true);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Failed to submit. Please try again.');
+      setError(err.message || 'Failed to submit. Please try again — your details and uploaded photos are saved on this phone.');
     } finally {
       setLoading(false);
+      setSubmitStatus('');
     }
   };
 
   const inputCls = "w-full rounded-xl px-4 py-3 text-sm font-bold focus:outline-none";
   const inputStyle = { background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY };
 
+  /* ================= LEVEL TRACK (Moniepoint-style) ================= */
+  const LevelTrack = ({ current }: { current: number }) => (
+    <div className="px-4 pt-3 pb-1">
+      <div className="flex items-center">
+        {LEVELS.map((lv, i) => {
+          const done = current > lv.n;
+          const active = current === lv.n;
+          const Icon = done ? CheckCircle : lv.icon;
+          return (
+            <div key={lv.n} className="flex items-center flex-1 last:flex-none">
+              <div className="flex flex-col items-center" style={{ minWidth: 52 }}>
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+                  style={
+                    done
+                      ? { background: TEAL, boxShadow: '0 3px 8px rgba(18,165,176,.35)' }
+                      : active
+                      ? { background: NAVY, boxShadow: `0 0 0 3px #fff, 0 0 0 5px ${TEAL}` }
+                      : { background: '#e6e9ee' }
+                  }
+                >
+                  {i === 3 && !done && !active ? (
+                    <Lock size={14} color="#8a8f98" />
+                  ) : (
+                    <Icon size={16} color={done || active ? '#fff' : '#8a8f98'} />
+                  )}
+                </div>
+                <span
+                  className="mt-1 text-[8.5px] font-extrabold tracking-wide"
+                  style={{ color: done || active ? NAVY : '#b8bec6' }}
+                >
+                  {lv.name}
+                </span>
+              </div>
+              {i < LEVELS.length - 1 && (
+                <div className="flex-1 h-1 rounded-full mx-1 mb-4" style={{ background: current > lv.n ? TEAL : '#e6e9ee' }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-center text-[11px] font-bold mt-1" style={{ color: '#8a8f98' }}>
+        Level {Math.min(current, 4)} of 4 · {LEVELS[Math.min(current, 4) - 1].tag}
+      </p>
+    </div>
+  );
+
+  /* ================= LEVEL-UP CELEBRATION ================= */
+  if (celebrating > 0) {
+    const lv = LEVELS[celebrating - 1];
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center p-6"
+        style={{ background: `linear-gradient(160deg, ${NAVY}, #0e8a94)` }}
+      >
+        <div className="text-center">
+          <div className="text-5xl mb-4">🎉</div>
+          <div
+            className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-5"
+            style={{ background: TEAL, boxShadow: '0 0 0 10px rgba(45,212,194,.2), 0 0 0 22px rgba(45,212,194,.08)' }}
+          >
+            <lv.icon size={42} color="#fff" />
+          </div>
+          <p className="text-[12px] font-extrabold tracking-[0.25em] mb-1" style={{ color: '#2dd4c2' }}>
+            LEVEL {lv.n} COMPLETE
+          </p>
+          <h1 className="text-3xl font-black text-white mb-2">{lv.name}</h1>
+          <p className="text-sm font-bold" style={{ color: '#c9d9e6' }}>{lv.tag}</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ================= FINAL: LEVEL 3 REACHED ================= */
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: '#f4f6f8' }}>
-        <div className="text-center max-w-md">
-          <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: '#e7f9ee' }}>
-            <CheckCircle size={40} style={{ color: '#0fa958' }} />
+      <div
+        className="min-h-screen flex items-center justify-center p-6"
+        style={{ background: `linear-gradient(160deg, ${NAVY}, #0e8a94)` }}
+      >
+        <div className="text-center max-w-md w-full">
+          <div className="text-5xl mb-4">🎖️</div>
+          <div
+            className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-5"
+            style={{ background: '#0fa958', boxShadow: '0 0 0 10px rgba(15,169,88,.2), 0 0 0 22px rgba(15,169,88,.08)' }}
+          >
+            <BadgeCheck size={42} color="#fff" />
           </div>
-          <h1 className="text-2xl font-extrabold mb-2" style={{ color: NAVY }}>Application Submitted!</h1>
-          <p className="mb-6 text-sm font-bold" style={{ color: '#8a8f98' }}>
-            Your seller application is under review. You will be able to start receiving orders once approved (usually within a few hours).
+          <p className="text-[12px] font-extrabold tracking-[0.25em] mb-1" style={{ color: '#2dd4c2' }}>
+            LEVEL 3 REACHED
           </p>
+          <h1 className="text-3xl font-black text-white mb-2">VERIFIED</h1>
+          <p className="text-sm font-bold mb-6" style={{ color: '#c9d9e6' }}>
+            {form.businessName || 'Your shop'} is submitted for review — usually approved within a few hours.
+          </p>
+
+          {/* the journey so far */}
+          <div className="rounded-2xl p-4 mb-5 text-left" style={{ background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)' }}>
+            {LEVELS.map((lv) => {
+              const done = lv.n <= 3;
+              const Icon = done ? CheckCircle : Lock;
+              return (
+                <div key={lv.n} className="flex items-center gap-3 py-2" style={{ opacity: done ? 1 : 0.55 }}>
+                  <Icon size={16} color={done ? '#2dd4c2' : '#8fa6c9'} />
+                  <div className="flex-1">
+                    <p className="text-[12px] font-extrabold text-white">Level {lv.n} · {lv.name}</p>
+                    <p className="text-[10px]" style={{ color: '#9fb4d8' }}>{lv.tag}</p>
+                  </div>
+                  {done && <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: 'rgba(45,212,194,.15)', color: '#2dd4c2' }}>DONE</span>}
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => router.push('/seller/bank')}
+            className="w-full text-white font-extrabold py-4 rounded-xl mb-3"
+            style={{ background: TEAL, boxShadow: '0 4px 14px rgba(18,165,176,.4)' }}
+          >
+            Unlock Level 4 · Link payout account →
+          </button>
           <button
             onClick={() => router.push('/seller/dashboard')}
-            className="text-white font-bold px-8 py-3 rounded-xl"
-            style={{ background: TEAL }}
+            className="w-full font-bold py-3 rounded-xl text-sm"
+            style={{ background: 'rgba(255,255,255,.1)', color: '#c9d9e6' }}
           >
             Go to Dashboard
           </button>
@@ -322,14 +741,17 @@ export default function SellerRegisterPage() {
     <>
       <SellerEntryCards />
     <div className="min-h-screen pb-20" style={{ background: '#f4f6f8' }}>
-      <div className="sticky top-0 p-4 z-10 bg-white border-b flex items-center gap-3" style={{ borderColor: '#eee' }}>
-        <button onClick={() => router.back()} className="p-1.5 rounded-full" style={{ background: '#f4f6f8' }}>
-          <ChevronLeft size={18} style={{ color: NAVY }} />
-        </button>
-        <div>
-          <h1 className="text-lg font-extrabold" style={{ color: NAVY }}>Become an OGas Seller</h1>
-          <p className="text-xs font-bold" style={{ color: '#8a8f98' }}>Step {step} of 3</p>
+      <div className="sticky top-0 z-10 bg-white border-b" style={{ borderColor: '#eee' }}>
+        <div className="p-4 pb-0 flex items-center gap-3">
+          <button onClick={() => router.back()} className="p-1.5 rounded-full" style={{ background: '#f4f6f8' }}>
+            <ChevronLeft size={18} style={{ color: NAVY }} />
+          </button>
+          <div>
+            <h1 className="text-lg font-extrabold" style={{ color: NAVY }}>Become an OGas Seller</h1>
+            <p className="text-xs font-bold" style={{ color: '#8a8f98' }}>4 levels to a paying store</p>
+          </div>
         </div>
+        <LevelTrack current={step} />
       </div>
 
       <div className="p-4 max-w-lg mx-auto space-y-6">
@@ -342,7 +764,11 @@ export default function SellerRegisterPage() {
 
         {step === 1 && (
           <div className="space-y-4">
-            <h2 className="text-lg font-extrabold" style={{ color: NAVY }}>Business Details</h2>
+            <div className="rounded-2xl p-4" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e4078)` }}>
+              <p className="text-[10px] font-extrabold tracking-[0.2em] mb-1" style={{ color: '#2dd4c2' }}>LEVEL 1 · PROFILED</p>
+              <h2 className="text-lg font-extrabold text-white">Tell us about the business</h2>
+              <p className="text-[11px] font-bold mt-1" style={{ color: '#9fb4d8' }}>This is the name buyers will see on the map.</p>
+            </div>
             <input placeholder="Business / Shop Name" value={form.businessName} onChange={e => setForm({ ...form, businessName: e.target.value })} className={inputCls} style={inputStyle} required />
             <select value={form.sellerType} onChange={e => setForm({ ...form, sellerType: e.target.value })} className={inputCls} style={inputStyle}>
               <option value="neighbourhood">Neighbourhood Seller (even 200kg)</option>
@@ -352,24 +778,34 @@ export default function SellerRegisterPage() {
             <input placeholder="Phone Number (WhatsApp preferred)" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} style={inputStyle} />
             <input placeholder="Nearest Landmark" value={form.landmark} onChange={e => setForm({ ...form, landmark: e.target.value })} className={inputCls} style={inputStyle} />
             <textarea placeholder="Full Address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className={inputCls + " h-24"} style={inputStyle} />
-            <button onClick={() => setStep(2)} disabled={!form.businessName || !form.phone} className="w-full text-white font-bold py-3 rounded-xl disabled:opacity-40" style={{ background: TEAL }}>Next → Location</button>
+            <button onClick={() => levelUp(1)} disabled={!form.businessName || !form.phone} className="w-full text-white font-bold py-3.5 rounded-xl disabled:opacity-40" style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.3)' }}>Complete Level 1 →</button>
           </div>
         )}
 
         {step === 2 && (
           <div className="space-y-4">
-            <h2 className="text-lg font-extrabold flex items-center gap-2" style={{ color: NAVY }}><MapPin size={20} style={{ color: TEAL }} /> Accurate Location</h2>
-            <p className="text-sm font-bold" style={{ color: '#8a8f98' }}>Be at or near your selling location. We capture your GPS so buyers nearby can find you.</p>
+            <div className="rounded-2xl p-4" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e4078)` }}>
+              <p className="text-[10px] font-extrabold tracking-[0.2em] mb-1" style={{ color: '#2dd4c2' }}>LEVEL 2 · LOCATED</p>
+              <h2 className="text-lg font-extrabold text-white flex items-center gap-2"><MapPin size={18} style={{ color: '#2dd4c2' }} /> Put your shop on the map</h2>
+              <p className="text-[11px] font-bold mt-1" style={{ color: '#9fb4d8' }}>Stand at your selling spot. Buyers near this pin will find you first.</p>
+            </div>
             {!location ? (
-              <button onClick={captureLocation} disabled={locating} className="w-full text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2" style={{ background: NAVY }}>
-                {locating ? (<><Loader2 className="animate-spin" size={20} /> Getting location... (up to 30 secs)</>) : (<><MapPin size={20} /> I am at my selling location — Capture GPS</>)}
-              </button>
+              <>
+                <button onClick={captureLocation} disabled={locating} className="w-full text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2" style={{ background: NAVY }}>
+                  {locating ? (<><Loader2 className="animate-spin" size={20} /> Getting location... (up to 30 secs)</>) : (<><MapPin size={20} /> I am at my selling location — Capture GPS</>)}
+                </button>
+                <div className="text-center">
+                  <button type="button" onClick={openManualMap} className="text-xs font-bold underline" style={{ color: TEAL }}>
+                    GPS not working? Set your pin on a map instead
+                  </button>
+                </div>
+              </>
             ) : (
               <div className="bg-white border rounded-xl p-4 space-y-3" style={{ borderColor: '#e6e9ee', boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
                 <div className="text-sm font-bold" style={{ color: '#5b616b' }}>
                   <p><span style={{ color: '#8a8f98' }}>Latitude:</span> {location.lat.toFixed(6)}</p>
                   <p><span style={{ color: '#8a8f98' }}>Longitude:</span> {location.lng.toFixed(6)}</p>
-                  <p><span style={{ color: '#8a8f98' }}>Accuracy:</span> ±{Math.round(location.accuracy)} meters</p>
+                  <p><span style={{ color: '#8a8f98' }}>Accuracy:</span> {location.manual ? 'Manual pin (set on map)' : `±${Math.round(location.accuracy)} meters`}</p>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={captureLocation} className="flex-1 py-2 rounded-lg text-sm font-bold" style={{ background: '#f4f6f8', color: NAVY }}>Recapture</button>
@@ -379,24 +815,40 @@ export default function SellerRegisterPage() {
                 </div>
               </div>
             )}
+            {manualMode && (
+              <div className="bg-white border rounded-xl p-3 space-y-3" style={{ borderColor: '#e6e9ee' }}>
+                <p className="text-xs font-bold" style={{ color: '#5b616b' }}>
+                  Zoom in and drag the pin to your exact shop location, then confirm. Buyers near this pin will find your shop.
+                </p>
+                <div ref={mapDivRef} className="w-full rounded-lg" style={{ height: 260, background: '#f4f6f8' }} />
+                {mapLoading && <p className="text-xs font-bold" style={{ color: '#8a8f98' }}>Loading map…</p>}
+                <div className="flex gap-2">
+                  <button onClick={cancelManualMap} className="flex-1 py-2 rounded-lg text-sm font-bold" style={{ background: '#e6e9ee', color: NAVY }}>Cancel</button>
+                  <button onClick={confirmManualPin} disabled={mapLoading} className="flex-1 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40" style={{ background: TEAL }}>Use this pin location</button>
+                </div>
+              </div>
+            )}
             <div className="flex gap-3 pt-4">
               <button onClick={() => setStep(1)} className="flex-1 py-3 rounded-xl font-bold" style={{ background: '#e6e9ee', color: NAVY }}>Back</button>
-              <button onClick={() => setStep(3)} disabled={!locationConfirmed} className="flex-1 text-white font-bold py-3 rounded-xl disabled:opacity-40" style={{ background: TEAL }}>Next → Photos & Prices</button>
+              <button onClick={() => levelUp(2)} disabled={!locationConfirmed} className="flex-1 text-white font-bold py-3 rounded-xl disabled:opacity-40" style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.3)' }}>Complete Level 2 →</button>
             </div>
           </div>
         )}
 
         {step === 3 && (
           <div className="space-y-5">
-            <h2 className="text-lg font-extrabold" style={{ color: NAVY }}>Photos & Pricing</h2>
-            <p className="text-xs font-bold" style={{ color: '#8a8f98' }}>Take the photos at your shop — they help us verify you faster.</p>
+            <div className="rounded-2xl p-4" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e4078)` }}>
+              <p className="text-[10px] font-extrabold tracking-[0.2em] mb-1" style={{ color: '#2dd4c2' }}>LEVEL 3 · VERIFIED</p>
+              <h2 className="text-lg font-extrabold text-white">Prove the shop is real</h2>
+              <p className="text-[11px] font-bold mt-1" style={{ color: '#9fb4d8' }}>Take the photos at your shop — they verify you faster and earn the badge.</p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="border border-dashed rounded-xl p-4 text-center cursor-pointer" style={{ background: '#fff', borderColor: '#c3cbd4' }}>
-                {frontPreview ? (<img src={frontPreview} alt="Front" className="w-full h-32 object-cover rounded-lg" />) : (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#8a8f98' }}><Camera size={28} /><span className="text-xs mt-2 font-bold">Front of location</span></div>)}
+                {frontPreview ? (<img src={frontPreview} alt="Front" className="w-full h-32 object-cover rounded-lg" />) : frontUrl ? (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#0fa958' }}><CheckCircle size={28} /><span className="text-xs mt-2 font-bold">Front photo uploaded ✓</span></div>) : (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#8a8f98' }}><Camera size={28} /><span className="text-xs mt-2 font-bold">Front of location</span></div>)}
                 <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhoto(e, 'front')} />
               </label>
               <label className="border border-dashed rounded-xl p-4 text-center cursor-pointer" style={{ background: '#fff', borderColor: '#c3cbd4' }}>
-                {stockPreview ? (<img src={stockPreview} alt="Stock" className="w-full h-32 object-cover rounded-lg" />) : (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#8a8f98' }}><Camera size={28} /><span className="text-xs mt-2 font-bold">Your gas stock</span></div>)}
+                {stockPreview ? (<img src={stockPreview} alt="Stock" className="w-full h-32 object-cover rounded-lg" />) : stockUrl ? (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#0fa958' }}><CheckCircle size={28} /><span className="text-xs mt-2 font-bold">Stock photo uploaded ✓</span></div>) : (<div className="h-32 flex flex-col items-center justify-center" style={{ color: '#8a8f98' }}><Camera size={28} /><span className="text-xs mt-2 font-bold">Your gas stock</span></div>)}
                 <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhoto(e, 'stock')} />
               </label>
             </div>
@@ -413,10 +865,15 @@ export default function SellerRegisterPage() {
             </label>
             <div className="flex gap-3 pt-2">
               <button onClick={() => setStep(2)} className="flex-1 py-3 rounded-xl font-bold" style={{ background: '#e6e9ee', color: NAVY }}>Back</button>
-              <button onClick={handleSubmit} disabled={loading || !frontPhoto || !stockPhoto} className="flex-1 text-white font-bold py-3 rounded-xl disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: TEAL }}>
-                {loading ? (<><Loader2 className="animate-spin" size={18} /> Verifying & submitting...</>) : 'Submit Application'}
+              <button onClick={handleSubmit} disabled={loading || (!frontPhoto && !frontUrl) || (!stockPhoto && !stockUrl)} className="flex-1 text-white font-bold py-3 rounded-xl disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.3)' }}>
+                {loading ? (<><Loader2 className="animate-spin" size={18} /> {submitStatus || 'Working…'}</>) : 'Reach Level 3 🎖'}
               </button>
             </div>
+            {loading && (
+              <p className="text-center text-[11px] font-bold" style={{ color: '#8a8f98' }}>
+                Slow network? No problem — uploads resume automatically. Keep this page open.
+              </p>
+            )}
           </div>
         )}
       </div>

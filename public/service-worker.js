@@ -1,12 +1,18 @@
 // Service Worker for OGas Marketplace
 // Handles push notifications and background tasks
+//
+// Caching strategy (v2):
+// - Navigations (HTML pages) + /_next/ app bundles: NETWORK-FIRST so every
+//   Vercel deploy reaches phones immediately; cache is only an offline fallback.
+// - True static assets (icons, images, manifest): cache-first.
+// - Cache version is bumped on every change (ogas-marketplace-v2) so old
+//   caches are purged on activate.
 
-const CACHE_NAME = 'ogas-marketplace-v1';
+const CACHE_NAME = 'ogas-marketplace-v2';
 const urlsToCache = [
   '/',
-  '/products',
-  '/tracking',
-  '/price-comparison',
+  '/ogas-icon-192x192.png',
+  '/ogas-badge-72x72.png',
 ];
 
 // Install event - cache app shell
@@ -39,12 +45,45 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') {
     return;
   }
 
+  const url = new URL(event.request.url);
+
+  // Only handle same-origin requests
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  const isNavigation = event.request.mode === 'navigate';
+  const isAppBundle = url.pathname.startsWith('/_next/');
+
+  // Pages and app code: NETWORK-FIRST (fresh deploys win; cache = offline fallback)
+  if (isNavigation || isAppBundle) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (response && response.status === 200 && response.type === 'basic') {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request).then(cached => {
+            return cached || (isNavigation ? caches.match('/') : Response.error());
+          });
+        })
+    );
+    return;
+  }
+
+  // Static assets (icons, images, fonts): cache-first, then network
   event.respondWith(
     caches.match(event.request)
       .then(response => {

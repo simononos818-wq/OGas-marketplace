@@ -96,8 +96,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Payment does not match this order' }, { status: 400 });
     }
 
+    // If Gas Points were applied at checkout, the expected amount is the
+    // reduced chargedAmount, not the full order total.
     const paidKobo = Number(data.data.amount);
-    const expectedNaira = Number(order.totalAmount || order.total || order.totalPrice || 0);
+    const expectedNaira = Number(
+      order.chargedAmount ?? order.totalAmount ?? order.total ?? order.totalPrice ?? 0,
+    );
     const expectedKobo = Math.round(expectedNaira * 100);
     if (expectedKobo > 0 && Math.abs(paidKobo - expectedKobo) > 100) {
       return NextResponse.json({
@@ -119,6 +123,63 @@ export async function POST(req: NextRequest) {
       verifiedViaApi: true,
       updatedAt: new Date(),
     });
+
+    // ── Gas Points deduction (atomic, exactly once) ────────────────────
+    const pointsRedeemed = Math.max(0, Math.floor(Number(order.pointsRedeemed) || 0));
+    if (pointsRedeemed > 0 && !order.pointsDeducted && order.buyerId) {
+      const buyerRef = adminDb.collection('users').doc(order.buyerId);
+      const txLogRef = adminDb.collection('pointsTransactions').doc();
+      try {
+        await adminDb.runTransaction(async (tx) => {
+          const [oSnap, uSnap] = await Promise.all([tx.get(orderRef), tx.get(buyerRef)]);
+          if (oSnap.data()?.pointsDeducted) return;
+          const balance = Math.max(0, Math.floor(Number(uSnap.data()?.gasPoints) || 0));
+          const deduct = Math.min(pointsRedeemed, balance);
+          tx.set(buyerRef, { gasPoints: balance - deduct }, { merge: true });
+          tx.update(orderRef, { pointsDeducted: true, pointsDeductedCount: deduct });
+          tx.set(txLogRef, {
+            uid: order.buyerId,
+            type: 'spend',
+            points: deduct,
+            reason: 'order_discount',
+            orderId: resolvedOrderId,
+            createdAt: new Date(),
+          });
+        });
+      } catch (pointsErr) {
+        // Payment is already confirmed — never fail the order over points.
+        console.error('Points deduction failed (payment still valid):', pointsErr);
+      }
+    }
+
+    // ── GasBack: every paid order earns GP (2% back, max 500 GP/order) ──
+    if (!order.pointsEarned && order.buyerId && expectedNaira > 0) {
+      const earnRef = adminDb.collection('users').doc(order.buyerId);
+      const earnLogRef = adminDb.collection('pointsTransactions').doc();
+      try {
+        await adminDb.runTransaction(async (tx) => {
+          const oSnap = await tx.get(orderRef);
+          if (oSnap.data()?.pointsEarned) return;
+          const earn = Math.min(500, Math.floor(expectedNaira * 0.02));
+          tx.update(orderRef, { pointsEarned: true, pointsEarnedCount: earn });
+          if (earn <= 0) return;
+          const uSnap = await tx.get(earnRef);
+          const bal = Math.max(0, Math.floor(Number(uSnap.data()?.gasPoints) || 0));
+          tx.set(earnRef, { gasPoints: bal + earn }, { merge: true });
+          tx.set(earnLogRef, {
+            uid: order.buyerId,
+            type: 'earn',
+            points: earn,
+            reason: 'order_cashback',
+            orderId: resolvedOrderId,
+            createdAt: new Date(),
+          });
+        });
+      } catch (earnErr) {
+        // Payment is already confirmed — never fail the order over points.
+        console.error('GasBack failed (payment still valid):', earnErr);
+      }
+    }
 
     await notifyPaidEscrow(resolvedOrderId);
     await postSystemMessage(

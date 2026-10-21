@@ -8,7 +8,7 @@ import {
   onSnapshot,
   orderBy,
   query,
-  setDoc,
+  updateDoc,
   Timestamp,
   where,
 } from 'firebase/firestore';
@@ -100,15 +100,16 @@ export function useChat(chatId: string) {
   }, [chatId, user]);
 
   // Mark as read — direct Firestore write (rules allow any signed-in user to
-  // write chats). This never depends on the API, so badges clear instantly and
-  // reliably, even on flaky connections. API 'read' kept as a fallback.
+  // write chats). Uses updateDoc, NOT setDoc: dotted keys are only treated as
+  // nested field paths by updateDoc — setDoc(merge) writes a literal garbage
+  // field named "unreadCount.<uid>" and the badge never clears.
+  // API 'read' kept as a fallback for flaky connections.
   useEffect(() => {
     if (!chatId || !user || !chatInfo) return;
     if ((chatInfo.unreadCount?.[user.uid] || 0) === 0) return;
-    setDoc(
+    updateDoc(
       doc(db, 'chats', chatId),
       { [`unreadCount.${user.uid}`]: 0 },
-      { merge: true },
     ).catch(() => {
       chatAction({ action: 'read', chatId }).catch(() => {});
     });
@@ -122,10 +123,9 @@ export function useChat(chatId: string) {
       try {
         await chatAction({ action: 'send', chatId, text, quickKey });
         // Clear own unread immediately (server also does this, but don't wait)
-        setDoc(
+        updateDoc(
           doc(db, 'chats', chatId),
           { [`unreadCount.${user.uid}`]: 0 },
-          { merge: true },
         ).catch(() => {});
       } catch (e: any) {
         setError(e.message || 'Could not send');

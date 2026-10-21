@@ -12,18 +12,18 @@ export default function ChatThreadPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+      <div className="min-h-screen bg-[#f4f6f8] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#12a5b0]" />
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center px-6 text-center">
+      <div className="min-h-screen bg-[#f4f6f8] flex items-center justify-center px-6 text-center">
         <div>
-          <p className="text-gray-400 mb-4">Sign in to open this chat.</p>
-          <Link href="/login" className="text-orange-500 font-bold">Sign in</Link>
+          <p className="text-[#8a8f98] mb-4">Sign in to open this chat.</p>
+          <Link href="/login" className="text-[#12a5b0] font-bold">Sign in</Link>
         </div>
       </div>
     );

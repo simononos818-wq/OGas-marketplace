@@ -10,7 +10,7 @@ const kits = [
     name: 'STARTER KIT',
     price: 85000,
     badge: 'Most Popular',
-    badgeColor: 'bg-orange-500',
+    badgeColor: 'bg-[#12a5b0]',
     features: [
       '12.5kg gas cylinder (brand new)',
       'Digital weighing scale',
@@ -19,7 +19,7 @@ const kits = [
       'OGas branded signage',
       'Seller onboarding training',
     ],
-    ctaColor: 'bg-orange-500',
+    ctaColor: 'bg-[#12a5b0]',
   },
   {
     id: 'pro',
@@ -36,7 +36,7 @@ const kits = [
       'Priority seller support',
       'Free first month on OGas',
     ],
-    ctaColor: 'bg-blue-500',
+    ctaColor: 'bg-[#0e8a94]',
   },
   {
     id: 'plant',
@@ -52,7 +52,7 @@ const kits = [
       'OGas plant certification support',
       'Dedicated account manager',
     ],
-    ctaColor: 'bg-purple-500',
+    ctaColor: 'bg-[#16305e]',
   },
 ];
 
@@ -60,14 +60,14 @@ export default function BuyKitPage() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen bg-black text-white pb-20">
-      <div className="sticky top-0 bg-black border-b border-gray-800 p-4 z-10 flex items-center gap-3">
+    <div className="min-h-screen bg-[#f4f6f8] text-[#16305e] pb-20">
+      <div className="sticky top-0 bg-[#f4f6f8] border-b border-[#e6e9ee] p-4 z-10 flex items-center gap-3">
         <button onClick={() => router.back()} className="p-1">
-          <ArrowLeft size={24} className="text-gray-400" />
+          <ArrowLeft size={24} className="text-[#8a8f98]" />
         </button>
         <div>
           <h1 className="text-xl font-bold">OGas Seller Kits</h1>
-          <p className="text-sm text-gray-400">Everything you need to start selling gas</p>
+          <p className="text-sm text-[#8a8f98]">Everything you need to start selling gas</p>
         </div>
       </div>
 
@@ -75,20 +75,20 @@ export default function BuyKitPage() {
         {kits.map((kit) => (
           <div
             key={kit.id}
-            className="bg-gray-900 border border-gray-800 rounded-2xl p-5 relative overflow-hidden"
+            className="bg-white border border-[#e6e9ee] rounded-2xl p-5 relative overflow-hidden"
           >
             {kit.badge && (
-              <span className={`absolute top-4 right-4 ${kit.badgeColor} text-black text-xs font-bold px-3 py-1 rounded-full`}>
+              <span className={`absolute top-4 right-4 ${kit.badgeColor} text-white text-xs font-bold px-3 py-1 rounded-full`}>
                 {kit.badge}
               </span>
             )}
             <div className="mb-4">
-              <p className="text-sm font-semibold text-gray-400">{kit.name}</p>
+              <p className="text-sm font-semibold text-[#8a8f98]">{kit.name}</p>
               <p className="text-3xl font-bold mt-1">₦{kit.price.toLocaleString()}</p>
             </div>
             <ul className="space-y-2 mb-5">
               {kit.features.map((f, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+                <li key={i} className="flex items-start gap-2 text-sm text-[#8a8f98]">
                   <CheckCircle size={14} className="text-green-500 mt-0.5 shrink-0" />
                   {f}
                 </li>
@@ -103,10 +103,10 @@ export default function BuyKitPage() {
           </div>
         ))}
 
-        <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 text-center">
-          <p className="text-sm text-gray-400">
-            Already have gas equipment?{' '}
-            <Link href="/seller/register" className="text-orange-400 font-semibold">
+        <div className="bg-white/50 border border-[#e6e9ee] rounded-xl p-4 text-center">
+          <p className="text-sm text-[#8a8f98]">
+            Already have equipment?{' '}
+            <Link href="/seller/register" className="text-[#12a5b0] font-semibold">
               Register as a seller instead ›
             </Link>
           </p>

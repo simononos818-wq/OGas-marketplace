@@ -169,18 +169,18 @@ export default function SellerBankPage() {
 
   if (authLoading || loadingExisting) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-[#f4f6f8]">
+        <Loader2 className="w-6 h-6 text-[#12a5b0] animate-spin" />
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+      <div className="min-h-screen flex items-center justify-center bg-[#f4f6f8]">
         <div className="text-center">
-          <p className="text-gray-400 mb-4">Please sign in first</p>
-          <Link href="/seller/login" className="text-orange-500 font-semibold">
+          <p className="text-[#8a8f98] mb-4">Please sign in first</p>
+          <Link href="/seller/login" className="text-[#12a5b0] font-semibold">
             Seller login
           </Link>
         </div>
@@ -189,23 +189,23 @@ export default function SellerBankPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 p-4 text-white">
+    <div className="min-h-screen bg-[#f4f6f8] p-4 text-[#16305e]">
       <div className="max-w-md mx-auto">
         <div className="flex items-center gap-3 mb-6">
-          <Link href="/seller/dashboard" className="p-2 bg-gray-900 rounded-lg border border-gray-800">
-            <ArrowLeft className="w-5 h-5 text-gray-300" />
+          <Link href="/seller/dashboard" className="p-2 bg-white rounded-lg border border-[#e6e9ee]">
+            <ArrowLeft className="w-5 h-5 text-[#8a8f98]" />
           </Link>
           <h1 className="text-xl font-bold">Payout account</h1>
         </div>
 
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+        <div className="bg-white rounded-2xl border border-[#e6e9ee] p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="p-3 bg-green-500/15 rounded-xl">
-              <Banknote className="w-6 h-6 text-green-400" />
+              <Banknote className="w-6 h-6 text-green-600" />
             </div>
             <div>
               <h2 className="font-semibold">Where we send your money</h2>
-              <p className="text-sm text-gray-400">After Door Code or buyer confirms delivery</p>
+              <p className="text-sm text-[#8a8f98]">After Door Code or buyer confirms delivery</p>
             </div>
           </div>
 
@@ -213,13 +213,13 @@ export default function SellerBankPage() {
             <div className="text-center py-8">
               <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
               <h3 className="font-semibold text-lg">Bank details saved</h3>
-              {resolvedName && <p className="text-sm text-green-400 mt-2">✔ {resolvedName}</p>}
-              <p className="text-sm text-gray-400 mt-2">
+              {resolvedName && <p className="text-sm text-green-600 mt-2">✔ {resolvedName}</p>}
+              <p className="text-sm text-[#8a8f98] mt-2">
                 You will receive payouts here when buyers confirm or enter the Door Code.
               </p>
               <Link
                 href="/seller/dashboard"
-                className="inline-block mt-5 px-6 py-3 bg-orange-500 text-black font-bold rounded-xl"
+                className="inline-block mt-5 px-6 py-3 bg-[#12a5b0] text-white font-bold rounded-xl"
               >
                 Back to dashboard
               </Link>
@@ -228,11 +228,11 @@ export default function SellerBankPage() {
             <div className="text-center py-8">
               <Lock className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
               <h3 className="font-semibold text-lg">Payout account locked</h3>
-              <p className="text-sm text-green-400 mt-2">✔ {form.accountName}</p>
-              <p className="text-sm text-gray-400 mt-2">
+              <p className="text-sm text-green-600 mt-2">✔ {form.accountName}</p>
+              <p className="text-sm text-[#8a8f98] mt-2">
                 {form.bankName} · {form.accountNumber}
               </p>
-              <p className="text-sm text-gray-500 mt-4">
+              <p className="text-sm text-[#8a8f98] mt-4">
                 For your security, the payout account cannot be changed after payouts have started.
                 To change it, contact OGas support for identity verification.
               </p>
@@ -241,9 +241,9 @@ export default function SellerBankPage() {
             <>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Bank</label>
+                  <label className="block text-sm font-medium text-[#8a8f98] mb-1">Bank</label>
                   <select
-                    className="w-full p-3 border border-gray-700 rounded-xl bg-gray-950 text-white"
+                    className="w-full p-3 border border-[#e6e9ee] rounded-xl bg-[#f4f6f8] text-[#16305e]"
                     value={form.bankCode}
                     onChange={(e) =>
                       setForm({
@@ -263,12 +263,12 @@ export default function SellerBankPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Account number</label>
+                  <label className="block text-sm font-medium text-[#8a8f98] mb-1">Account number</label>
                   <input
                     type="text"
                     inputMode="numeric"
                     maxLength={10}
-                    className="w-full p-3 border border-gray-700 rounded-xl bg-gray-950 text-white"
+                    className="w-full p-3 border border-[#e6e9ee] rounded-xl bg-[#f4f6f8] text-[#16305e]"
                     placeholder="10 digits"
                     value={form.accountNumber}
                     onChange={(e) =>
@@ -280,9 +280,9 @@ export default function SellerBankPage() {
                 {(resolving || resolvedName || resolveError) && (
                   <div className="rounded-xl px-3 py-2.5 text-sm font-semibold border"
                     style={{
-                      background: resolvedName ? 'rgba(34,197,94,0.08)' : resolveError ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)',
-                      borderColor: resolvedName ? 'rgba(34,197,94,0.3)' : resolveError ? 'rgba(239,68,68,0.3)' : '#374151',
-                      color: resolvedName ? '#4ade80' : resolveError ? '#f87171' : '#9ca3af',
+                      background: resolvedName ? 'rgba(34,197,94,0.08)' : resolveError ? 'rgba(239,68,68,0.08)' : 'rgba(22,48,94,0.04)',
+                      borderColor: resolvedName ? 'rgba(34,197,94,0.3)' : resolveError ? 'rgba(239,68,68,0.3)' : '#e6e9ee',
+                      color: resolvedName ? '#16a34a' : resolveError ? '#dc2626' : '#5b616b',
                     }}
                   >
                     {resolving && (
@@ -296,7 +296,7 @@ export default function SellerBankPage() {
                 )}
 
                 {error && (
-                  <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                  <p className="text-sm text-red-600 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
                     {error}
                   </p>
                 )}
@@ -304,7 +304,7 @@ export default function SellerBankPage() {
                 <button
                   onClick={handleSave}
                   disabled={loading || resolving || !resolvedName}
-                  className="w-full py-3.5 bg-orange-500 text-black font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-[#12a5b0] text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <>
@@ -317,7 +317,7 @@ export default function SellerBankPage() {
                 </button>
               </div>
 
-              <p className="text-xs text-gray-500 mt-4 text-center flex items-center justify-center gap-1">
+              <p className="text-xs text-[#8a8f98] mt-4 text-center flex items-center justify-center gap-1">
                 <Shield size={12} />
                 Used only to pay you. Never shared with buyers.
               </p>
