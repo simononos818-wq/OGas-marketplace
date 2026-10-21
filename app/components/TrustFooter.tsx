@@ -60,8 +60,9 @@ export default function TrustFooter() {
         </div>
 
         <p className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
-          <span className="font-semibold text-white">Smell gas?</span> Close the valve, open windows,
-          switch off nothing electrical, use no flame or phone indoors, and move outside.{' '}
+          <span className="font-semibold text-white">Smell gas?</span> No flames, light switches or phones
+          indoors. Open doors and windows, close the cylinder valve only if it is safe to reach, and get
+          everyone outside.{' '}
           <Link href="/safety" className="text-[#2dd4c2] underline">Safety guide</Link>
         </p>
 
