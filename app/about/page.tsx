@@ -85,7 +85,7 @@ export default function AboutPage() {
             <div>
               <dt className="font-semibold">Registration</dt>
               <dd>
-                Business Name, CAC BN: 9638951 — incorporated 26 June 2026 under the Companies
+                Business Name, CAC BN: 9638951 — registered 26 June 2026 under the Companies
                 and Allied Matters Act 2020. Nature of business: internet services (digital
                 marketplace).
               </dd>
