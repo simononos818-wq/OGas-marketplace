@@ -177,8 +177,8 @@ export default function SellerEarningsPage() {
             <Clock size={18} style={{ color: TEAL }} />
           </div>
           <div>
-            <p className="text-[13px] font-extrabold" style={{ color: NAVY }}>Payouts run every morning after settlement</p>
-            <p className="text-xs mt-0.5" style={{ color: MUTED }}>No fees · Money lands in your saved bank account</p>
+            <p className="text-[13px] font-extrabold" style={{ color: NAVY }}>Walk-in payments are immediate</p>
+            <p className="text-xs mt-0.5" style={{ color: MUTED }}>Cash and transfers go directly to you. Online orders pay out after confirmation.</p>
           </div>
         </div>
 

@@ -1,10 +1,7 @@
-// app/api/walkin/route.ts
-// Logs a walk-in sale to Firestore (server-side, via firebase-admin)
-// and fires a thank-you SMS via Termii. If Termii env vars are missing
-// or Nigeria isn't activated on the account, the sale still saves.
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
+import { requireUser } from "@/lib/require-user";
 
 type PaymentType = "cash" | "transfer";
 
@@ -49,13 +46,19 @@ async function sendTermiiSms(to: string, message: string): Promise<void> {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const user = await requireUser(req);
+  if (!user) {
+    return NextResponse.json({ ok: false, error: "Sign in to complete a walk-in sale." }, { status: 401 });
+  }
+
   let body: {
     shopId?: string;
     kg?: number;
     amount?: number;
     paymentType?: PaymentType;
     customerPhone?: string;
+    clientSaleId?: string;
   };
   try {
     body = await req.json();
@@ -67,9 +70,13 @@ export async function POST(req: Request) {
   const kg = Number(body.kg);
   const amount = Number(body.amount);
   const paymentType = body.paymentType;
+  const clientSaleId = body.clientSaleId?.trim() || "";
 
   if (!shopId) {
     return NextResponse.json({ ok: false, error: "missing shopId" }, { status: 400 });
+  }
+  if (shopId !== user.uid) {
+    return NextResponse.json({ ok: false, error: "You can only complete sales for your own shop." }, { status: 403 });
   }
   if (!(kg > 0 && kg <= 100)) {
     return NextResponse.json({ ok: false, error: "invalid kg" }, { status: 400 });
@@ -80,44 +87,84 @@ export async function POST(req: Request) {
   if (paymentType !== "cash" && paymentType !== "transfer") {
     return NextResponse.json({ ok: false, error: "invalid paymentType" }, { status: 400 });
   }
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(clientSaleId)) {
+    return NextResponse.json({ ok: false, error: "invalid clientSaleId" }, { status: 400 });
+  }
 
-  let shopName = "your gas seller";
   try {
     const shopSnap = await adminDb.collection("sellers").doc(shopId).get();
-    const name = shopSnap.data()?.businessName;
-    if (typeof name === "string" && name.trim()) shopName = name.trim();
-  } catch {
-    // non-fatal
+    if (!shopSnap.exists) {
+      return NextResponse.json({ ok: false, error: "Seller profile not found." }, { status: 404 });
+    }
+    const sellerName = shopSnap.data()?.businessName;
+    const shopName = typeof sellerName === "string" && sellerName.trim() ? sellerName.trim() : "your gas seller";
+    const day = dayString(new Date());
+    const walkinRef = adminDb.collection("walkins").doc(`${shopId}_${clientSaleId}`);
+    let duplicate = false;
+    let conflict = false;
+
+    await adminDb.runTransaction(async (tx) => {
+      const existing = await tx.get(walkinRef);
+      if (existing.exists) {
+        const sale = existing.data()!;
+        conflict = Number(sale.kg) !== kg || Number(sale.amountNaira) !== amount || sale.paymentType !== paymentType;
+        duplicate = !conflict;
+        return;
+      }
+
+      tx.create(walkinRef, {
+        shopId,
+        kg,
+        amountNaira: amount,
+        paymentType,
+        customerPhone: body.customerPhone?.trim() ? body.customerPhone.trim().slice(0, 32) : null,
+        source: "seller-studio",
+        status: "completed",
+        paymentStatus: "paid_offline",
+        settlementStatus: "received_by_seller",
+        settlementMethod: "direct",
+        sellerEarnings: amount,
+        commission: 0,
+        day,
+        clientSaleId,
+        createdAt: FieldValue.serverTimestamp(),
+        paidAt: FieldValue.serverTimestamp(),
+        completedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    if (conflict) {
+      return NextResponse.json({ ok: false, error: "This sale ID was already used for a different sale." }, { status: 409 });
+    }
+
+    const todaySnap = await adminDb
+      .collection("walkins")
+      .where("shopId", "==", shopId)
+      .where("day", "==", day)
+      .count()
+      .get();
+    const walkinsToday = todaySnap.data().count;
+
+    const normalized = body.customerPhone ? normalizeNgPhone(body.customerPhone) : null;
+    if (!duplicate && normalized) {
+      const message =
+        `Thanks for refilling at ${shopName} (${kg}kg - N${amount.toLocaleString("en-NG")}). ` +
+        `Next refill on OGas gets you N200 off. Live price: https://www.ogaslpgmarketplace.com/buy`;
+      await sendTermiiSms(normalized, message);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      walkinsToday,
+      saleId: walkinRef.id,
+      amountReceived: amount,
+      paymentType,
+      paymentStatus: "paid_offline",
+      settlementStatus: "received_by_seller",
+      duplicate,
+    });
+  } catch (error) {
+    console.error("Walk-in sale completion failed:", error instanceof Error ? error.message : "unknown error");
+    return NextResponse.json({ ok: false, error: "Could not complete the sale. Please try again." }, { status: 500 });
   }
-
-  const day = dayString(new Date());
-
-  await adminDb.collection("walkins").add({
-    shopId,
-    kg,
-    amountNaira: amount,
-    paymentType,
-    customerPhone: body.customerPhone?.trim() ? body.customerPhone.trim() : null,
-    source: "seller-studio",
-    day,
-    createdAt: FieldValue.serverTimestamp(),
-  });
-
-  const todaySnap = await adminDb
-    .collection("walkins")
-    .where("shopId", "==", shopId)
-    .where("day", "==", day)
-    .count()
-    .get();
-  const walkinsToday = todaySnap.data().count;
-
-  const normalized = body.customerPhone ? normalizeNgPhone(body.customerPhone) : null;
-  if (normalized) {
-    const message =
-      `Thanks for refilling at ${shopName} (${kg}kg - N${amount.toLocaleString("en-NG")}). ` +
-      `Next refill on OGas gets you N200 off. Live price: https://ogaslpgmarketplace.com/buy`;
-    await sendTermiiSms(normalized, message);
-  }
-
-  return NextResponse.json({ ok: true, walkinsToday });
 }

@@ -1,5 +1,6 @@
 'use client';
 import { useState, type CSSProperties } from "react";
+import { authHeaders } from "@/lib/client-auth";
 
 const NAVY = "#0B2545";
 const TEAL = "#0FA3A3";
@@ -11,14 +12,20 @@ type Payment = "cash" | "transfer";
 
 const KG_PRESETS = [3, 6, 12.5, 25, 50];
 
+function newClientSaleId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export default function WalkInSaleButton({ shopId }: Props) {
   const [open, setOpen] = useState(false);
   const [kg, setKg] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
   const [payment, setPayment] = useState<Payment>("cash");
   const [phone, setPhone] = useState<string>("");
+  const [clientSaleId, setClientSaleId] = useState(newClientSaleId);
   const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState<{ count: number } | null>(null);
+  const [done, setDone] = useState<{ count: number; amount: number; payment: Payment } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function reset() {
@@ -26,6 +33,7 @@ export default function WalkInSaleButton({ shopId }: Props) {
     setAmount("");
     setPayment("cash");
     setPhone("");
+    setClientSaleId(newClientSaleId());
     setDone(null);
     setError(null);
   }
@@ -40,20 +48,21 @@ export default function WalkInSaleButton({ shopId }: Props) {
     try {
       const res = await fetch("/api/walkin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders(),
         body: JSON.stringify({
           shopId,
           kg: parseFloat(kg),
           amount: parseFloat(amount),
           paymentType: payment,
           customerPhone: phone.trim() || undefined,
+          clientSaleId,
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "save failed");
-      setDone({ count: data.walkinsToday });
-    } catch {
-      setError("Did not save. Try again.");
+      if (!res.ok || !data.ok) throw new Error(data.error || "Could not complete the sale.");
+      setDone({ count: data.walkinsToday, amount: Number(data.amountReceived), payment: data.paymentType });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Did not complete. Try again.");
     } finally {
       setSaving(false);
     }
@@ -107,8 +116,13 @@ export default function WalkInSaleButton({ shopId }: Props) {
           marginBottom: 16,
         }}
       >
-        <div style={{ fontSize: "2rem", color: TEAL_DARK, fontWeight: 800 }}>Saved</div>
+        <div style={{ fontSize: "2rem", color: TEAL_DARK, fontWeight: 800 }}>
+          ₦{done.amount.toLocaleString("en-NG")} received
+        </div>
         <div style={{ fontSize: "1rem", color: "#444", marginTop: 6 }}>
+          {done.payment === "cash" ? "Cash" : "Transfer"} sale completed — paid directly to you.
+        </div>
+        <div style={{ fontSize: "0.9rem", color: "#666", marginTop: 6 }}>
           Today&apos;s walk-ins: {done.count}
         </div>
         <button
@@ -179,12 +193,13 @@ export default function WalkInSaleButton({ shopId }: Props) {
         style={inputStyle}
       />
 
-      <label style={labelStyle}>Payment</label>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <label style={labelStyle}>Payment received by you</label>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         {(["cash", "transfer"] as Payment[]).map((p) => (
           <button
             key={p}
             onClick={() => setPayment(p)}
+            aria-pressed={payment === p}
             style={{
               flex: 1,
               padding: "14px",
@@ -196,10 +211,13 @@ export default function WalkInSaleButton({ shopId }: Props) {
               color: payment === p ? "#fff" : "#333",
             }}
           >
-            {p === "cash" ? "Cash" : "Transfer"}
+            {p === "cash" ? "Cash" : "Bank transfer"}
           </button>
         ))}
       </div>
+      <p style={{ fontSize: "0.85rem", color: "#555", lineHeight: 1.45, margin: "0 0 14px" }}>
+        Money goes directly to you. For transfers, confirm your bank alert before completing this sale. OGas will not create another payout.
+      </p>
 
       <label style={labelStyle}>Customer phone (optional - for SMS discount)</label>
       <input
@@ -244,7 +262,7 @@ export default function WalkInSaleButton({ shopId }: Props) {
             color: "#fff",
           }}
         >
-          {saving ? "Saving..." : "Save sale"}
+          {saving ? "Completing..." : "Complete sale — paid"}
         </button>
       </div>
     </div>
