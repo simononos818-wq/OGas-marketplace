@@ -4,6 +4,7 @@ export const metadata = {
   title: 'Partner with OGas — Distributors, Gas Plants, Lenders & Investors',
   description:
     'OGas Ventures is digitizing Nigeria\u2019s LPG retail: verified sellers, escrow payments, weigh-on-scale receipts, and sales data that unlocks financing. Partner with us as a distributor, gas plant, lender or investor.',
+  alternates: { canonical: '/partners' },
 }
 
 const lanes = [

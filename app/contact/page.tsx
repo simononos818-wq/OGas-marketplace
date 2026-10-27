@@ -2,6 +2,7 @@ export const metadata = {
   title: 'Contact OGas Ventures — Support, WhatsApp & Visit Us',
   description:
     'Contact OGas Ventures: WhatsApp 0913 311 0237, support@ogaslpgmarketplace.com. Visit Mega Think Success, 20 Ejumeghere Street, Isodje, Oteri, Ughelli, Delta State, Nigeria.',
+  alternates: { canonical: '/contact' },
 }
 
 export default function ContactPage() {

@@ -4,6 +4,7 @@ export const metadata = {
   title: 'Cooking Gas Safety — LPG Safety Tips & Checks | OGas',
   description:
     'Simple LPG safety guide for Nigerian homes and businesses: how to check your gas hose, spot leaks, store cylinders safely, and what to do if you smell gas.',
+  alternates: { canonical: '/safety' },
 }
 
 const faqJsonLd = {

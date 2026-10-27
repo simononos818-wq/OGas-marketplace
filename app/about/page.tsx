@@ -4,6 +4,7 @@ export const metadata = {
   title: 'About OGas Ventures — Registered LPG Marketplace in Nigeria',
   description:
     'OGas Ventures (CAC BN 9638951) is a registered Nigerian digital marketplace connecting LPG buyers with verified independent sellers. Transparent prices, secure escrow, seller financing.',
+  alternates: { canonical: '/about' },
 }
 
 export default function AboutPage() {

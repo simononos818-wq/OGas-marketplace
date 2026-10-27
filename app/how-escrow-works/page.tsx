@@ -4,6 +4,7 @@ export const metadata = {
   title: 'How Escrow Works — Safe Gas Payments on OGas',
   description:
     'OGas protects every gas purchase with escrow: your payment is held safely by Paystack and only released to the seller when you confirm your gas with your private Door Code.',
+  alternates: { canonical: '/how-escrow-works' },
 }
 
 const faqJsonLd = {
