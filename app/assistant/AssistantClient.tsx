@@ -1,8 +1,9 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Loader2, MapPin, Navigation, Send, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, Loader2, MapPin, MessageCircle, Navigation, Send, ShieldCheck, Sparkles } from 'lucide-react';
+import { whatsappLink } from '@/lib/contact';
 
 type Seller = {
   id: string;
@@ -18,6 +19,7 @@ type AssistantResponse = {
   mode?: 'safety' | 'live-data' | 'ai-live-data';
   answer?: string;
   recommendations?: Seller[];
+  notice?: string;
   message?: string;
 };
 
@@ -27,6 +29,8 @@ const PROMPTS = [
   'I have ₦20,000. How much gas can I buy?',
 ];
 
+const SUPPORT_LINK = whatsappLink('Hello OGas support, I need help with the OGas AI assistant.');
+
 export default function AssistantClient() {
   const [message, setMessage] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -34,6 +38,9 @@ export default function AssistantClient() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AssistantResponse | null>(null);
   const [error, setError] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const requestLocation = () => {
     if (!navigator.geolocation) {
@@ -56,18 +63,29 @@ export default function AssistantClient() {
     if (message.trim().length < 2 || loading) return;
     setLoading(true);
     setError('');
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 25000);
     try {
       const response = await fetch('/api/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        signal: controller.signal,
         body: JSON.stringify({ message: message.trim(), location: coords }),
       });
       const data = await response.json() as AssistantResponse;
       if (!response.ok || !data.success) throw new Error(data.message || 'Please try again.');
       setResult(data);
     } catch (err: any) {
-      setError(err.message || 'The assistant is unavailable. Please try again.');
+      const timedOut = err?.name === 'AbortError';
+      setError(timedOut
+        ? 'The assistant took too long to answer. Please try again.'
+        : err?.message || 'The assistant is unavailable. Please try again.');
     } finally {
+      clearTimeout(timeout);
+      if (abortRef.current === controller) abortRef.current = null;
       setLoading(false);
     }
   };
@@ -84,10 +102,10 @@ export default function AssistantClient() {
       </header>
 
       <main className="px-4 py-5">
-        <section aria-label="Ask OGas AI" className="rounded-2xl bg-white p-4" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
+        <section aria-label="Ask OGas AI" aria-busy={loading} className="rounded-2xl bg-white p-4" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
           <div className="flex flex-wrap gap-2" aria-label="Suggested questions">
             {PROMPTS.map((prompt) => (
-              <button key={prompt} type="button" onClick={() => { setMessage(prompt); setResult(null); setError(''); }} className="min-h-[44px] rounded-xl border border-[#c9d6e8] px-3 py-2 text-left text-[12px] font-bold text-[#16305e] transition-colors hover:border-[#12a5b0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#12a5b0]">
+              <button key={prompt} type="button" disabled={loading} onClick={() => { setMessage(prompt); setResult(null); setError(''); }} className="min-h-[44px] rounded-xl border border-[#c9d6e8] px-3 py-2 text-left text-[12px] font-bold text-[#16305e] transition-colors hover:border-[#12a5b0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#12a5b0] disabled:cursor-not-allowed disabled:opacity-50">
                 {prompt}
               </button>
             ))}
@@ -112,20 +130,34 @@ export default function AssistantClient() {
               </button>
               <span className="text-[11px] text-[#5b616b]">{message.length}/500</span>
             </div>
-            <button type="submit" disabled={loading || message.trim().length < 2} className="mt-3 flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[#12a5b0] px-4 text-[14px] font-extrabold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+            <button type="submit" disabled={loading || message.trim().length < 2} className="mt-3 flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[#0a7f88] px-4 text-[14px] font-extrabold text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16305e] disabled:cursor-not-allowed disabled:opacity-50">
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={17} />}
               {loading ? 'Checking live sellers…' : 'Ask OGas AI'}
             </button>
           </form>
         </section>
 
-        {error && <div role="alert" className="mt-4 rounded-xl border border-[#e74c3c] bg-[#fff4f2] p-4 text-[14px] font-semibold text-[#9f2d20]">{error} <Link href="/shops" className="ml-1 underline">Browse shops instead.</Link></div>}
+        {error && (
+          <div role="alert" className="mt-4 rounded-xl border border-[#e74c3c] bg-[#fff4f2] p-4 text-[14px] font-semibold text-[#9f2d20]">
+            <p>{error}</p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+              <Link href="/shops" className="underline">Browse shops</Link>
+              <a href={SUPPORT_LINK} target="_blank" rel="noreferrer" className="underline">WhatsApp support</a>
+            </div>
+          </div>
+        )}
+
+        {result?.notice && (
+          <div role="status" className="mt-4 rounded-xl border border-[#d8a72d] bg-[#fff9e8] p-3 text-[13px] font-semibold leading-relaxed text-[#6b4b00]">
+            {result.notice}
+          </div>
+        )}
 
         {result?.answer && (
           <section aria-live="polite" className="mt-4 rounded-r-2xl border-l-[3px] border-[#12a5b0] bg-white p-4" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
             <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#0a7f88]">
               {result.mode === 'safety' ? <ShieldCheck size={16} /> : <Sparkles size={16} />}
-              {result.mode === 'ai-live-data' ? 'OGas AI answer' : result.mode === 'safety' ? 'Safety guidance' : 'Live-data recommendations'}
+              {result.mode === 'ai-live-data' ? 'Gemini answer + live OGas data' : result.mode === 'safety' ? 'Safety guidance' : 'Live-data recommendations'}
             </div>
             <p className="mt-3 whitespace-pre-wrap text-[15px] leading-[1.7] text-[#263b5a]">{result.answer}</p>
           </section>
@@ -154,7 +186,7 @@ export default function AssistantClient() {
                     </div>
                     <p className="shrink-0 text-right text-[18px] font-black">₦{seller.pricePerKg.toLocaleString()}<span className="block text-[11px] font-semibold text-[#5b616b]">per kg</span></p>
                   </div>
-                  <Link href={`/buy/${seller.id}`} className="mt-4 flex min-h-[46px] items-center justify-center gap-2 rounded-xl bg-[#16305e] px-4 text-[13px] font-extrabold text-white">
+                  <Link href={`/buy/${seller.id}`} className="mt-4 flex min-h-[46px] items-center justify-center gap-2 rounded-xl bg-[#16305e] px-4 text-[13px] font-extrabold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#12a5b0]">
                     View shop and order <ArrowRight size={15} />
                   </Link>
                 </article>
@@ -163,7 +195,12 @@ export default function AssistantClient() {
           </section>
         )}
 
-        <p className="mt-5 text-center text-[12px] leading-relaxed text-[#5b616b]">AI can make mistakes. Seller names, prices and delivery details should always be confirmed on the live shop page before payment.</p>
+        <div className="mt-5 text-center">
+          <a href={SUPPORT_LINK} target="_blank" rel="noreferrer" className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 text-[13px] font-extrabold text-[#16305e] underline decoration-[#12a5b0] decoration-2 underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#12a5b0]">
+            <MessageCircle size={17} /> Need a person? WhatsApp OGas
+          </a>
+          <p className="mt-2 text-[12px] leading-relaxed text-[#5b616b]">AI can make mistakes. Seller names, prices and delivery details should always be confirmed on the live shop page before payment. Never share your password, PIN or OTP with the assistant.</p>
+        </div>
       </main>
     </div>
   );

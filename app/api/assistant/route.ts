@@ -5,6 +5,7 @@ import { GAS_LOCATIONS, sellersForLocation } from '@/lib/gas-locations';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 type Coordinates = { lat: number; lng: number };
 type RankedSeller = PublicSeller & { distanceKm?: number };
@@ -12,9 +13,15 @@ type RankedSeller = PublicSeller & { distanceKm?: number };
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 12;
+const AI_UNAVAILABLE_NOTICE = 'Gemini is temporarily unavailable. This answer uses live OGas seller data only, without an AI-generated explanation.';
 
 function allowed(ip: string): boolean {
   const now = Date.now();
+  if (attempts.size > 5000) {
+    for (const [key, value] of attempts) {
+      if (value.resetAt <= now) attempts.delete(key);
+    }
+  }
   const current = attempts.get(ip);
   if (!current || current.resetAt <= now) {
     attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
@@ -79,6 +86,9 @@ function json(body: Record<string, unknown>, status = 200) {
 }
 
 export async function POST(req: NextRequest) {
+  const contentLength = Number(req.headers.get('content-length') || 0);
+  if (contentLength > 16_000) return json({ success: false, message: 'That request is too large. Please send a shorter question.' }, 413);
+
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
   if (!allowed(ip)) return json({ success: false, message: 'Too many requests. Please wait a minute and try again.' }, 429);
 
@@ -108,7 +118,13 @@ export async function POST(req: NextRequest) {
     const fallback = fallbackAnswer(recommendations, Boolean(coords));
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || !recommendations.length) {
-      return json({ success: true, mode: 'live-data', answer: fallback, recommendations });
+      return json({
+        success: true,
+        mode: 'live-data',
+        answer: fallback,
+        recommendations,
+        ...(apiKey ? {} : { notice: AI_UNAVAILABLE_NOTICE }),
+      });
     }
 
     const catalog = recommendations.map((seller) => ({
@@ -123,8 +139,8 @@ export async function POST(req: NextRequest) {
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({
-        model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
-        systemInstruction: `You are OGas AI, a concise cooking-gas shopping assistant for Nigeria. Use ONLY the supplied live seller catalog for seller names, areas, prices, distances and delivery fees. Never invent sellers, prices, ratings, stock, delivery times or promises. You may calculate refill costs from catalog prices and show the calculation. A null delivery fee means the fee is unknown, not free. Mention that buyers should confirm the current price and delivery fee on the shop page. Recommend only catalog sellers and keep answers under 180 words. If the request is unrelated to LPG, briefly redirect to cooking gas help.`,
+        model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+        systemInstruction: `You are OGas AI, a concise cooking-gas shopping assistant for Nigeria. Use ONLY the supplied live seller catalog for seller names, areas, prices, distances and delivery fees. Never invent sellers, prices, ratings, stock, delivery times or promises. You may calculate refill costs from catalog prices and show the calculation. A null delivery fee means the fee is unknown, not free. Mention that buyers should confirm the current price and delivery fee on the shop page. Recommend only catalog sellers and keep answers under 180 words. Never claim to place orders, take payments, change prices or issue rewards. Do not request passwords, PINs, OTPs or payment details. If the request is unrelated to LPG, briefly redirect to cooking gas help.`,
       });
       const result = await model.generateContent({
         contents: [{
@@ -134,10 +150,13 @@ export async function POST(req: NextRequest) {
         generationConfig: { temperature: 0.2, maxOutputTokens: 400 },
       });
       const answer = result.response.text().trim();
-      return json({ success: true, mode: 'ai-live-data', answer: answer || fallback, recommendations });
+      if (!answer) {
+        return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE });
+      }
+      return json({ success: true, mode: 'ai-live-data', answer, recommendations });
     } catch (error) {
-      console.error('OGas AI generation failed; using live-data fallback:', error instanceof Error ? error.message : 'unknown error');
-      return json({ success: true, mode: 'live-data', answer: fallback, recommendations });
+      console.error('OGas AI generation failed; using labelled live-data fallback:', error instanceof Error ? error.message : 'unknown error');
+      return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE });
     }
   } catch (error) {
     console.error('OGas assistant route failed:', error instanceof Error ? error.message : 'unknown error');
