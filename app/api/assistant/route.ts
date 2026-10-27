@@ -123,6 +123,7 @@ export async function POST(req: NextRequest) {
         mode: 'live-data',
         answer: fallback,
         recommendations,
+        aiStatus: apiKey ? 'seller-data-only' : 'not-configured',
         ...(apiKey ? {} : { notice: AI_UNAVAILABLE_NOTICE }),
       });
     }
@@ -151,12 +152,12 @@ export async function POST(req: NextRequest) {
       });
       const answer = result.response.text().trim();
       if (!answer) {
-        return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE });
+        return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE, aiStatus: 'empty-response' });
       }
-      return json({ success: true, mode: 'ai-live-data', answer, recommendations });
+      return json({ success: true, mode: 'ai-live-data', answer, recommendations, aiStatus: 'connected' });
     } catch (error) {
       console.error('OGas AI generation failed; using labelled live-data fallback:', error instanceof Error ? error.message : 'unknown error');
-      return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE });
+      return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE, aiStatus: 'generation-failed' });
     }
   } catch (error) {
     console.error('OGas assistant route failed:', error instanceof Error ? error.message : 'unknown error');
