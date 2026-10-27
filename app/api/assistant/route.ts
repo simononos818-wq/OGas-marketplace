@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { listPublicSellers, type PublicSeller } from '@/lib/public-sellers';
 import { GAS_LOCATIONS, sellersForLocation } from '@/lib/gas-locations';
 
@@ -9,6 +8,9 @@ export const maxDuration = 30;
 
 type Coordinates = { lat: number; lng: number };
 type RankedSeller = PublicSeller & { distanceKm?: number };
+type GeminiApiResponse = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+};
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 60_000;
@@ -85,6 +87,15 @@ function json(body: Record<string, unknown>, status = 200) {
   return NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 }
 
+function geminiFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (message.includes('404') || message.includes('not found')) return 'model-not-found';
+  if (message.includes('401') || message.includes('403') || message.includes('api key')) return 'key-rejected';
+  if (message.includes('429') || message.includes('quota') || message.includes('rate limit')) return 'quota-exceeded';
+  if (message.includes('abort') || message.includes('timeout')) return 'timeout';
+  return 'request-failed';
+}
+
 export async function POST(req: NextRequest) {
   const contentLength = Number(req.headers.get('content-length') || 0);
   if (contentLength > 16_000) return json({ success: false, message: 'That request is too large. Please send a shorter question.' }, 413);
@@ -138,26 +149,42 @@ export async function POST(req: NextRequest) {
     }));
 
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
-        systemInstruction: `You are OGas AI, a concise cooking-gas shopping assistant for Nigeria. Use ONLY the supplied live seller catalog for seller names, areas, prices, distances and delivery fees. Never invent sellers, prices, ratings, stock, delivery times or promises. You may calculate refill costs from catalog prices and show the calculation. A null delivery fee means the fee is unknown, not free. Mention that buyers should confirm the current price and delivery fee on the shop page. Recommend only catalog sellers and keep answers under 180 words. Never claim to place orders, take payments, change prices or issue rewards. Do not request passwords, PINs, OTPs or payment details. If the request is unrelated to LPG, briefly redirect to cooking gas help.`,
+      const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: `You are OGas AI, a concise cooking-gas shopping assistant for Nigeria. Use ONLY the supplied live seller catalog for seller names, areas, prices, distances and delivery fees. Never invent sellers, prices, ratings, stock, delivery times or promises. You may calculate refill costs from catalog prices and show the calculation. A null delivery fee means the fee is unknown, not free. Mention that buyers should confirm the current price and delivery fee on the shop page. Recommend only catalog sellers and keep answers under 180 words. Never claim to place orders, take payments, change prices or issue rewards. Do not request passwords, PINs, OTPs or payment details. If the request is unrelated to LPG, briefly redirect to cooking gas help.` }],
+          },
+          contents: [{
+            role: 'user',
+            parts: [{ text: `Buyer request: ${message}\n\nLive seller catalog:\n${JSON.stringify(catalog)}` }],
+          }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 400 },
+        }),
+        signal: AbortSignal.timeout(20_000),
       });
-      const result = await model.generateContent({
-        contents: [{
-          role: 'user',
-          parts: [{ text: `Buyer request: ${message}\n\nLive seller catalog:\n${JSON.stringify(catalog)}` }],
-        }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 400 },
-      });
-      const answer = result.response.text().trim();
+      if (!geminiResponse.ok) {
+        const details = await geminiResponse.text();
+        throw new Error(`Gemini request failed (${geminiResponse.status}): ${details.slice(0, 300)}`);
+      }
+      const result = await geminiResponse.json() as GeminiApiResponse;
+      const answer = result.candidates
+        ?.flatMap((candidate) => candidate.content?.parts || [])
+        .map((part) => part.text || '')
+        .join('\n')
+        .trim() || '';
       if (!answer) {
         return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE, aiStatus: 'empty-response' });
       }
       return json({ success: true, mode: 'ai-live-data', answer, recommendations, aiStatus: 'connected' });
     } catch (error) {
       console.error('OGas AI generation failed; using labelled live-data fallback:', error instanceof Error ? error.message : 'unknown error');
-      return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE, aiStatus: 'generation-failed' });
+      return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE, aiStatus: 'generation-failed', aiReason: geminiFailureReason(error) });
     }
   } catch (error) {
     console.error('OGas assistant route failed:', error instanceof Error ? error.message : 'unknown error');
