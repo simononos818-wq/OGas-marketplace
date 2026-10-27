@@ -4,11 +4,12 @@ import SellerPacksClient from "./SellerPacksClient";
 export const metadata: Metadata = {
   title: "Start Your Gas Business | OGas Seller Starter Packs",
   description:
-    "Complete gas business packages from ₦500,000: 47kg Calor cylinder, digital scale, safety kit, FREE one-day training, live OGas shop and 3 months commission-free trading. First 10 buyers save ₦50,000.",
+    "Join the OGas seller pack waitlist. Packages from ₦450,000 with filled branded 50kg C-Smart cylinders, weighing equipment, safety kit, practical training and seller onboarding. No payment today.",
+  alternates: { canonical: "/seller/packs" },
   openGraph: {
     title: "Start Your Own Gas Business — OGas Seller Starter Packs",
     description:
-      "Equipment + FREE training + your own online shop + 3 months commission-free. From ₦500,000.",
+      "Filled branded 50kg C-Smart cylinders + equipment + practical training + OGas seller onboarding. Waitlist packages from ₦450,000; no payment today.",
     url: "https://ogaslpgmarketplace.com/seller/packs",
     siteName: "OGas LPG Marketplace",
     type: "website",

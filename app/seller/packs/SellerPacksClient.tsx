@@ -8,7 +8,6 @@ type Pack = {
   icon: string;
   name: string;
   price: number;
-  oldPrice: number;
   tagline: string;
   items: string[];
   featured?: boolean;
@@ -19,32 +18,30 @@ const PACKS: Pack[] = [
     icon: "🥉",
     name: "STARTER",
     price: 450000,
-    oldPrice: 500000,
-    tagline: "Begin your gas business — everything you need in one box.",
+    tagline: "Begin your gas business with the essential equipment and training.",
     items: [
-      "47kg Calor cylinder — FILLED ✅",
+      "50kg branded C-Smart cylinder — FILLED ✅",
       "Digital weighing scale",
       "Hose & regulator",
       "Fire extinguisher, apron & gloves",
       "Branded signboard",
-      "FREE training + certificate",
-      "6 months featured on OGas",
+      "FREE practical training",
+      "OGas seller onboarding support",
     ],
   },
   {
     icon: "🥈",
     name: "BUSINESS",
     price: 900000,
-    oldPrice: 1000000,
-    tagline: "For the serious seller — double capacity, full branding.",
+    tagline: "For the serious seller — double capacity and full shop branding.",
     items: [
-      "2× 47kg Calor cylinders — both FILLED ✅",
+      "2× 50kg branded C-Smart cylinders — both FILLED ✅",
       "Heavy-duty platform scale",
       "2× hose & regulator sets",
       "Full safety kit + fire bucket",
       "Signboard + price board",
-      "FREE training + certificate",
-      "12 months featured on OGas",
+      "FREE practical training",
+      "OGas seller onboarding support",
     ],
     featured: true,
   },
@@ -52,16 +49,14 @@ const PACKS: Pack[] = [
     icon: "🥇",
     name: "MEGA DEALER",
     price: 1350000,
-    oldPrice: 1500000,
-    tagline: "Own your area — big capacity, certified partner status.",
+    tagline: "Build a higher-capacity operation with equipment for your team.",
     items: [
-      "3× 47kg Calor cylinders (1 filled + 2 spare)",
+      "3× 50kg branded C-Smart cylinders — all FILLED ✅",
       "Industrial scale + backup scale",
       "Full safety kit + 2 extinguishers",
       "Complete shop branding",
-      "OGas Certified Partner badge",
+      "OGas seller onboarding support",
       "FREE training for you + 1 worker",
-      "24 months featured + delivery support",
     ],
   },
 ];
@@ -70,11 +65,11 @@ const naira = (v: number) => "₦" + v.toLocaleString("en-NG");
 
 function waLink(packName: string, price: number) {
   const msg =
-    "Hello OGas! I want to book the " +
+    "Hello OGas! I want to join the waitlist for the " +
     packName +
     " Pack (" +
     naira(price) +
-    " promo price). My name is ______ and I am based in ______.";
+    "). My name is ______ and I am based in ______. Please confirm supplier availability, the final package details and my delivery quote. I understand that no payment is due today.";
   return "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(msg);
 }
 
@@ -85,38 +80,36 @@ export default function SellerPacksClient() {
         <Link href="/" className="packs-back">← Back to OGas</Link>
         <h1>Start Your Own Gas Business 🏆</h1>
         <p className="packs-lede">
-          One refill = <strong>₦15,000 profit</strong>. People cook every day.
-          We package the whole business — equipment, training and your own
-          online shop.
+          Start with filled branded cylinders, safety equipment, practical training
+          and OGas seller onboarding. Package prices are shown below; delivery is quoted separately.
         </p>
         <div className="promo-strip">
-          ⏰ FIRST 10 BUYERS GET <strong>₦50,000 OFF</strong> — promo ends
-          31 October
+          <strong>WAITLIST OPEN — NO PAYMENT TODAY.</strong> Join on WhatsApp and we will confirm
+          supplier availability, final package details and your delivery quote before asking for payment.
         </div>
       </header>
 
       <section className="includes">
         <h2>EVERY PACK INCLUDES ✅</h2>
         <div className="includes-grid">
-          <div>🔥 FREE one-day training (worth ₦10k)</div>
-          <div>🛒 Your shop LIVE on OGas same day</div>
-          <div>💚 3 months commission-free</div>
-          <div>📍 Featured listing — buyers find you first</div>
+          <div>🔥 FREE practical training</div>
+          <div>🛒 OGas seller onboarding support</div>
+          <div>💚 3 months commission-free trading</div>
+          <div>⛽ Filled branded 50kg C-Smart cylinders</div>
         </div>
       </section>
 
-      <section className="packs-grid">
+      <section className="packs-grid" aria-label="Gas business packages">
         {PACKS.map((p) => (
           <article
             key={p.name}
             className={"pack-card" + (p.featured ? " featured" : "")}
           >
             {p.featured && <div className="best-badge">MOST POPULAR</div>}
-            <div className="pack-icon">{p.icon}</div>
+            <div className="pack-icon" aria-hidden="true">{p.icon}</div>
             <h3>{p.name} PACK</h3>
             <p className="pack-tagline">{p.tagline}</p>
             <div className="price-row">
-              <span className="old-price">{naira(p.oldPrice)}</span>
               <span className="price">{naira(p.price)}</span>
             </div>
             <ul className="pack-items">
@@ -130,10 +123,10 @@ export default function SellerPacksClient() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              BOOK WITH 50% DEPOSIT
+              JOIN THE WAITLIST
             </a>
             <p className="deposit-note">
-              Deposit: {naira(p.price / 2)} to lock your price & training seat
+              No deposit on this page. We confirm stock, filled-cylinder availability and delivery quote first.
             </p>
           </article>
         ))}
@@ -161,12 +154,12 @@ export default function SellerPacksClient() {
           margin: 0 auto;
         }
         .packs-hero { text-align: center; padding: 24px 0 8px; }
-        .packs-back { color: #2dd4c2; font-size: 14px; text-decoration: none; display: inline-block; margin-bottom: 16px; }
+        .packs-back { color: #2dd4c2; font-size: 14px; text-decoration: none; display: inline-block; margin-bottom: 16px; min-height: 44px; }
         .packs-hero h1 { font-size: 28px; margin: 0 0 10px; color: #ffffff; }
-        .packs-lede { font-size: 16px; color: #c9d6e8; max-width: 560px; margin: 0 auto 16px; }
+        .packs-lede { font-size: 16px; line-height: 1.6; color: #c9d6e8; max-width: 620px; margin: 0 auto 16px; }
         .promo-strip {
-          background: #e8a13a; color: #0a2540; font-size: 15px;
-          border-radius: 10px; padding: 12px; max-width: 520px; margin: 0 auto;
+          background: #e8a13a; color: #0a2540; font-size: 14px; line-height: 1.55;
+          border-radius: 10px; padding: 12px; max-width: 620px; margin: 0 auto;
         }
         .includes { margin: 28px 0; }
         .includes h2 { text-align: center; font-size: 16px; color: #2dd4c2; margin-bottom: 14px; }
@@ -195,31 +188,36 @@ export default function SellerPacksClient() {
         }
         .pack-icon { font-size: 40px; }
         .pack-card h3 { margin: 6px 0 2px; font-size: 20px; }
-        .pack-tagline { font-size: 13px; color: #c9d6e8; min-height: 36px; }
+        .pack-tagline { font-size: 14px; line-height: 1.5; color: #c9d6e8; min-height: 42px; }
         .price-row { margin: 10px 0; }
-        .old-price { text-decoration: line-through; color: #8fa3c0; margin-right: 8px; font-size: 15px; }
         .price { font-size: 26px; font-weight: 800; color: #2dd4c2; }
         .pack-items { list-style: none; padding: 0; margin: 0 0 18px; text-align: left; }
-        .pack-items li { font-size: 13.5px; padding: 7px 4px; border-bottom: 1px dashed #1f3d75; color: #e6eefb; }
+        .pack-items li { font-size: 14px; line-height: 1.45; padding: 7px 4px; border-bottom: 1px dashed #1f3d75; color: #e6eefb; }
         .pack-cta {
-          display: block; background: #0fb5a6; color: #0a2540; font-weight: 800;
+          display: flex; align-items: center; justify-content: center; min-height: 52px;
+          background: #0fb5a6; color: #0a2540; font-weight: 800;
           font-size: 15px; padding: 16px; border-radius: 12px; text-decoration: none;
           margin-top: auto; text-align: center; letter-spacing: .3px;
         }
         .pack-cta:active { background: #2dd4c2; }
-        .deposit-note { font-size: 12px; color: #8fa3c0; margin-top: 10px; }
+        .deposit-note { font-size: 12px; line-height: 1.5; color: #aebfd6; margin-top: 10px; }
         .already {
           margin-top: 36px; background: #16305e; border: 1px dashed #2dd4c2;
           border-radius: 16px; padding: 24px; text-align: center;
         }
         .already h2 { font-size: 18px; color: #2dd4c2; margin: 0 0 8px; }
-        .already p { color: #c9d6e8; font-size: 14px; margin: 0 0 16px; }
+        .already p { color: #c9d6e8; font-size: 14px; line-height: 1.5; margin: 0 0 16px; }
         .already-cta {
-          display: inline-block; background: transparent; border: 2px solid #2dd4c2;
+          display: inline-flex; align-items: center; justify-content: center; min-height: 48px;
+          background: transparent; border: 2px solid #2dd4c2;
           color: #2dd4c2; font-weight: 700; padding: 14px 28px; border-radius: 12px;
           text-decoration: none; font-size: 15px;
         }
-        .packs-foot { text-align: center; font-size: 12px; color: #5a7291; margin-top: 40px; }
+        .packs-foot { text-align: center; font-size: 12px; line-height: 1.5; color: #8fa3c0; margin-top: 40px; }
+        @media (max-width: 640px) {
+          .packs-grid { grid-template-columns: 1fr; }
+          .pack-tagline { min-height: 0; }
+        }
       `}</style>
     </main>
   );

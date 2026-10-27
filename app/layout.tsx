@@ -33,10 +33,8 @@ export const metadata: Metadata = {
     icon: '/ogas-icon.svg',
     apple: '/ogas-icon.svg',
   },
-  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
-    url: SITE_URL,
     siteName: SITE_NAME,
     title: 'OGas — Verified LPG Marketplace',
     description: SITE_DESC,
@@ -70,6 +68,15 @@ export const viewport: Viewport = {
   themeColor: '#16305e',
 };
 
+const websiteJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: SITE_NAME,
+  url: SITE_URL,
+  inLanguage: 'en-NG',
+  publisher: { '@type': 'Organization', name: 'OGas Ventures', url: SITE_URL },
+};
+
 const orgJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
@@ -100,6 +107,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="dark">
 <head>
 <meta name="google-site-verification" content="kmZSslXHb-lG8NfZY_eQBhB5oMzJXjk3cWnb6Fynu8Q" />
+<script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+/>
 <script
   type="application/ld+json"
   dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}

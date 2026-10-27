@@ -20,7 +20,10 @@ export default function TrustFooter() {
             <p className="mb-2 font-semibold text-[#2dd4c2]">Marketplace</p>
             <ul className="space-y-1.5">
               <li><Link href="/shops" className={linkCls}>Find a seller</Link></li>
+              <li><Link href="/assistant" className={linkCls}>Ask OGas AI</Link></li>
               <li><Link href="/calculator" className={linkCls}>Gas calculator</Link></li>
+              <li><Link href="/gas/ughelli" className={linkCls}>LPG in Ughelli</Link></li>
+              <li><Link href="/gas/warri" className={linkCls}>LPG in Warri</Link></li>
               <li><Link href="/sell" className={linkCls}>Sell on OGas</Link></li>
               <li><Link href="/partners" className={linkCls}>Partners</Link></li>
             </ul>

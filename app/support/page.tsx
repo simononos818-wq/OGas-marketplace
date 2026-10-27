@@ -1,3 +1,9 @@
+export const metadata = {
+  title: 'OGas Support — Orders, Payments and Seller Help',
+  description: 'Get help with an OGas cooking gas order, delivery, payment or seller account from the OGas support team.',
+  alternates: { canonical: '/support' },
+};
+
 export default function SupportPage() {
   return (
     <div className="min-h-screen bg-[#f4f6f8] text-[#16305e] p-6 max-w-2xl mx-auto">

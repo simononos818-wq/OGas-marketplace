@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { sellerVerified } from '@/lib/fields';
+import { isValidPricePerKg } from '@/lib/pricing';
 
 export interface Seller {
   id: string;
@@ -64,7 +65,7 @@ export function extractCoords(seller: any): { lat: number; lng: number } | null 
 }
 
 function derivePricePerKg(s: Seller): number {
-  if (s.pricePerKg && s.pricePerKg >= 800 && s.pricePerKg <= 2500) return s.pricePerKg;
+  if (isValidPricePerKg(s.pricePerKg)) return s.pricePerKg;
   const p = s.prices || {};
   const from125 = Number(p['12.5kg'] || p['12kg'] || 0);
   if (from125 > 0) return Math.round(from125 / 12.5);

@@ -7,6 +7,7 @@ import { useSellers } from '../hooks/useSellers';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { isValidPricePerKg } from '@/lib/pricing';
 
 const NAVY = '#16305e';
 const TEAL = '#12a5b0';
@@ -41,7 +42,7 @@ export default function ShopsPage() {
   const list = sellers.filter((s) => {
     if (s.id.startsWith('seed_')) return false;
     const price = Number(s.pricePerKg || 0);
-    if (price > 0 && (price < 800 || price > 2500)) return false;
+    if (price > 0 && !isValidPricePerKg(price)) return false;
     const q = search.trim().toLowerCase();
     if (!q) return true;
     const hay = [s.businessName, s.address, s.city, s.state, s.ownerName]

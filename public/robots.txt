@@ -1,8 +1,18 @@
 User-agent: *
 Allow: /
+Disallow: /api/
 Disallow: /checkout
 Disallow: /dashboard
 Disallow: /orders
-Disallow: /api/
+Disallow: /profile
+Disallow: /chat
+Disallow: /receipt/
+Disallow: /kitchen
+Disallow: /tank
+Disallow: /login
+Disallow: /seller/login
+Disallow: /seller/dashboard
+Disallow: /seller/bank
+Disallow: /seller/earnings
 
 Sitemap: https://ogaslpgmarketplace.com/sitemap.xml
