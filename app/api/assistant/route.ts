@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { listPublicSellers, type PublicSeller } from '@/lib/public-sellers';
+import { GAS_LOCATIONS, sellersForLocation } from '@/lib/gas-locations';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,17 +37,22 @@ function rankSellers(sellers: PublicSeller[], message: string, coords: Coordinat
   const query = message.toLowerCase();
   const wantsCheap = /cheap|lowest|affordable|budget|best price/.test(query);
   const meaningfulWords = new Set(query.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((word) => word.length >= 4));
+  const requestedLocations = GAS_LOCATIONS.filter((location) =>
+    [location.name, ...location.searchTerms].some((term) => meaningfulWords.has(term.toLowerCase()))
+  );
 
   const ranked = sellers.map((seller) => {
     const distance = coords && seller.lat != null && seller.lng != null
       ? distanceKm(coords, { lat: seller.lat, lng: seller.lng })
       : undefined;
     const haystack = `${seller.businessName} ${seller.area} ${seller.city || ''} ${seller.state || ''}`.toLowerCase();
-    const locationMatches = [...meaningfulWords].filter((word) => haystack.includes(word)).length;
-    return { ...seller, distanceKm: distance, locationMatches };
+    const knownLocationMatch = requestedLocations.some((location) => sellersForLocation([seller], location).length > 0);
+    const locationMatches = [...meaningfulWords].filter((word) => haystack.includes(word)).length + (knownLocationMatch ? 10 : 0);
+    return { ...seller, distanceKm: distance, locationMatches, knownLocationMatch };
   });
 
-  return ranked
+  const eligible = requestedLocations.length ? ranked.filter((seller) => seller.knownLocationMatch) : ranked;
+  return eligible
     .sort((a, b) => {
       if (a.locationMatches !== b.locationMatches) return b.locationMatches - a.locationMatches;
       if (wantsCheap && a.pricePerKg !== b.pricePerKg) return a.pricePerKg - b.pricePerKg;
@@ -56,7 +62,7 @@ function rankSellers(sellers: PublicSeller[], message: string, coords: Coordinat
       return a.pricePerKg - b.pricePerKg;
     })
     .slice(0, 3)
-    .map(({ locationMatches: _locationMatches, ...seller }) => seller);
+    .map(({ locationMatches: _locationMatches, knownLocationMatch: _knownLocationMatch, ...seller }) => seller);
 }
 
 function fallbackAnswer(recommendations: RankedSeller[], hasCoords: boolean): string {

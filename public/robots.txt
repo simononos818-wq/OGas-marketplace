@@ -15,4 +15,4 @@ Disallow: /seller/dashboard
 Disallow: /seller/bank
 Disallow: /seller/earnings
 
-Sitemap: https://ogaslpgmarketplace.com/sitemap.xml
+Sitemap: https://www.ogaslpgmarketplace.com/sitemap.xml

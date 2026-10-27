@@ -44,10 +44,10 @@ export default async function SellerLayout({ children, params }: { children: Rea
       structuredData = {
         '@context': 'https://schema.org',
         '@type': 'Store',
-        '@id': `https://ogaslpgmarketplace.com/buy/${seller.id}#store`,
+        '@id': `https://www.ogaslpgmarketplace.com/buy/${seller.id}#store`,
         name: seller.businessName,
         description: `Verified LPG seller on OGas${badge ? ` — ${badge.tier.toLowerCase()} seller badge` : ''}.`,
-        url: `https://ogaslpgmarketplace.com/buy/${seller.id}`,
+        url: `https://www.ogaslpgmarketplace.com/buy/${seller.id}`,
         address: {
           '@type': 'PostalAddress',
           addressLocality: seller.city || seller.area,
@@ -56,7 +56,7 @@ export default async function SellerLayout({ children, params }: { children: Rea
         },
         makesOffer: {
           '@type': 'Offer',
-          url: `https://ogaslpgmarketplace.com/buy/${seller.id}`,
+          url: `https://www.ogaslpgmarketplace.com/buy/${seller.id}`,
           priceCurrency: 'NGN',
           price: seller.pricePerKg,
           availability: 'https://schema.org/InStock',

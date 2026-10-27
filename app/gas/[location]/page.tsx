@@ -50,7 +50,7 @@ export default async function GasLocationPage({ params }: Props) {
     itemListElement: sellers.map((seller, index) => ({
       '@type': 'ListItem',
       position: index + 1,
-      url: `https://ogaslpgmarketplace.com/buy/${seller.id}`,
+      url: `https://www.ogaslpgmarketplace.com/buy/${seller.id}`,
       name: seller.businessName,
     })),
   } : null;

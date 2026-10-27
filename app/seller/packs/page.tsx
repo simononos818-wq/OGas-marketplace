@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     title: "Start Your Own Gas Business — OGas Seller Starter Packs",
     description:
       "Filled branded 50kg C-Smart cylinders + equipment + practical training + OGas seller onboarding. Waitlist packages from ₦450,000; no payment today.",
-    url: "https://ogaslpgmarketplace.com/seller/packs",
+    url: "https://www.ogaslpgmarketplace.com/seller/packs",
     siteName: "OGas LPG Marketplace",
     type: "website",
   },
