@@ -257,7 +257,7 @@ export default function HomePage() {
                     </span>
                   </span>
                   <span className="text-white text-[11px] font-extrabold px-4 py-2 rounded-xl flex items-center gap-1"
-                    style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.4)' }}>
+                    style={{ background: TEAL, boxShadow: '0 3px 8px rgba(18,165,176,.4)' }}>
                     Start <ChevronRight size={13} />
                   </span>
                 </Link>
