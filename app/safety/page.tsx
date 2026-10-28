@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Cooking Gas Safety — LPG Safety Tips & Checks | OGas',
+  title: 'Cooking Gas Safety — LPG Safety Tips & Checks',
   description:
     'Simple LPG safety guide for Nigerian homes and businesses: how to check your gas hose, spot leaks, store cylinders safely, and what to do if you smell gas.',
   alternates: { canonical: '/safety' },
