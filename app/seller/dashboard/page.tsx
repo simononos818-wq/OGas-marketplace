@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, updateDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { Flame, Package, MapPin, CheckCircle, Truck, Star, LogOut, Banknote, KeyRound, MessageSquare, Power, Save, Minus, Plus } from 'lucide-react';
+import { Flame, Package, MapPin, CheckCircle, Truck, Star, LogOut, Banknote, KeyRound, MessageSquare, Power, Save, Minus, Plus, QrCode } from 'lucide-react';
 import ChatButton from '@/components/ChatButton';
 import WalkInSaleButton from '@/components/WalkInSaleButton';
 import { authHeaders } from '@/lib/client-auth';
@@ -357,8 +357,20 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
         </div>
       </div>
 
-      {/* ===== WALK-IN SALE ===== */}
-      <div className="px-4 mt-3">
+      {/* ===== SHOP QR + WALK-IN SALE ===== */}
+      <div className="px-4 mt-3 space-y-2">
+        <Link href="/seller/qr"
+          className="flex items-center justify-between bg-white rounded-2xl px-4 py-3.5"
+          style={{ color: NAVY, boxShadow: '0 2px 8px rgba(20,30,50,.06)', border: '1.5px solid #d8e3ef' }}>
+          <span className="flex items-center gap-3">
+            <QrCode size={23} color={TEAL} />
+            <span>
+              <span className="block text-[13px] font-extrabold">My shop QR code</span>
+              <span className="block text-[10px] mt-0.5" style={{ color: '#8a8f98' }}>Print for cylinders, counters and walk-in buyers</span>
+            </span>
+          </span>
+          <span className="text-[18px]" style={{ color: '#c3cbd4' }}>›</span>
+        </Link>
         <WalkInSaleButton shopId={userId} />
       </div>
 

@@ -229,6 +229,10 @@ export default function BuyPage() {
       </div>
 
       <div className="p-3 space-y-3">
+        <div className="px-1 text-center">
+          <p className="text-[11px] font-extrabold" style={{ color: NAVY }}>Order in 3 easy steps</p>
+          <p className="text-[10px] mt-0.5" style={{ color: '#8a8f98' }}>1. Enter amount or size · 2. Choose pickup · 3. Add your phone and place order</p>
+        </div>
         {isPendingApproval && (
           <div className="rounded-xl p-2.5 text-center text-xs font-bold" style={{ background: '#fff4e0', border: '1px solid #f0d48a', color: '#b35400' }}>
             This store is pending verification and can't take orders yet.
