@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listPublicSellers, type PublicSeller } from '@/lib/public-sellers';
 import { GAS_LOCATIONS, sellersForLocation } from '@/lib/gas-locations';
+import { getAssistantGuide } from '@/lib/assistant-guides';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -135,6 +136,18 @@ export async function POST(req: NextRequest) {
         mode: 'safety',
         answer: 'Do not use flames, light switches or phones indoors. Open doors and windows, close the cylinder valve only if it is safe to reach, and move everyone outside. Call your gas seller or emergency help from a safe distance.',
         recommendations: [],
+      });
+    }
+
+    const guide = getAssistantGuide(message);
+    if (guide) {
+      return json({
+        success: true,
+        mode: 'guide',
+        answer: guide.answer,
+        actions: guide.actions,
+        recommendations: [],
+        aiStatus: 'not-required',
       });
     }
 

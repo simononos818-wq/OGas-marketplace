@@ -14,10 +14,16 @@ type Seller = {
   distanceKm?: number;
 };
 
+type AssistantAction = {
+  label: string;
+  href: string;
+};
+
 type AssistantResponse = {
   success: boolean;
-  mode?: 'safety' | 'live-data' | 'ai-live-data';
+  mode?: 'safety' | 'guide' | 'live-data' | 'ai-live-data';
   answer?: string;
+  actions?: AssistantAction[];
   recommendations?: Seller[];
   notice?: string;
   message?: string;
@@ -26,7 +32,8 @@ type AssistantResponse = {
 const PROMPTS = [
   'How much is a 12.5kg refill near me?',
   'Show me affordable verified sellers in Ughelli',
-  'I have ₦20,000. How much gas can I buy?',
+  'How do I place my first order?',
+  'How do I register as a seller?',
 ];
 
 const SUPPORT_LINK = whatsappLink('Hello OGas support, I need help with the OGas AI assistant.');
@@ -97,8 +104,8 @@ export default function AssistantClient() {
         <div className="mt-3 flex items-center gap-2 text-[12px] font-bold text-[#2dd4c2]">
           <Sparkles size={17} /> OGAS AI + LIVE SELLER DATA
         </div>
-        <h1 className="mt-2 max-w-[390px] text-[30px] font-black leading-[1.12] text-white">What cooking gas do you need?</h1>
-        <p className="mt-3 max-w-[420px] text-[15px] leading-relaxed text-[#c9d6e8]">Ask about refill costs, cylinder sizes or verified sellers. Recommendations use live OGas shop listings—never invented prices.</p>
+        <h1 className="mt-2 max-w-[390px] text-[30px] font-black leading-[1.12] text-white">How can OGas AI help you today?</h1>
+        <p className="mt-3 max-w-[420px] text-[15px] leading-relaxed text-[#c9d6e8]">Get clear steps for buying, orders and seller registration, or compare verified sellers with live OGas prices—never invented listings.</p>
       </header>
 
       <main className="px-4 py-5">
@@ -132,7 +139,7 @@ export default function AssistantClient() {
             </div>
             <button type="submit" disabled={loading || message.trim().length < 2} className="mt-3 flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[#0a7f88] px-4 text-[14px] font-extrabold text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16305e] disabled:cursor-not-allowed disabled:opacity-50">
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={17} />}
-              {loading ? 'Checking live sellers…' : 'Ask OGas AI'}
+              {loading ? 'Finding your OGas answer…' : 'Ask OGas AI'}
             </button>
           </form>
         </section>
@@ -157,9 +164,18 @@ export default function AssistantClient() {
           <section aria-live="polite" className="mt-4 rounded-r-2xl border-l-[3px] border-[#12a5b0] bg-white p-4" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
             <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#0a7f88]">
               {result.mode === 'safety' ? <ShieldCheck size={16} /> : <Sparkles size={16} />}
-              {result.mode === 'ai-live-data' ? 'Gemini answer + live OGas data' : result.mode === 'safety' ? 'Safety guidance' : 'Live-data recommendations'}
+              {result.mode === 'ai-live-data' ? 'Gemini answer + live OGas data' : result.mode === 'safety' ? 'Safety guidance' : result.mode === 'guide' ? 'OGas self-service guide' : 'Live-data recommendations'}
             </div>
             <p className="mt-3 whitespace-pre-wrap text-[15px] leading-[1.7] text-[#263b5a]">{result.answer}</p>
+            {result.actions && result.actions.length > 0 && (
+              <div className="mt-4 grid gap-2" aria-label="Next steps">
+                {result.actions.map((action) => (
+                  <Link key={action.href} href={action.href} className="flex min-h-[46px] items-center justify-center gap-2 rounded-xl bg-[#16305e] px-4 text-[13px] font-extrabold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#12a5b0]">
+                    {action.label} <ArrowRight size={15} />
+                  </Link>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
