@@ -89,11 +89,32 @@ function json(body: Record<string, unknown>, status = 200) {
 
 function geminiFailureReason(error: unknown): string {
   const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (message.includes('402') || message.includes('prepayment') || message.includes('credits are depleted')) return 'credits-depleted';
+  if (message.includes('503') || message.includes('high demand') || message.includes('unavailable')) return 'high-demand';
   if (message.includes('404') || message.includes('not found')) return 'model-not-found';
   if (message.includes('401') || message.includes('403') || message.includes('api key')) return 'key-rejected';
   if (message.includes('429') || message.includes('quota') || message.includes('rate limit')) return 'quota-exceeded';
   if (message.includes('abort') || message.includes('timeout')) return 'timeout';
+  if (message.includes('400')) return 'bad-request';
   return 'request-failed';
+}
+
+async function requestGemini(apiKey: string, model: string, prompt: string): Promise<Response> {
+  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: `You are OGas AI, a concise cooking-gas shopping assistant for Nigeria. Use ONLY the supplied live seller catalog for seller names, areas, prices, distances and delivery fees. Never invent sellers, prices, ratings, stock, delivery times or promises. You may calculate refill costs from catalog prices and show the calculation. A null delivery fee means the fee is unknown, not free. Mention that buyers should confirm the current price and delivery fee on the shop page. Recommend only catalog sellers and keep answers under 180 words. Never claim to place orders, take payments, change prices or issue rewards. Do not request passwords, PINs, OTPs or payment details. If the request is unrelated to LPG, briefly redirect to cooking gas help.` }],
+      },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 400 },
+    }),
+    signal: AbortSignal.timeout(8_000),
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -149,39 +170,43 @@ export async function POST(req: NextRequest) {
     }));
 
     try {
-      const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: `You are OGas AI, a concise cooking-gas shopping assistant for Nigeria. Use ONLY the supplied live seller catalog for seller names, areas, prices, distances and delivery fees. Never invent sellers, prices, ratings, stock, delivery times or promises. You may calculate refill costs from catalog prices and show the calculation. A null delivery fee means the fee is unknown, not free. Mention that buyers should confirm the current price and delivery fee on the shop page. Recommend only catalog sellers and keep answers under 180 words. Never claim to place orders, take payments, change prices or issue rewards. Do not request passwords, PINs, OTPs or payment details. If the request is unrelated to LPG, briefly redirect to cooking gas help.` }],
-          },
-          contents: [{
-            role: 'user',
-            parts: [{ text: `Buyer request: ${message}\n\nLive seller catalog:\n${JSON.stringify(catalog)}` }],
-          }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 400 },
-        }),
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!geminiResponse.ok) {
-        const details = await geminiResponse.text();
-        throw new Error(`Gemini request failed (${geminiResponse.status}): ${details.slice(0, 300)}`);
+      const primaryModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+      const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.5-flash-lite';
+      const models = primaryModel === fallbackModel ? [primaryModel] : [primaryModel, fallbackModel];
+      const prompt = `Buyer request: ${message}\n\nLive seller catalog:\n${JSON.stringify(catalog)}`;
+      let lastError: unknown = new Error('Gemini returned no usable answer');
+
+      for (const [index, model] of models.entries()) {
+        try {
+          let geminiResponse = await requestGemini(apiKey, model, prompt);
+          if (geminiResponse.status === 503 && index === 0) {
+            await geminiResponse.text();
+            await new Promise((resolve) => setTimeout(resolve, 400));
+            geminiResponse = await requestGemini(apiKey, model, prompt);
+          }
+          if (!geminiResponse.ok) {
+            const details = await geminiResponse.text();
+            throw new Error(`Gemini request failed (${geminiResponse.status}): ${details.slice(0, 300)}`);
+          }
+          const result = await geminiResponse.json() as GeminiApiResponse;
+          const answer = result.candidates
+            ?.flatMap((candidate) => candidate.content?.parts || [])
+            .map((part) => part.text || '')
+            .join('\n')
+            .trim() || '';
+          if (answer) {
+            return json({ success: true, mode: 'ai-live-data', answer, recommendations, aiStatus: 'connected', modelUsed: model });
+          }
+          lastError = new Error(`Gemini ${model} returned an empty response`);
+        } catch (error) {
+          lastError = error;
+          console.error(`OGas Gemini ${model} failed:`, error instanceof Error ? error.message : 'unknown error');
+          const reason = geminiFailureReason(error);
+          const canTryNextModel = ['high-demand', 'model-not-found', 'quota-exceeded', 'timeout', 'request-failed'].includes(reason);
+          if (!canTryNextModel) break;
+        }
       }
-      const result = await geminiResponse.json() as GeminiApiResponse;
-      const answer = result.candidates
-        ?.flatMap((candidate) => candidate.content?.parts || [])
-        .map((part) => part.text || '')
-        .join('\n')
-        .trim() || '';
-      if (!answer) {
-        return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE, aiStatus: 'empty-response' });
-      }
-      return json({ success: true, mode: 'ai-live-data', answer, recommendations, aiStatus: 'connected' });
+      throw lastError;
     } catch (error) {
       console.error('OGas AI generation failed; using labelled live-data fallback:', error instanceof Error ? error.message : 'unknown error');
       return json({ success: true, mode: 'live-data', answer: fallback, recommendations, notice: AI_UNAVAILABLE_NOTICE, aiStatus: 'generation-failed', aiReason: geminiFailureReason(error) });
