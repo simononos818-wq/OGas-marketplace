@@ -119,7 +119,7 @@ export default function HomePage() {
                 style={{ background: 'rgba(255,255,255,.14)' }}>
                 <Flame size={28} color="#2dd4c2" />
               </div>
-              <h2 className="text-white font-black text-[18px] tracking-wide">LPG NEAR YOU</h2>
+              <h1 className="text-white font-black text-[18px] tracking-wide">Cooking gas refill near you</h1>
               <p className="text-[11px] mt-1 mb-4" style={{ color: '#9fb4d8' }}>
                 See verified gas sellers around you with live per-kg prices
               </p>
@@ -257,7 +257,7 @@ export default function HomePage() {
                     </span>
                   </span>
                   <span className="text-white text-[11px] font-extrabold px-4 py-2 rounded-xl flex items-center gap-1"
-                    style={{ background: TEAL, boxShadow: '0 3px 8px rgba(18,165,176,.4)' }}>
+                    style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.4)' }}>
                     Start <ChevronRight size={13} />
                   </span>
                 </Link>
