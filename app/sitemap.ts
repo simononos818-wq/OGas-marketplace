@@ -14,7 +14,7 @@ const publicPages: Array<{
   { path: '/shops', changeFrequency: 'daily', priority: 0.9 },
   { path: '/calculator', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/assistant', changeFrequency: 'weekly', priority: 0.8 },
-  { path: '/seller/register', changeFrequency: 'monthly', priority: 0.9 },
+  { path: '/sell', changeFrequency: 'weekly', priority: 0.9 },
   { path: '/seller/packs', changeFrequency: 'weekly', priority: 0.8 },
   { path: '/how-escrow-works', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/safety', changeFrequency: 'monthly', priority: 0.8 },

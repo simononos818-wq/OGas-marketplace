@@ -103,7 +103,7 @@ export default async function GasLocationPage({ params }: Props) {
             <p className="mt-2 text-[14px] leading-relaxed text-[#5b616b]">You can browse every verified OGas shop or register your own LPG business. We do not invent shop listings or prices for locations we have not verified.</p>
             <div className="mt-4 grid gap-2">
               <Link href="/shops" className="flex min-h-[46px] items-center justify-center rounded-xl bg-[#16305e] px-4 text-[13px] font-extrabold text-white">Browse all verified shops</Link>
-              <Link href="/seller/register" className="flex min-h-[46px] items-center justify-center rounded-xl border border-[#12a5b0] px-4 text-[13px] font-extrabold text-[#0a7f88]">Register an LPG shop</Link>
+              <Link href="/sell" className="flex min-h-[46px] items-center justify-center rounded-xl border border-[#12a5b0] px-4 text-[13px] font-extrabold text-[#0a7f88]">Sell cooking gas with OGas</Link>
             </div>
           </section>
         )}
@@ -112,6 +112,18 @@ export default async function GasLocationPage({ params }: Props) {
           <div className="flex items-center gap-2"><ShieldCheck size={19} color="#0a7f88" /><h2 className="text-[15px] font-extrabold">A clearer refill, every time</h2></div>
           <p className="mt-2 text-[14px] leading-relaxed text-[#33465f]">OGas sellers list their price per kilogram. Your order records the kg entered from the scale, and eligible online payments stay in escrow until you confirm with your Door Code.</p>
           <Link href="/how-escrow-works" className="mt-2 inline-flex min-h-[44px] items-center text-[13px] font-extrabold text-[#0a7f88] underline">How OGas escrow works</Link>
+        </section>
+
+        <section className="mt-5 rounded-2xl bg-white p-5" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
+          <h2 className="text-[18px] font-black">Buying cooking gas in {location.name}</h2>
+          <p className="mt-2 text-[14px] leading-relaxed text-[#5b616b]">Compare the verified sellers listed above by their current price per kilogram and shop area. Open a seller page to confirm the latest price, delivery fee, stock and available fulfilment options before placing your order.</p>
+          <p className="mt-2 text-[14px] leading-relaxed text-[#5b616b]">Where delivery is offered, provide accurate contact and delivery details. Your OGas order keeps a digital record of the refill and the weight entered from the scale.</p>
+        </section>
+
+        <section className="mt-5 rounded-2xl bg-[#16305e] p-5 text-white">
+          <h2 className="text-[18px] font-black">Sell cooking gas in {location.name}</h2>
+          <p className="mt-2 text-[14px] leading-relaxed text-[#c9d6e8]">Run a genuine LPG shop or gas plant? Register your business, confirm your real shop location and submit it for review so local buyers can discover you on OGas.</p>
+          <Link href="/sell" className="mt-3 inline-flex min-h-[46px] items-center gap-2 rounded-xl bg-[#12a5b0] px-4 text-[13px] font-extrabold text-white">See how to become a seller <ArrowRight size={15} /></Link>
         </section>
 
         <nav aria-label="Other LPG locations" className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-[13px] font-bold">
