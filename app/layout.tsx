@@ -13,7 +13,7 @@ import { Suspense } from 'react';
 const SITE_URL = 'https://www.ogaslpgmarketplace.com';
 const SITE_NAME = 'OGas — Online Gas Refill';
 const SITE_DESC =
-  "Nigeria's verified LPG marketplace. Buy cooking gas from verified sellers near you with live per-kg prices and weigh-on-scale receipts — no short-filling, no guesswork. Sellers: reach more buyers and build a verifiable sales record.";
+  'Buy cooking gas from verified LPG sellers near you. Compare live prices per kg, order on OGas and get a weigh-on-scale receipt for every refill.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -39,6 +39,7 @@ export const metadata: Metadata = {
     title: 'OGas — Verified LPG Marketplace',
     description: SITE_DESC,
     locale: 'en_NG',
+    url: SITE_URL,
   },
   twitter: {
     card: 'summary_large_image',
