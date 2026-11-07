@@ -1,3 +1,4 @@
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const functions = require('firebase-functions');
 const {onDocumentUpdated} = require("firebase-functions/v2/firestore");
 const admin = require('firebase-admin');
@@ -432,6 +433,144 @@ exports.onReferralFirstOrder = onDocumentUpdated(
 // Budget-guarded by promoConfig/gasCreditCampaign (Firestore doc YOU create).
 // Exactly-once: claim + budget + credit all inside one transaction.
 const FIRST_ORDER_CREDIT = 300;
+
+// ORCHESTRATION: order expiry + paystack reconciliation + day-end balance
+const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
+const EXPIRY_MINUTES = 30;
+
+async function settlePaidOrder(db, orderRef, order, orderId, reference, paidKobo) {
+  await orderRef.update({
+    status: 'paid', paymentStatus: 'paid', escrowStatus: 'held',
+    paystackRef: reference, paystackAmount: paidKobo,
+    paidAt: new Date(), verifiedAt: new Date(), verifiedViaReconciliation: true,
+    updatedAt: new Date(),
+  });
+  const pointsRedeemed = Math.max(0, Math.floor(Number(order.pointsRedeemed) || 0));
+  if (pointsRedeemed > 0 && !order.pointsDeducted && order.buyerId) {
+    const buyerRef = db.collection('users').doc(order.buyerId);
+    const logRef = db.collection('pointsTransactions').doc();
+    try {
+      await db.runTransaction(async (tx) => {
+        const [o, u] = await Promise.all([tx.get(orderRef), tx.get(buyerRef)]);
+        if (o.data()?.pointsDeducted) return;
+        const bal = Math.max(0, Math.floor(Number(u.data()?.gasPoints) || 0));
+        const deduct = Math.min(pointsRedeemed, bal);
+        tx.set(buyerRef, { gasPoints: bal - deduct }, { merge: true });
+        tx.update(orderRef, { pointsDeducted: true, pointsDeductedCount: deduct });
+        tx.set(logRef, { uid: order.buyerId, type: 'spend', points: deduct, reason: 'order_discount', orderId, createdAt: new Date() });
+      });
+    } catch (e) { console.error('recon points deduction failed:', e.message); }
+  }
+  const expectedNaira = Number(order.chargedAmount ?? order.totalAmount ?? order.total ?? 0);
+  if (!order.pointsEarned && order.buyerId && expectedNaira > 0) {
+    const buyerRef = db.collection('users').doc(order.buyerId);
+    const logRef = db.collection('pointsTransactions').doc();
+    try {
+      await db.runTransaction(async (tx) => {
+        const o = await tx.get(orderRef);
+        if (o.data()?.pointsEarned) return;
+        const earn = Math.min(500, Math.floor(expectedNaira * 0.02));
+        tx.update(orderRef, { pointsEarned: true, pointsEarnedCount: earn });
+        if (earn <= 0) return;
+        const u = await tx.get(buyerRef);
+        const bal = Math.max(0, Math.floor(Number(u.data()?.gasPoints) || 0));
+        tx.set(buyerRef, { gasPoints: bal + earn }, { merge: true });
+        tx.set(logRef, { uid: order.buyerId, type: 'earn', points: earn, reason: 'order_cashback', orderId, createdAt: new Date() });
+      });
+    } catch (e) { console.error('recon GasBack failed:', e.message); }
+  }
+}
+
+// A) Expire unpaid ONLINE orders (checkout started, never completed).
+//    Cash orders (pending_cash / paymentMethod cash / no paystackRef) are NEVER touched.
+exports.expireUnpaidOrders = onSchedule('every 10 minutes', async () => {
+  const db = admin.firestore();
+  const cutoff = Date.now() - EXPIRY_MINUTES * 60 * 1000;
+  const snap = await db.collection('orders').where('paymentStatus', '==', 'pending').get();
+  const batch = db.batch();
+  let n = 0;
+  snap.forEach((d) => {
+    const o = d.data();
+    if (!o.paystackRef) return;
+    if (o.paymentMethod === 'cash' || o.status === 'pending_cash') return;
+    const ts = o.updatedAt?.toMillis ? o.updatedAt.toMillis() : new Date(o.updatedAt || 0).getTime();
+    if (ts >= cutoff) return;
+    batch.update(d.ref, { status: 'cancelled', paymentStatus: 'expired',
+      cancelledAt: new Date(), expiredReason: 'payment_timeout', updatedAt: new Date() });
+    n++;
+  });
+  if (n) { await batch.commit(); console.log('expired unpaid orders:', n); }
+});
+
+// B) Reconcile: check every pending online order against Paystack reality.
+exports.reconcilePayments = onSchedule('every 30 minutes', async () => {
+  if (!PAYSTACK_SECRET) return;
+  const db = admin.firestore();
+  const grace = Date.now() - 10 * 60 * 1000; // let the webhook win first
+  const snap = await db.collection('orders').where('paymentStatus', '==', 'pending').get();
+  for (const d of snap.docs) {
+    const o = d.data();
+    if (!o.paystackRef || o.paymentMethod === 'cash' || o.status === 'pending_cash') continue;
+    const ts = o.updatedAt?.toMillis ? o.updatedAt.toMillis() : new Date(o.updatedAt || 0).getTime();
+    if (ts >= grace) continue;
+    try {
+      const r = await fetch('https://api.paystack.co/transaction/verify/' + encodeURIComponent(o.paystackRef),
+        { headers: { Authorization: 'Bearer ' + PAYSTACK_SECRET } });
+      const v = await r.json();
+      const ps = v.data?.status;
+      if (ps === 'success') {
+        const paidKobo = Number(v.data.amount);
+        const expected = Math.round(Number(o.chargedAmount ?? o.totalAmount ?? o.total ?? 0) * 100);
+        if (expected > 0 && Math.abs(paidKobo - expected) > 100) {
+          console.error('recon amount mismatch', d.id); continue;
+        }
+        await settlePaidOrder(db, d.ref, o, d.id, o.paystackRef, paidKobo);
+        if (o.buyerPhone) await sendSMS(o.buyerPhone, 'OGas: your payment don confirm. Your order is now active.');
+        console.log('recon settled paid:', d.id);
+      } else if (ps === 'abandoned' || ps === 'failed') {
+        await d.ref.update({ status: 'cancelled', paymentStatus: ps,
+          cancelledAt: new Date(), expiredReason: 'paystack_' + ps, updatedAt: new Date() });
+        console.log('recon cancelled ' + ps + ':', d.id);
+      }
+    } catch (e) { console.error('recon error', d.id, e.message); }
+  }
+});
+
+// C) Day-end balance (23:55 Lagos) -> dailyReports/YYYY-MM-DD. balanced=false flags gaps.
+exports.dayEndBalance = onSchedule({ schedule: '55 23 * * *', timeZone: 'Africa/Lagos' }, async () => {
+  const db = admin.firestore();
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const day = start.toISOString().slice(0, 10);
+  const orders = await db.collection('orders').where('updatedAt', '>=', start).get();
+  let completedCount = 0, completedSum = 0, expectedPayout = 0, commissionSum = 0, abandoned = 0, expired = 0, paidCount = 0, paidSum = 0;
+  orders.forEach((d) => {
+    const o = d.data();
+    const amt = Number(o.totalAmount ?? o.total ?? o.chargedAmount ?? 0);
+    if (o.paymentStatus === 'paid') { paidCount++; paidSum += amt; }
+    if (o.paymentStatus === 'abandoned' || o.paymentStatus === 'failed') abandoned++;
+    if (o.paymentStatus === 'expired') expired++;
+    if (o.status === 'completed') {
+      completedCount++; completedSum += amt;
+      expectedPayout += Number(o.sellerPayoutAmount || 0) / 100;
+      commissionSum += Number(o.commissionAmount || 0) / 100;
+    }
+  });
+  const payoutsSnap = await db.collection('payouts').where('createdAt', '>=', start).get();
+  let payoutSum = 0;
+  payoutsSnap.forEach((d) => { payoutSum += Number(d.data().amount || 0) / 100; });
+  const balanced = Math.abs(expectedPayout - payoutSum) < 1;
+  const report = { day, paidCount, paidSum, completedCount, completedSum, abandoned, expired,
+    commissionSum, expectedPayout, payoutSum, balanced,
+    checkedAt: admin.firestore.FieldValue.serverTimestamp() };
+  await db.collection('dailyReports').doc(day).set(report);
+  console.log('day-end ' + day + ':', JSON.stringify(report));
+  if (!balanced && process.env.ADMIN_PHONE) {
+    try {
+      await sendSMS(process.env.ADMIN_PHONE, 'OGas day-end ' + day + ': IMBALANCE. Expected payout ' + expectedPayout + ' vs sent ' + payoutSum + '. See dailyReports/' + day);
+    } catch (e) { console.error('admin alert failed:', e.message); }
+  }
+});
+
 exports.onFirstOrderGasCredit = onDocumentUpdated(
   { document: "orders/{orderId}", region: "europe-west3" },
   async (event) => {

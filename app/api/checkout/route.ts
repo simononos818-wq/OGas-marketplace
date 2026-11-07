@@ -167,6 +167,7 @@ export async function POST(req: NextRequest) {
         pointsRedeemed: pointsApplied,
         chargedAmount: charged,
         pointsDeducted: false,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
         updatedAt: new Date(),
       });
 
