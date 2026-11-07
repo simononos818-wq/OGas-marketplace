@@ -7,7 +7,11 @@ service cloud.firestore {
     match /sellers/{sellerId} {
       allow read: if true;
       allow create: if request.auth != null && request.auth.uid == sellerId;
-      allow update: if request.auth != null && (request.auth.uid == sellerId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow update: if
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        || (request.auth != null && request.auth.uid == sellerId
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                 .hasAny(['isApproved', 'verified', 'isVerified', 'status', 'sellerStatus', 'level', 'gates', 'approvalNotes', 'completedOrders']));
     }
     match /orders/{orderId} {
       allow read: if request.auth != null && (request.auth.uid == resource.data.buyerId || request.auth.uid == resource.data.sellerId);
