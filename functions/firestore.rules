@@ -1,29 +1,87 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == 'simononos818@gmail.com' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
     }
+
+    // USERS
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (
+        request.auth.uid == userId || isAdmin()
+      );
+      allow delete: if false;
+    }
+
+    // SELLERS — self-serve edits allowed, but approval/verification/level
+    // fields can ONLY change via admin. Create must start unapproved.
     match /sellers/{sellerId} {
       allow read: if true;
-      allow create: if request.auth != null && request.auth.uid == sellerId;
-      allow update: if
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-        || (request.auth != null && request.auth.uid == sellerId
-            && !request.resource.data.diff(resource.data).affectedKeys()
-                 .hasAny(['isApproved', 'verified', 'isVerified', 'status', 'sellerStatus', 'level', 'gates', 'approvalNotes', 'completedOrders']));
+      allow create: if request.auth != null && request.auth.uid == sellerId
+        && request.resource.data.get('isApproved', false) == false
+        && request.resource.data.get('isVerified', false) == false
+        && request.resource.data.get('verified', false) == false
+        && request.resource.data.get('status', 'pending') == 'pending'
+        && request.resource.data.get('sellerStatus', 'pending') == 'pending';
+      allow update: if request.auth != null && (
+        isAdmin() || (
+          request.auth.uid == sellerId &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['isApproved', 'verified', 'isVerified', 'status', 'sellerStatus', 'level', 'gates', 'approvalNotes', 'completedOrders'])
+        )
+      );
+      allow delete: if false;
     }
+
+    // ORDERS
     match /orders/{orderId} {
-      allow read: if request.auth != null && (request.auth.uid == resource.data.buyerId || request.auth.uid == resource.data.sellerId);
+      allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update: if request.auth != null && (request.auth.uid == resource.data.buyerId || request.auth.uid == resource.data.sellerId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow update: if request.auth != null && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if false;
     }
+
+    // ORDER SECRETS (door codes)
+    match /orderSecrets/{secretId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // CHATS + MESSAGES
+    match /chats/{chatId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    match /chats/{chatId}/messages/{messageId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // GAS POINTS LEDGER — reads by owner only; all writes are server-side
+    match /pointsTransactions/{txId} {
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // NOTIFICATIONS
     match /notifications/{notifId} {
-      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null;
     }
+
+    // PAYOUTS
     match /payouts/{payoutId} {
-      allow read: if request.auth != null && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || request.auth.uid == resource.data.sellerId);
+      allow read: if request.auth != null && (isAdmin() || request.auth.uid == resource.data.sellerId);
     }
   }
 }
