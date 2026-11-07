@@ -564,7 +564,8 @@ export default function SellerRegisterPage() {
         },
         hours: form.hours,
         offersDelivery: form.delivery,
-        photos: { front: finalFrontUrl, stock: finalStockUrl },
+        photos: { front: finalFrontUrl ?? null, stock: finalStockUrl ?? null },
+        photosPending: !(finalFrontUrl || finalStockUrl),
         status: 'pending',
         verified: false,
         isVerified: false,
@@ -574,7 +575,7 @@ export default function SellerRegisterPage() {
         gates: {
           profile: true,
           location: true,
-          photos: true,
+          photos: Boolean(finalFrontUrl || finalStockUrl),
           bankLinked: false,
           approved: false,
         },
@@ -840,7 +841,7 @@ export default function SellerRegisterPage() {
             <div className="rounded-2xl p-4" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e4078)` }}>
               <p className="text-[10px] font-extrabold tracking-[0.2em] mb-1" style={{ color: '#2dd4c2' }}>LEVEL 3 · VERIFIED</p>
               <h2 className="text-lg font-extrabold text-white">Prove the shop is real</h2>
-              <p className="text-[11px] font-bold mt-1" style={{ color: '#9fb4d8' }}>Take the photos at your shop — they verify you faster and earn the badge.</p>
+              <p className="text-[11px] font-bold mt-1" style={{ color: '#9fb4d8' }}>Optional now — add them here or later from your dashboard. 1 photo earns the VERIFIED badge.</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="border border-dashed rounded-xl p-4 text-center cursor-pointer" style={{ background: '#fff', borderColor: '#c3cbd4' }}>
@@ -865,8 +866,8 @@ export default function SellerRegisterPage() {
             </label>
             <div className="flex gap-3 pt-2">
               <button onClick={() => setStep(2)} className="flex-1 py-3 rounded-xl font-bold" style={{ background: '#e6e9ee', color: NAVY }}>Back</button>
-              <button onClick={handleSubmit} disabled={loading || (!frontPhoto && !frontUrl) || (!stockPhoto && !stockUrl)} className="flex-1 text-white font-bold py-3 rounded-xl disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.3)' }}>
-                {loading ? (<><Loader2 className="animate-spin" size={18} /> {submitStatus || 'Working…'}</>) : 'Reach Level 3 🎖'}
+              <button onClick={handleSubmit} disabled={loading} className="flex-1 text-white font-bold py-3 rounded-xl disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: TEAL, boxShadow: '0 4px 12px rgba(18,165,176,.3)' }}>
+                {loading ? (<><Loader2 className="animate-spin" size={18} /> {submitStatus || 'Working…'}</>) : 'FINISH — GO LIVE 🎉'}
               </button>
             </div>
             {loading && (

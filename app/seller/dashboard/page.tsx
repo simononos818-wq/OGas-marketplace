@@ -11,6 +11,7 @@ import WalkInSaleButton from '@/components/WalkInSaleButton';
 import { authHeaders } from '@/lib/client-auth';
 import Link from 'next/link';
 import SellerVerifiedCard from '@/components/SellerVerifiedCard';
+import ProveYourShopCard from '@/components/seller/ProveYourShopCard';
 import { getSellerBadge } from '@/lib/seller-badges';
 import { MIN_PRICE_PER_KG, MAX_PRICE_PER_KG } from '@/lib/pricing';
 
@@ -311,6 +312,7 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
 
       {badge && (
         <div className="px-4 pt-3">
+          <ProveYourShopCard uid={userId} photoUrl={sellerData?.photos?.front || sellerData?.shopPhotoUrl} />
           <SellerVerifiedCard
             businessName={sellerData?.businessName || 'My Store'}
             sellerId={userId}
