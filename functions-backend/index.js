@@ -427,6 +427,75 @@ exports.onReferralFirstOrder = onDocumentUpdated(
 // ===== OCTOBER LAUNCH PROMO: order 5kg+, get 500 Gas Points =====
 // Runs on every order completion until Oct 31 2026 (WAT). One bonus per order,
 // repeat orders qualify — we WANT heavy users this month.
+
+// ===== GAS CREDIT: 300 credit on FIRST completed order (every buyer) =====
+// Budget-guarded by promoConfig/gasCreditCampaign (Firestore doc YOU create).
+// Exactly-once: claim + budget + credit all inside one transaction.
+const FIRST_ORDER_CREDIT = 300;
+exports.onFirstOrderGasCredit = onDocumentUpdated(
+  { document: "orders/{orderId}", region: "europe-west3" },
+  async (event) => {
+    const before = event.data && event.data.before ? event.data.before.data() : null;
+    const after = event.data && event.data.after ? event.data.after.data() : null;
+    if (!after || !before) return;
+    if (after.status !== 'completed' || before.status === 'completed') return;
+
+    const buyerId = after.buyerId;
+    if (!buyerId) return; // walk-in orders with phone-only stay out (phase 2)
+
+    const db = admin.firestore();
+    const orderId = event.params.orderId;
+    const CREDIT = FIRST_ORDER_CREDIT;
+
+    try {
+      await db.runTransaction(async (tx) => {
+        const campaignRef = db.collection('promoConfig').doc('gasCreditCampaign');
+        const claimRef = db.collection('welcomeCredits').doc(buyerId);
+        const userRef = db.collection('users').doc(buyerId);
+        const [campaign, claim] = await Promise.all([tx.get(campaignRef), tx.get(claimRef)]);
+
+        if (!campaign.exists || campaign.data().active !== true) throw new Error('campaign_inactive');
+        if (claim.exists) throw new Error('already_credited');
+
+        const remaining = Number(campaign.data().remainingBudget ?? 0);
+        if (remaining < CREDIT) throw new Error('budget_exhausted');
+
+        tx.set(campaignRef, {
+          remainingBudget: remaining - CREDIT,
+          totalIssued: admin.firestore.FieldValue.increment(CREDIT),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        tx.set(claimRef, {
+          buyerId, orderId, amount: CREDIT, status: 'issued',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        tx.set(userRef, {
+          gasPoints: admin.firestore.FieldValue.increment(CREDIT),
+        }, { merge: true });
+        tx.set(db.collection('pointsTransactions').doc(), {
+          uid: buyerId, type: 'earn', points: CREDIT,
+          reason: 'first_order', orderId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+    } catch (e) {
+      if (e.message === 'already_credited' || e.message === 'campaign_inactive' || e.message === 'budget_exhausted') {
+        console.log('Gas credit skipped:', e.message, buyerId);
+      } else {
+        console.error('Gas credit error:', e);
+      }
+      return;
+    }
+
+    try {
+      await sendPush(buyerId, 'Gas Credit Earned!', 'Your first order earned you 300 gas credit. Use it on your next order.', { type: 'gas_credit', orderId });
+      if (after.buyerPhone) {
+        await sendSMS(after.buyerPhone, 'OGas: 300 gas credit don enter your tank from your first order. Use am for your next gas. ogaslpgmarketplace.com');
+      }
+    } catch (e) { console.error('Notify error:', e); }
+    console.log('Welcome gas credit: ' + buyerId + ' +' + CREDIT + ' (order ' + orderId + ')');
+  });
+
 exports.onPromoFreeKg = onDocumentUpdated(
   { document: "orders/{orderId}", region: "europe-west3" },
   async (event) => {
