@@ -435,7 +435,7 @@ exports.onReferralFirstOrder = onDocumentUpdated(
 const FIRST_ORDER_CREDIT = 300;
 
 // ORCHESTRATION: order expiry + paystack reconciliation + day-end balance
-const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
+
 const EXPIRY_MINUTES = 30;
 
 async function settlePaidOrder(db, orderRef, order, orderId, reference, paidKobo) {
