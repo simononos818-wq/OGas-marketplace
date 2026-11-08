@@ -10,6 +10,7 @@ import {
   Store, Shield, Clock, XCircle, CheckCircle, Wrench, Loader2, Gift
 } from 'lucide-react';
 import Link from 'next/link';
+import ProfilePhotoUploader from '@/components/ProfilePhotoUploader';
 
 const NAVY = '#16305e';
 const TEAL = '#12a5b0';
@@ -243,9 +244,7 @@ export default function ProfilePage() {
       <div className="max-w-md mx-auto">
         <div className="rounded-2xl p-5 mb-5 bg-white" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: NAVY }}>
-              <User size={32} color="#fff" />
-            </div>
+            <ProfilePhotoUploader uid={user.uid} currentPhoto={userData?.photoURL} size={64} />
             <div>
               <h1 className="text-xl font-extrabold" style={{ color: NAVY }}>
                 {userData?.name || user.displayName || 'User'}
