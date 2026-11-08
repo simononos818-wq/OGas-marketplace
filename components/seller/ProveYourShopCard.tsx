@@ -28,8 +28,9 @@ export default function ProveYourShopCard({ uid, photoUrl }: { uid: string; phot
         verifiedAt: new Date().toISOString(),
       });
       setDone(true);
-    } catch {
-      setErr("Network wahala. Tap TRY AGAIN.");
+    } catch (e: any) {
+      console.error("shop photo upload failed:", e);
+      setErr("Failed: " + (e?.code || e?.message || "network") + " - tap retry");
     } finally {
       setBusy(false);
     }

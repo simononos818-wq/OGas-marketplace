@@ -22,9 +22,9 @@ export default function ProfilePhotoUploader({ uid, currentPhoto, size = 96 }: {
       });
       await updateDoc(doc(db, "users", uid), { photoURL: url });
       setTimeout(() => window.location.reload(), 800);
-    } catch (e) {
-      console.error(e);
-      setErr("Network wahala. Tap to retry.");
+    } catch (e: any) {
+      console.error("avatar upload failed:", e);
+      setErr("Failed: " + (e?.code || e?.message || "network"));
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
