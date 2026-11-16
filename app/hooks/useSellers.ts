@@ -7,6 +7,7 @@ import { sellerVerified } from '@/lib/fields';
 import { isValidPricePerKg } from '@/lib/pricing';
 
 export interface Seller {
+  shopPhotoUrl?: string;
   id: string;
   businessName: string;
   ownerName?: string;

@@ -293,10 +293,15 @@ export default function HomePage() {
                     return (
                       <div key={s.id} className="bg-white rounded-2xl p-3" style={{ boxShadow: '0 2px 8px rgba(20,30,50,.06)' }}>
                         <div className="flex items-center gap-2.5">
-                          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                            style={{ background: 'linear-gradient(135deg,#e6f7f8,#d2f0f2)' }}>
-                            <Flame size={18} color={TEAL} />
-                          </div>
+                          {s.shopPhotoUrl ? (
+                            <img src={s.shopPhotoUrl} alt={s.businessName} className="w-10 h-10 rounded-xl object-cover shrink-0"
+                              style={{ background: 'linear-gradient(135deg,#e6f7f8,#d2f0f2)' }} />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                              style={{ background: 'linear-gradient(135deg,#e6f7f8,#d2f0f2)' }}>
+                              <Flame size={18} color={TEAL} />
+                            </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[12.5px] font-extrabold truncate" style={{ color: '#1a1d23' }}>{s.businessName}</span>
