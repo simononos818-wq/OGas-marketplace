@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '../../../lib/firebase-admin';
-import { OGAS_COMMISSION_PERCENT } from '../../../lib/escrow';
+import { OGAS_COMMISSION_PERCENT, commissionPercentForSeller } from '../../../lib/escrow';
 import { requireUser } from '../../../lib/require-user';
 import { orderBuyerId, orderTotal } from '../../../lib/fields';
 
@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    if (amount != null && Math.abs(Number(amount) - expected) > 1) {
+    // Buyer may send the amount including the Paystack card fee (cap ₦2,000).
+    if (amount != null && (Number(amount) < expected - 1 || Number(amount) > expected + 2001)) {
       return NextResponse.json(
         { success: false, message: 'Amount does not match this order' },
         { status: 400 },
@@ -122,7 +123,16 @@ export async function POST(req: NextRequest) {
     }
 
     const reference = `OGAS-${orderId}-${Date.now()}`;
-    const commissionInKobo = Math.round(amountInKobo * (OGAS_COMMISSION_PERCENT / 100));
+    let orderCommissionPercent = Number(order.ogasCommissionPercent ?? NaN);
+    if (!Number.isFinite(orderCommissionPercent)) {
+      try {
+        const sellerSnap = await adminDb.collection('sellers').doc(resolvedSellerId).get();
+        orderCommissionPercent = commissionPercentForSeller(sellerSnap.data() || {});
+      } catch {
+        orderCommissionPercent = OGAS_COMMISSION_PERCENT;
+      }
+    }
+    const commissionInKobo = Math.round(amountInKobo * (orderCommissionPercent / 100));
     const guestEmail =
       email ||
       (order.buyerPhone
@@ -137,7 +147,7 @@ export async function POST(req: NextRequest) {
         orderId,
         buyerName: name || order.buyerName || '',
         sellerId: resolvedSellerId || '',
-        ogasCommissionPercent: OGAS_COMMISSION_PERCENT,
+        ogasCommissionPercent: orderCommissionPercent,
         ogasCommissionKobo: commissionInKobo,
         pointsRedeemed: pointsApplied,
         usedSplitPayment: false,
@@ -162,7 +172,7 @@ export async function POST(req: NextRequest) {
         paystackRef: reference,
         paymentStatus: 'pending',
         escrowStatus: 'pending',
-        ogasCommissionPercent: OGAS_COMMISSION_PERCENT,
+        ogasCommissionPercent: orderCommissionPercent,
         usedSplitPayment: false,
         pointsRedeemed: pointsApplied,
         chargedAmount: charged,

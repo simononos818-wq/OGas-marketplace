@@ -67,7 +67,11 @@ export async function POST(req: NextRequest) {
     const expectedNaira = Number(
       order.chargedAmount ?? order.totalAmount ?? order.total ?? order.totalPrice ?? 0,
     );
-    if (!(expectedNaira > 0) || Math.abs(paidKobo - Math.round(expectedNaira * 100)) > 100) {
+    const expectedKobo = Math.round(expectedNaira * 100);
+    const cardFeeKobo = Math.max(0, paidKobo - expectedKobo);
+    // Paystack may pass its card fee to the customer (charged = order total + fee).
+    // Accept expected total up to +₦2,500 fee cap; record the fee for clean accounting.
+    if (!(expectedNaira > 0) || paidKobo < expectedKobo - 100 || cardFeeKobo > 250000) {
       console.error('webhook amount mismatch', { orderId: resolvedOrderId, paidKobo, expectedNaira });
       try {
         await adminDb.collection('webhookAlerts').add({
@@ -91,6 +95,7 @@ export async function POST(req: NextRequest) {
       usedSplitPayment: false,
       paystackRef: reference,
       paystackAmount: paidKobo,
+      cardFeeKobo,
       paidAt: new Date(),
       verifiedAt: new Date(),
       verifiedViaWebhook: true,

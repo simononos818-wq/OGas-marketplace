@@ -7,6 +7,7 @@ import { sendSms } from '../../../lib/sms';
 import { openOrderChat } from '../../../lib/chat-server';
 import { sellerVerified } from '../../../lib/fields';
 import { isNgPhone, normalizeNgPhone } from '../../../lib/phone';
+import { commissionPercentForSeller } from '../../../lib/escrow';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -79,7 +80,8 @@ export async function POST(req: NextRequest) {
     const deliveryFee = deliveryType === 'pickup' ? 0 : Number(seller.deliveryFee || 500);
     const gasCost = discounted * size * qty;
     const totalAmount = gasCost + deliveryFee;
-    const platformFee = Math.round(totalAmount * 0.10); // 10% OGas commission
+    const commissionPct = commissionPercentForSeller(seller);
+    const platformFee = Math.round(totalAmount * (commissionPct / 100)); // 2% after 90-day grace (0% inside grace)
     const method = paymentMethod === 'cash' ? 'cash' : 'paystack';
     const isCash = method === 'cash';
 
@@ -123,6 +125,7 @@ export async function POST(req: NextRequest) {
       paymentStatus: isCash ? 'cod' : 'pending',
       escrowStatus: isCash ? 'cod' : 'pending',
       doorCodeHash,
+      ogasCommissionPercent: commissionPct,
       platformFee,
       ogasCommission: platformFee,
       usedSplitPayment: false,

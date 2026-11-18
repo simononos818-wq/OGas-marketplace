@@ -5,7 +5,23 @@ import { sendSms } from './sms';
 import { postSystemMessage } from './chat-server';
 import { SYSTEM_COPY } from './chat';
 
-export const OGAS_COMMISSION_PERCENT = 10;
+export const OGAS_COMMISSION_PERCENT = 2;
+
+// New sellers pay 0% commission for their first 90 days on OGas.
+const GRACE_PERIOD_DAYS = 90;
+
+export function commissionPercentForSeller(seller: any): number {
+  const createdAt = seller?.createdAt;
+  const joinedMs =
+    typeof createdAt?.toMillis === 'function'
+      ? createdAt.toMillis()
+      : createdAt
+      ? new Date(createdAt).getTime()
+      : null;
+  if (!joinedMs || Number.isNaN(joinedMs)) return 0; // join date unknown = still in grace
+  const ageDays = (Date.now() - joinedMs) / (1000 * 60 * 60 * 24);
+  return ageDays >= GRACE_PERIOD_DAYS ? OGAS_COMMISSION_PERCENT : 0;
+}
 
 export async function notifyPaidEscrow(orderId: string) {
   const orderSnap = await adminDb.collection('orders').doc(orderId).get();
@@ -75,7 +91,8 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
 
   const order = claimed.order;
   const totalNaira = Number(order.totalAmount || order.total || order.totalPrice || 0);
-  const commission = Math.round(totalNaira * (OGAS_COMMISSION_PERCENT / 100));
+  // Commission was fixed when the order was created (grace-aware). Never recompute at payout.
+  const commission = Number(order.ogasCommission ?? order.platformFee ?? 0);
   const sellerEarnings = Math.max(totalNaira - commission, 0);
 
   let payoutStatus = 'pending';
