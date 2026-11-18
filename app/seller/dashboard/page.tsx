@@ -84,9 +84,34 @@ export default function SellerDashboardPage() {
    ================================================================== */
 function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any }) {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [deliveryFeeInput, setDeliveryFeeInput] = useState('');
+  const [savingFee, setSavingFee] = useState(false);
   const [stats, setStats] = useState({ total: 0, pending: 0, confirmed: 0, delivered: 0, revenue: 0 });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'new' | 'active' | 'completed'>('new');
+
+  // Auto-expire stale unpaid orders (30-minute payment window)
+  useEffect(() => {
+    try {
+      const nowMs = Date.now();
+      const staleIds = (orders as any[])
+        .filter((o: any) => o.status === 'pending_payment' && o.paymentStatus === 'pending')
+        .filter((o: any) => {
+          const ts = o.expiresAt?.toMillis ? o.expiresAt.toMillis() : o.expiresAt ? new Date(o.expiresAt).getTime() : null;
+          if (ts) return ts < nowMs;
+          const up = o.updatedAt?.toMillis ? o.updatedAt.toMillis() : new Date(o.updatedAt || 0).getTime();
+          return up < nowMs - 30 * 60 * 1000;
+        })
+        .map((o: any) => o.id);
+      if (staleIds.length === 0) return;
+      (async () => {
+        try {
+          const headers = await authHeaders();
+          await fetch('/api/expire-orders', { method: 'POST', headers, body: JSON.stringify({ orderIds: staleIds }) });
+        } catch { /* non-blocking */ }
+      })();
+    } catch { /* non-blocking */ }
+  }, [orders]);
   const [weighOrder, setWeighOrder] = useState<any | null>(null);
   const [weighKg, setWeighKg] = useState('');
   const [doorInputs, setDoorInputs] = useState<Record<string, string>>({});
@@ -187,6 +212,26 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
     } catch (err: any) { alert(err.message || 'Could not confirm payment'); }
   };
 
+  const saveDeliveryFee = async () => {
+    const fee = Math.max(0, Math.floor(Number(deliveryFeeInput) || 0));
+    setSavingFee(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch('/api/seller-settings', { method: 'POST', headers, body: JSON.stringify({ deliveryFee: fee }) });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        setDeliveryFeeInput('');
+        alert('Delivery fee saved: ' + String.fromCharCode(8358) + data.deliveryFee.toLocaleString() + ' (0 = free)');
+      } else {
+        alert(data.message || 'Could not save');
+      }
+    } catch {
+      alert('Network error — try again');
+    } finally {
+      setSavingFee(false);
+    }
+  };
+
   const completeCash = async (orderId: string) => {
     try {
       const headers = await authHeaders();
@@ -207,6 +252,7 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
   });
 
   const statusLabel: Record<string, string> = {
+    expired: 'Expired — payment not completed',
     pending_payment: 'Awaiting Payment', pending_cash: 'Cash — confirm when paid', paid: 'Paid — Accept Order',
     confirmed: 'Confirmed — Deliver', out_for_delivery: 'Out for Delivery', delivered: 'Delivered', completed: 'Completed'
   };
@@ -312,6 +358,25 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
 
       {badge && (
         <div className="px-4 pt-3">
+          <div className="rounded-2xl p-4 bg-white" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Truck size={16} color={TEAL} />
+              <span className="font-extrabold text-[13px]" style={{ color: NAVY }}>DELIVERY FEE</span>
+            </div>
+            <p className="text-[10.5px] font-semibold mb-2" style={{ color: '#8a8f98' }}>
+              Current: <b style={{ color: NAVY }}>{String.fromCharCode(8358)}{Number(sellerData?.deliveryFee ?? 500).toLocaleString()}</b> per delivery. Enter 0 = free delivery.
+            </p>
+            <div className="flex gap-2">
+              <input type="number" min={0} value={deliveryFeeInput} onChange={(e) => setDeliveryFeeInput(e.target.value)}
+                placeholder="e.g. 500" className="flex-1 rounded-xl px-3 py-2.5 text-[12.5px] outline-none"
+                style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY }} />
+              <button onClick={saveDeliveryFee} disabled={savingFee}
+                className="px-4 text-white font-bold text-[12px] rounded-xl disabled:opacity-50" style={{ background: TEAL }}>
+                {savingFee ? 'Saving...' : 'SAVE'}
+              </button>
+            </div>
+          </div>
+
           <ProveYourShopCard uid={userId} photoUrl={sellerData?.photos?.front || sellerData?.shopPhotoUrl} />
           <SellerVerifiedCard
             businessName={sellerData?.businessName || 'My Store'}
