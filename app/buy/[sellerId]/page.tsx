@@ -140,6 +140,12 @@ export default function BuyPage() {
   const pointsApplied = paymentMethod === 'paystack' && usePoints ? maxPoints : 0;
   const payable = totalAmount - pointsApplied;
 
+  // Paystack local card fee shown to the buyer BEFORE payment — no surprises.
+  const cardFeeEstimate =
+    paymentMethod === 'paystack'
+      ? Math.min(payable <= 2500 ? Math.round(payable * 0.015) : Math.round(payable * 0.015) + 100, 2000)
+      : 0;
+
   const isValid =
     fillKg >= SCALE_STEP &&
     fillKg <= 50 &&
@@ -410,6 +416,48 @@ export default function BuyPage() {
           </p>
         )}
 
+        {/* Price breakdown — every kobo visible before payment */}
+        <div className="rounded-xl p-3 bg-white space-y-1.5" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
+          <div className="flex justify-between text-[12px] font-bold" style={{ color: '#5b616b' }}>
+            <span>Gas ({fillKg}kg)</span>
+            <span>{naira(gasCost)}</span>
+          </div>
+          <div className="flex justify-between text-[12px] font-bold" style={{ color: '#5b616b' }}>
+            <span>{deliveryType === 'pickup' ? 'Pickup' : 'Delivery'}</span>
+            <span>{naira(deliveryFee)}</span>
+          </div>
+          {pointsApplied > 0 && (
+            <div className="flex justify-between text-[12px] font-bold" style={{ color: TEAL }}>
+              <span>Gas Points discount</span>
+              <span>-{naira(pointsApplied)}</span>
+            </div>
+          )}
+          {paymentMethod === 'paystack' && (
+            <div className="flex justify-between text-[12px] font-bold" style={{ color: '#b45309' }}>
+              <span>Card fee (est.)</span>
+              <span>{naira(cardFeeEstimate)}</span>
+            </div>
+          )}
+          <div className="flex justify-between items-center pt-1.5 border-t" style={{ borderColor: '#eef1f5' }}>
+            <span className="text-[13px] font-black" style={{ color: NAVY }}>
+              {paymentMethod === 'paystack' ? 'You pay by card' : 'You pay'}
+            </span>
+            <span className="text-[15px] font-black" style={{ color: NAVY }}>
+              {paymentMethod === 'paystack' ? naira(payable + cardFeeEstimate) : naira(payable)}
+            </span>
+          </div>
+          {paymentMethod === 'cash' && (
+            <p className="text-[10.5px] font-bold" style={{ color: TEAL }}>
+              💵 Pay cash when the gas reaches you — no card needed, no extra fee. Gas Points go still accumulate.
+            </p>
+          )}
+          {paymentMethod === 'paystack' && (
+            <p className="text-[10.5px] font-semibold" style={{ color: '#8a8f98' }}>
+              🔒 Escrow protected — money only releases to the seller when you confirm delivery.
+            </p>
+          )}
+        </div>
+
         {/* Contact */}
         {(!contactSaved || deliveryType === 'delivery') && (
           <div className="rounded-xl p-3 space-y-2 bg-white" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
@@ -458,7 +506,7 @@ export default function BuyPage() {
       <div className="sticky bottom-16 z-10 px-4 py-3 flex items-center gap-3 bg-white border-t" style={{ borderColor: '#eee', boxShadow: '0 -4px 12px rgba(20,30,50,.06)' }}>
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className="font-black text-lg leading-tight" style={{ color: NAVY }}>{naira(payable)}</span>
+            <span className="font-black text-lg leading-tight" style={{ color: NAVY }}>{paymentMethod === 'paystack' ? naira(payable + cardFeeEstimate) : naira(payable)}</span>
             {pointsApplied > 0 && (
               <span className="text-[11px] font-bold line-through" style={{ color: '#c3cbd4' }}>{naira(totalAmount)}</span>
             )}
@@ -479,7 +527,7 @@ export default function BuyPage() {
             ? { background: TEAL, boxShadow: '0 4px 10px rgba(18,165,176,.4)' }
             : { background: '#c3cbd4', cursor: 'not-allowed' }}
         >
-          {placingOrder ? 'Placing...' : paymentMethod === 'paystack' ? `Pay ${naira(payable)}` : 'Place order'}
+          {placingOrder ? 'Placing...' : paymentMethod === 'paystack' ? `Pay ${naira(payable + cardFeeEstimate)}` : 'Place order — pay cash on delivery'}
         </button>
       </div>
     </div>
