@@ -140,10 +140,17 @@ export default function BuyPage() {
   const pointsApplied = paymentMethod === 'paystack' && usePoints ? maxPoints : 0;
   const payable = totalAmount - pointsApplied;
 
+  // Partial payment: buyer pays part by card now, balance as cash on delivery.
+  const [payOnlineAmount, setPayOnlineAmount] = useState('');
+  const payOnlineNum = Math.max(0, Math.floor(Number(payOnlineAmount) || 0));
+  const splitActive = paymentMethod === 'paystack' && payOnlineNum >= 100 && payOnlineNum < payable;
+  const onlineNow = splitActive ? payOnlineNum : payable;
+  const cashOnDelivery = splitActive ? payable - onlineNow : 0;
+
   // Paystack local card fee shown to the buyer BEFORE payment — no surprises.
   const cardFeeEstimate =
     paymentMethod === 'paystack'
-      ? Math.min(payable <= 2500 ? Math.round(payable * 0.015) : Math.round(payable * 0.015) + 100, 2000)
+      ? Math.min(onlineNow <= 2500 ? Math.round(onlineNow * 0.015) : Math.round(onlineNow * 0.015) + 100, 2000)
       : 0;
 
   const isValid =
@@ -170,6 +177,7 @@ export default function BuyPage() {
           kg: fillKg,
           deliveryType,
           paymentMethod,
+          onlineAmount: splitActive ? onlineNow : undefined,
           buyerPhone,
           buyerName,
           buyerAddress: deliveryType === 'pickup' ? 'Pickup in store' : buyerAddress,
@@ -194,7 +202,7 @@ export default function BuyPage() {
           headers,
           body: JSON.stringify({
             orderId: created.orderId,
-            amount: created.totalAmount,
+            amount: splitActive ? onlineNow : created.totalAmount,
             email: user?.email || '',
             name: buyerName || user?.displayName || '',
             sellerId: seller.id,
@@ -438,12 +446,34 @@ export default function BuyPage() {
               <span>{naira(cardFeeEstimate)}</span>
             </div>
           )}
+          {paymentMethod === 'paystack' && (
+            <div className="pt-1.5 border-t" style={{ borderColor: '#eef1f5' }}>
+              <p className="text-[10.5px] font-bold mb-1" style={{ color: '#5b616b' }}>
+                Account no reach full amount? Pay part by card, balance as cash:
+              </p>
+              <input
+                type="number"
+                min={100}
+                value={payOnlineAmount}
+                onChange={(e) => setPayOnlineAmount(e.target.value)}
+                placeholder={'Part to pay by card (min ' + String.fromCharCode(8358) + '100)'}
+                className="w-full rounded-xl px-3 py-2 text-[12.5px] outline-none"
+                style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY }}
+              />
+            </div>
+          )}
+          {splitActive && (
+            <div className="flex justify-between text-[12px] font-bold" style={{ color: TEAL }}>
+              <span>💵 Cash on delivery</span>
+              <span>{naira(cashOnDelivery)}</span>
+            </div>
+          )}
           <div className="flex justify-between items-center pt-1.5 border-t" style={{ borderColor: '#eef1f5' }}>
             <span className="text-[13px] font-black" style={{ color: NAVY }}>
               {paymentMethod === 'paystack' ? 'You pay by card' : 'You pay'}
             </span>
             <span className="text-[15px] font-black" style={{ color: NAVY }}>
-              {paymentMethod === 'paystack' ? naira(payable + cardFeeEstimate) : naira(payable)}
+              {paymentMethod === 'paystack' ? naira(onlineNow + cardFeeEstimate) : naira(payable)}
             </span>
           </div>
           {paymentMethod === 'cash' && (
@@ -506,7 +536,7 @@ export default function BuyPage() {
       <div className="sticky bottom-16 z-10 px-4 py-3 flex items-center gap-3 bg-white border-t" style={{ borderColor: '#eee', boxShadow: '0 -4px 12px rgba(20,30,50,.06)' }}>
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className="font-black text-lg leading-tight" style={{ color: NAVY }}>{paymentMethod === 'paystack' ? naira(payable + cardFeeEstimate) : naira(payable)}</span>
+            <span className="font-black text-lg leading-tight" style={{ color: NAVY }}>{paymentMethod === 'paystack' ? naira(onlineNow + cardFeeEstimate) : naira(payable)}</span>
             {pointsApplied > 0 && (
               <span className="text-[11px] font-bold line-through" style={{ color: '#c3cbd4' }}>{naira(totalAmount)}</span>
             )}
@@ -527,7 +557,7 @@ export default function BuyPage() {
             ? { background: TEAL, boxShadow: '0 4px 10px rgba(18,165,176,.4)' }
             : { background: '#c3cbd4', cursor: 'not-allowed' }}
         >
-          {placingOrder ? 'Placing...' : paymentMethod === 'paystack' ? `Pay ${naira(payable + cardFeeEstimate)}` : 'Place order — pay cash on delivery'}
+          {placingOrder ? 'Placing...' : paymentMethod === 'paystack' ? `Pay ${naira(onlineNow + cardFeeEstimate)}` : 'Place order — pay cash on delivery'}
         </button>
       </div>
     </div>

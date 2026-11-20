@@ -90,7 +90,11 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
   }
 
   const order = claimed.order;
-  const totalNaira = Number(order.totalAmount || order.total || order.totalPrice || 0);
+  const orderTotalNaira = Number(order.totalAmount || order.total || order.totalPrice || 0);
+  // Escrow only ever holds the online part; the cash balance stays with the seller.
+  const totalNaira = order.paymentMethod === 'split' && Number(order.onlineAmount) > 0
+    ? Number(order.onlineAmount)
+    : orderTotalNaira;
   // Commission was fixed when the order was created (grace-aware). Never recompute at payout.
   const commission = Number(order.ogasCommission ?? order.platformFee ?? 0);
   const sellerEarnings = Math.max(totalNaira - commission, 0);

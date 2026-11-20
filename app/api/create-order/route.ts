@@ -81,9 +81,14 @@ export async function POST(req: NextRequest) {
     const gasCost = discounted * size * qty;
     const totalAmount = gasCost + deliveryFee;
     const commissionPct = commissionPercentForSeller(seller);
-    const platformFee = Math.round(totalAmount * (commissionPct / 100)); // 2% after 90-day grace (0% inside grace)
+    const platformFee = Math.round(onlineAmount * (commissionPct / 100)); // 2% on the online part only; cash balance is seller-collected
     const method = paymentMethod === 'cash' ? 'cash' : 'paystack';
     const isCash = method === 'cash';
+    // Partial payment: buyer pays part online now, balance as cash on delivery.
+    const requestedOnline = isCash ? 0 : Math.floor(Number((body as any)?.onlineAmount) || 0);
+    const onlineAmount = requestedOnline >= 100 && requestedOnline < totalAmount ? requestedOnline : totalAmount;
+    const cashBalance = Math.max(totalAmount - onlineAmount, 0);
+    const isSplit = !isCash && cashBalance > 0;
 
     const userRef = adminDb.collection('users').doc(user.uid);
     await userRef.set(
@@ -120,7 +125,8 @@ export async function POST(req: NextRequest) {
       total: totalAmount,
       totalAmount,
       totalPrice: totalAmount,
-      paymentMethod: method,
+      paymentMethod: isSplit ? 'split' : method,
+      ...(isSplit ? { onlineAmount, cashBalance, cashCollected: false } : {}),
       status: isCash ? 'pending_cash' : 'pending_payment',
       paymentStatus: isCash ? 'cod' : 'pending',
       escrowStatus: isCash ? 'cod' : 'pending',

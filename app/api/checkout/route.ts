@@ -62,7 +62,9 @@ export async function POST(req: NextRequest) {
     }
     const resolvedSellerId = sellerId || order.sellerId;
 
-    const expected = orderTotal(order);
+    const totalExpected = orderTotal(order);
+    const orderOnlineAmt = Number((order as any)?.onlineAmount) || 0;
+    const expected = orderOnlineAmt >= 100 && orderOnlineAmt < totalExpected ? orderOnlineAmt : totalExpected;
     if (expected < 100) {
       return NextResponse.json(
         { success: false, message: 'Order total is missing or too small' },

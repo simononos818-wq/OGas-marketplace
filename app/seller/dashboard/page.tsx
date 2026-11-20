@@ -232,6 +232,21 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
     }
   };
 
+  const markCashCollected = async (orderId: string) => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch('/api/cash-collected', { method: 'POST', headers, body: JSON.stringify({ orderId }) });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        setOrders((prev: any[]) => prev.map((o: any) => (o.id === orderId ? { ...o, cashCollected: true } : o)));
+      } else {
+        alert(data.message || 'Could not update');
+      }
+    } catch {
+      alert('Network error — try again');
+    }
+  };
+
   const completeCash = async (orderId: string) => {
     try {
       const headers = await authHeaders();
