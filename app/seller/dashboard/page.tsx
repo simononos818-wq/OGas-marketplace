@@ -577,6 +577,22 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
                   </button>
                 </div>
               )}
+              {Number(order.cashBalance) > 0 && (
+                <div className="mt-2 rounded-xl p-2.5" style={{ background: order.cashCollected ? '#e8f8f0' : '#fff7ed', border: '1.5px solid #fed7aa' }}>
+                  <div className="flex justify-between text-[12px] font-extrabold" style={{ color: NAVY }}>
+                    <span>Collect cash on delivery</span>
+                    <span>{String.fromCharCode(8358)}{Number(order.cashBalance).toLocaleString()}</span>
+                  </div>
+                  <button
+                    onClick={() => markCashCollected(order.id)}
+                    disabled={!!order.cashCollected}
+                    className="w-full mt-1.5 py-2 rounded-xl text-[12px] font-extrabold text-white disabled:opacity-60"
+                    style={{ background: order.cashCollected ? '#22c55e' : NAVY }}
+                  >
+                    {order.cashCollected ? 'Cash collected' : 'Mark cash collected'}
+                  </button>
+                </div>
+              )}
 
               {st === 'pending_cash' && (
                 <div className="px-3.5 pb-3.5 space-y-2">

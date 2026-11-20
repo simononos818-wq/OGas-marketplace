@@ -80,15 +80,15 @@ export async function POST(req: NextRequest) {
     const deliveryFee = deliveryType === 'pickup' ? 0 : Number(seller.deliveryFee || 500);
     const gasCost = discounted * size * qty;
     const totalAmount = gasCost + deliveryFee;
+    // Partial payment: buyer pays part online now, balance as cash on delivery.
+    const requestedOnline = paymentMethod === 'cash' ? 0 : Math.floor(Number((body as any)?.onlineAmount) || 0);
+    const onlineAmount = requestedOnline >= 100 && requestedOnline < totalAmount ? requestedOnline : totalAmount;
+    const cashBalance = Math.max(totalAmount - onlineAmount, 0);
+    const isSplit = paymentMethod !== 'cash' && cashBalance > 0;
     const commissionPct = commissionPercentForSeller(seller);
     const platformFee = Math.round(onlineAmount * (commissionPct / 100)); // 2% on the online part only; cash balance is seller-collected
     const method = paymentMethod === 'cash' ? 'cash' : 'paystack';
     const isCash = method === 'cash';
-    // Partial payment: buyer pays part online now, balance as cash on delivery.
-    const requestedOnline = isCash ? 0 : Math.floor(Number((body as any)?.onlineAmount) || 0);
-    const onlineAmount = requestedOnline >= 100 && requestedOnline < totalAmount ? requestedOnline : totalAmount;
-    const cashBalance = Math.max(totalAmount - onlineAmount, 0);
-    const isSplit = !isCash && cashBalance > 0;
 
     const userRef = adminDb.collection('users').doc(user.uid);
     await userRef.set(
