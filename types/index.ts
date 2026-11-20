@@ -35,6 +35,8 @@ export type OrderStatus =
   | 'pending_delivery' | 'driver_assigned' | 'en_route' | 'arrived' | 'delivered' | 'completed' | 'cancelled';
 
 export interface Order {
+  cashBalance?: number;
+  cashCollected?: boolean;
   id: string;
   customerId: string;
   customerName: string;
