@@ -18,6 +18,8 @@ import { MIN_PRICE_PER_KG, MAX_PRICE_PER_KG } from '@/lib/pricing';
 const NAVY = '#16305e', TEAL = '#12a5b0';
 
 interface Order {
+  cashBalance?: number;
+  cashCollected?: boolean;
   id: string;
   buyerPhone: string;
   buyerAddress: string;
