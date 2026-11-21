@@ -88,6 +88,10 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
   const [orders, setOrders] = useState<Order[]>([]);
   const [deliveryFeeInput, setDeliveryFeeInput] = useState('');
   const [savingFee, setSavingFee] = useState(false);
+  const [walkinKg, setWalkinKg] = useState('');
+  const [walkinTotal, setWalkinTotal] = useState('');
+  const [walkinPhone, setWalkinPhone] = useState('');
+  const [savingWalkin, setSavingWalkin] = useState(false);
   const [stats, setStats] = useState({ total: 0, pending: 0, confirmed: 0, delivered: 0, revenue: 0 });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'new' | 'active' | 'completed'>('new');
@@ -249,6 +253,37 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
     }
   };
 
+  const recordWalkin = async () => {
+    const kg = Number(walkinKg);
+    const total = Math.round(Number(walkinTotal));
+    if (!kg || kg <= 0 || !total || total <= 0) {
+      alert('Enter kg weighed and total amount collected');
+      return;
+    }
+    setSavingWalkin(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch('/api/walkin-sale', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ kg, totalAmount: total, buyerPhone: walkinPhone }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        alert('Walk-in sale recorded — receipt #' + data.shortId);
+        setWalkinKg('');
+        setWalkinTotal('');
+        setWalkinPhone('');
+      } else {
+        alert(data.message || 'Could not record sale');
+      }
+    } catch {
+      alert('Network error — try again');
+    } finally {
+      setSavingWalkin(false);
+    }
+  };
+
   const completeCash = async (orderId: string) => {
     try {
       const headers = await authHeaders();
@@ -392,6 +427,33 @@ function SellerStudio({ userId, sellerData }: { userId: string; sellerData: any 
                 {savingFee ? 'Saving...' : 'SAVE'}
               </button>
             </div>
+          </div>
+
+          <div className="rounded-2xl p-4 bg-white" style={{ boxShadow: '0 1px 3px rgba(20,30,50,.06)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Banknote size={16} color={TEAL} />
+              <span className="font-extrabold text-[13px]" style={{ color: NAVY }}>WEIGH & FILL — WALK-IN SALE</span>
+            </div>
+            <p className="text-[10.5px] font-semibold mb-2" style={{ color: '#8a8f98' }}>
+              Record every over-the-counter refill. Enter what the scale show and the cash collected.
+            </p>
+            <div className="flex gap-2 mb-2">
+              <input type="number" min={0} step="0.01" value={walkinKg} onChange={(e) => setWalkinKg(e.target.value)}
+                placeholder="kg (e.g. 12.5)" className="flex-1 rounded-xl px-3 py-2.5 text-[12.5px] outline-none"
+                style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY }} />
+              <input type="number" min={0} value={walkinTotal} onChange={(e) => setWalkinTotal(e.target.value)}
+                placeholder={'Total ' + String.fromCharCode(8358)} className="flex-1 rounded-xl px-3 py-2.5 text-[12.5px] outline-none"
+                style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY }} />
+            </div>
+            <input type="tel" value={walkinPhone} onChange={(e) => setWalkinPhone(e.target.value)}
+              placeholder="Buyer phone (optional — for Gas Points)"
+              className="w-full rounded-xl px-3 py-2.5 text-[12.5px] outline-none mb-2"
+              style={{ background: '#f4f6f8', border: '1.5px solid #e6e9ee', color: NAVY }} />
+            <button onClick={recordWalkin} disabled={savingWalkin}
+              className="w-full py-3 text-white font-extrabold text-[13px] rounded-xl disabled:opacity-50"
+              style={{ background: NAVY }}>
+              {savingWalkin ? 'Recording...' : 'RECORD SALE'}
+            </button>
           </div>
 
           <ProveYourShopCard uid={userId} photoUrl={sellerData?.photos?.front || sellerData?.shopPhotoUrl} />
