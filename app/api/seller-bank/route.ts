@@ -3,6 +3,43 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireUser } from '../../../lib/require-user';
 
+const PRIVATE_BANK_FIELDS = [
+  'accountNumber', 'bankCode', 'bankName', 'accountName', 'bankResolved',
+  'bankUpdatedAt', 'paystackRecipientCode', 'bankLocked',
+] as const;
+
+// Upgrade older seller records lazily and atomically. This preserves existing
+// payout-lock state and removes legacy bank fields from the public seller doc.
+async function getOrMigratePrivateBank(sellerRef: FirebaseFirestore.DocumentReference) {
+  const privateRef = adminDb.collection('sellerPrivate').doc(sellerRef.id);
+  return adminDb.runTransaction(async (tx) => {
+    const [sellerSnap, privateSnap] = await Promise.all([
+      tx.get(sellerRef),
+      tx.get(privateRef),
+    ]);
+    const privateData = privateSnap.data() || {};
+    const sellerData = sellerSnap.data() || {};
+    const legacy = Object.fromEntries(
+      PRIVATE_BANK_FIELDS
+        .filter((field) => Object.prototype.hasOwnProperty.call(sellerData, field))
+        .map((field) => [field, sellerData[field]]),
+    );
+    if (!privateSnap.exists && Object.keys(legacy).length) {
+      tx.set(privateRef, { ...legacy, migratedAt: new Date() }, { merge: true });
+      tx.update(sellerRef, Object.fromEntries(
+        PRIVATE_BANK_FIELDS.map((field) => [field, FieldValue.delete()]),
+      ));
+      return legacy;
+    }
+    if (Object.keys(legacy).length) {
+      tx.update(sellerRef, Object.fromEntries(
+        PRIVATE_BANK_FIELDS.map((field) => [field, FieldValue.delete()]),
+      ));
+    }
+    return privateData;
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser(req);
@@ -29,7 +66,7 @@ export async function POST(req: NextRequest) {
     if (!sellerSnap.exists) {
       return NextResponse.json({ success: false, message: 'Seller profile not found. Register as a seller first.' }, { status: 404 });
     }
-    const existing = privateSnap.data() || {};
+    const existing = await getOrMigratePrivateBank(sellerRef);
 
     // Payout lock: once a seller has received a successful payout, bank changes
     // require support-led identity verification.
@@ -164,8 +201,7 @@ export async function GET(req: NextRequest) {
     if (!sellerSnap.exists) {
       return NextResponse.json({ success: false, message: 'Seller not found' }, { status: 404 });
     }
-    const privateSnap = await adminDb.collection('sellerPrivate').doc(user.uid).get();
-    const s = privateSnap.data() || {};
+    const s = await getOrMigratePrivateBank(adminDb.collection('sellers').doc(user.uid));
     return NextResponse.json({
       success: true,
       accountNumber: s.accountNumber || '',
