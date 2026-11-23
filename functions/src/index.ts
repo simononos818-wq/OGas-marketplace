@@ -6,29 +6,16 @@ if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET || '';
-const TERMII_API_KEY = process.env.TERMII_API_KEY || '';
-// Swap to 'OGAS' once Termii approves the sender ID; until then 'N-Alert' works on DND.
-const TERMII_SENDER_ID = process.env.TERMII_SENDER_ID || 'N-Alert';
-const OGAS_COMMISSION_PERCENT = 10;
 
-async function sendSMS(to: string, message: string) {
-  try {
-    let phone = to.replace(/\s/g, '');
-    if (phone.startsWith('0')) phone = '234' + phone.substring(1);
-    if (phone.startsWith('+')) phone = phone.substring(1);
-
-    await axios.post('https://v3.api.termii.com/api/sms/send', {
-      to: [phone],
-      from: TERMII_SENDER_ID,
-      sms: message,
-      type: 'plain',
-      api_key: TERMII_API_KEY,
-      channel: 'dnd',
-    });
-  } catch (error: any) {
-    console.error('SMS failed:', error.response?.data || error.message);
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// 2026-11-23 consolidation: this codebase NO LONGER sends SMS and NO LONGER
+// computes commission.
+//  - SMS ownership: functions-backend/onOrderStatusChanged (order status),
+//    Next.js routes (cash order, escrow paid, release). Termii sender "OGas".
+//  - Commission: exactly one number lives in lib/escrow.ts (5% card / 0% cash).
+//    The old 10% confirmDelivery callable was deleted — nothing in the app
+//    calls it; buyers confirm via /api/release-escrow (door code).
+// ─────────────────────────────────────────────────────────────────────────────
 
 /** Fire-and-forget FCM push to a user's saved device token. Never throws. */
 async function sendPushToUser(
@@ -71,26 +58,12 @@ export const paystackWebhook = functions.https.onRequest(async (req, res) => {
         const order = orderDoc.data();
 
         if (order) {
-          await sendSMS(
-            order.buyerPhone,
-            `OGas: Payment confirmed! Order #${orderId.slice(-6)} is being processed.`
-          );
-
           await sendPushToUser(
             order.buyerId,
             'Payment confirmed',
             `Order #${orderId.slice(-6)} is being processed.`,
             { orderId, type: 'order_status' }
           );
-
-          const sellerDoc = await db.collection('sellers').doc(order.sellerId).get();
-          const seller = sellerDoc.data();
-          if (seller?.phone) {
-            await sendSMS(
-              seller.phone,
-              `OGas: New order #${orderId.slice(-6)} from ${order.buyerName}. Amount: N${order.totalAmount}.`
-            );
-          }
 
           await sendPushToUser(
             order.sellerId,
@@ -148,11 +121,6 @@ export const createChatOnOrder = functions.region('europe-west3').firestore
 
     await snap.ref.update({ chatId });
 
-    await sendSMS(
-      order.buyerPhone,
-      `OGas: Order #${orderId.slice(-6)} placed! Total: N${order.totalAmount}.`
-    );
-
     await sendPushToUser(
       buyerId,
       'Order placed',
@@ -160,144 +128,6 @@ export const createChatOnOrder = functions.region('europe-west3').firestore
       { orderId, type: 'order_status' }
     );
   });
-
-export const notifySellerNewOrder = functions.region('europe-west3').firestore
-  .document('orders/{orderId}')
-  .onCreate(async (snap, context) => {
-    const order = snap.data();
-    const orderId = context.params.orderId;
-
-    const sellerDoc = await db.collection('sellers').doc(order.sellerId).get();
-    const seller = sellerDoc.data();
-
-    if (seller?.phone) {
-      const items = order.items?.map((i: any) => `${i.quantity}x${i.size}kg`).join(', ');
-      await sendSMS(
-        seller.phone,
-        `OGas NEW ORDER #${orderId.slice(-6)}: ${items}. Total: N${order.totalAmount}. Call: ${order.buyerPhone}`
-      );
-    }
-
-    const itemsShort = order.items?.map((i: any) => `${i.quantity}x${i.size ?? i.kg}kg`).join(', ');
-    await sendPushToUser(
-      order.sellerId,
-      'New OGas order',
-      `#${orderId.slice(-6)}: ${itemsShort} — N${order.totalAmount}`,
-      { orderId, type: 'new_order' }
-    );
-  });
-
-export const notifyOrderStatusUpdate = functions.region('europe-west3').firestore
-  .document('orders/{orderId}')
-  .onUpdate(async (change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
-    const orderId = context.params.orderId;
-
-    if (before.status === after.status) return;
-
-    const statusMessages: Record<string, string> = {
-      paid: 'Payment confirmed! Your order is being processed.',
-      pending_cash: 'Order received! Pay on delivery.',
-      confirmed: 'Your seller confirmed the order. It is being prepared.',
-      preparing: 'Your order is being prepared for delivery.',
-      out_for_delivery: 'Your gas is on the way! Get ready to receive it.',
-      delivered: 'Your gas has been delivered. Please confirm receipt to complete the order.',
-      completed: 'Order completed! Thank you for using OGas.',
-      cancelled: 'Your order has been cancelled.',
-    };
-
-    const message = statusMessages[after.status];
-    if (message) {
-      await sendSMS(
-        after.buyerPhone,
-        `OGas Order #${orderId.slice(-6)}: ${message}`
-      );
-
-      await sendPushToUser(
-        after.buyerId,
-        'Order update',
-        `#${orderId.slice(-6)}: ${message}`,
-        { orderId, type: 'order_status', status: after.status }
-      );
-    }
-
-    if (after.status === 'delivered' && before.status !== 'delivered') {
-      const confirmUrl = `https://www.ogaslpgmarketplace.com/orders/${orderId}/confirm`;
-      await sendSMS(
-        after.buyerPhone,
-        `OGas: Confirm you received your gas: ${confirmUrl} or reply YES.`
-      );
-    }
-  });
-
-export const confirmDelivery = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Login required');
-  }
-
-  const { orderId } = data;
-  const userId = context.auth.uid;
-
-  const orderRef = db.collection('orders').doc(orderId);
-  const orderDoc = await orderRef.get();
-
-  if (!orderDoc.exists) {
-    throw new functions.https.HttpsError('not-found', 'Order not found');
-  }
-
-  const order = orderDoc.data()!;
-
-  if (order.buyerId !== userId) {
-    throw new functions.https.HttpsError('permission-denied', 'Only buyer can confirm');
-  }
-
-  if (order.status !== 'delivered') {
-    throw new functions.https.HttpsError('failed-precondition', 'Order not yet delivered');
-  }
-
-  const totalAmount = order.totalAmount || 0;
-  const commission = Math.round(totalAmount * (OGAS_COMMISSION_PERCENT / 100));
-  const sellerEarnings = totalAmount - commission;
-
-  await orderRef.update({
-    status: 'completed',
-    buyerConfirmedAt: admin.firestore.FieldValue.serverTimestamp(),
-    commission: commission,
-    sellerEarnings: sellerEarnings,
-    payoutStatus: 'pending',
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-
-  const sellerRef = db.collection('sellers').doc(order.sellerId);
-  await sellerRef.update({
-    totalEarnings: admin.firestore.FieldValue.increment(sellerEarnings),
-    totalOrders: admin.firestore.FieldValue.increment(1),
-    totalCommissionPaid: admin.firestore.FieldValue.increment(commission),
-    pendingPayout: admin.firestore.FieldValue.increment(sellerEarnings),
-  });
-
-  await sendSMS(
-    order.buyerPhone,
-    `OGas: Order #${orderId.slice(-6)} completed! Thank you.`
-  );
-
-  const sellerDoc = await db.collection('sellers').doc(order.sellerId).get();
-  const seller = sellerDoc.data();
-  if (seller?.phone) {
-    await sendSMS(
-      seller.phone,
-      `OGas: Order #${orderId.slice(-6)} confirmed! N${sellerEarnings} ready for withdrawal.`
-    );
-  }
-
-  return {
-    success: true,
-    commission,
-    sellerEarnings,
-    message: 'Delivery confirmed. Seller can now withdraw earnings.',
-  };
-});
 
 export const sendMessageNotification = functions.region('europe-west3').firestore
   .document('chats/{chatId}/messages/{messageId}')
@@ -322,7 +152,6 @@ export const sendMessageNotification = functions.region('europe-west3').firestor
 
     const userDoc = await db.collection('users').doc(recipientId).get();
     const fcmToken = userDoc.data()?.fcmToken;
-    const phone = userDoc.data()?.phoneNumber;
 
     if (fcmToken) {
       const senderDoc = await db.collection('users').doc(message.senderId).get();
@@ -336,10 +165,6 @@ export const sendMessageNotification = functions.region('europe-west3').firestor
         },
         data: { chatId, type: 'chat_message' },
       });
-    }
-
-    if (phone) {
-      await sendSMS(phone, 'OGas: New message: "' + message.text.substring(0, 100) + '"');
     }
   });
 
