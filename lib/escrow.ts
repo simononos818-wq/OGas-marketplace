@@ -5,22 +5,28 @@ import { sendSms } from './sms';
 import { postSystemMessage } from './chat-server';
 import { SYSTEM_COPY } from './chat';
 
-export const OGAS_COMMISSION_PERCENT = 2;
+// ─────────────────────────────────────────────────────────────────────────────
+// THE ONE NUMBER. OGas commission is 5% on card (escrow-held) orders, locked
+// at order creation and never recomputed. Cash orders: 0%, forever.
+// No grace window. No other rate may exist anywhere in the codebase.
+// Ruling: Simon, 2026-11-23 — supersedes every 2% and 10% version.
+// ─────────────────────────────────────────────────────────────────────────────
+export const OGAS_COMMISSION_PERCENT = 5;
 
-// New sellers pay 0% commission for their first 90 days on OGas.
-const GRACE_PERIOD_DAYS = 90;
+// OGas absorbs the Paystack card fee out of its own commission, so the buyer
+// pays exactly the order amount and the seller receives 95% clean.
+// Estimate for accounting: 1.5% (+₦100 above ₦2,500), capped at ₦2,000.
+export function estimatePaystackFeeNaira(onlineNaira: number): number {
+  const amt = Math.max(0, Math.round(Number(onlineNaira) || 0));
+  if (amt <= 0) return 0;
+  const pct = Math.round(amt * 0.015);
+  return Math.min(amt <= 2500 ? pct : pct + 100, 2000);
+}
 
-export function commissionPercentForSeller(seller: any): number {
-  const createdAt = seller?.createdAt;
-  const joinedMs =
-    typeof createdAt?.toMillis === 'function'
-      ? createdAt.toMillis()
-      : createdAt
-      ? new Date(createdAt).getTime()
-      : null;
-  if (!joinedMs || Number.isNaN(joinedMs)) return 0; // join date unknown = still in grace
-  const ageDays = (Date.now() - joinedMs) / (1000 * 60 * 60 * 24);
-  return ageDays >= GRACE_PERIOD_DAYS ? OGAS_COMMISSION_PERCENT : 0;
+// DEPRECATED 2026-11-23: the 90-day grace window is gone. This shim exists only
+// so older imports keep working — it always returns the one number.
+export function commissionPercentForSeller(_seller: any): number {
+  return OGAS_COMMISSION_PERCENT;
 }
 
 export async function notifyPaidEscrow(orderId: string) {
@@ -53,18 +59,9 @@ async function sellerPhoneFor(sellerId?: string) {
   return (snap.data()?.phone as string | undefined) || null;
 }
 
-async function paystackJson(path: string, secret: string, body: object) {
-  const res = await fetch(`https://api.paystack.co${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${secret}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  return res.json();
-}
-
+// AUTO-PAYOUT IS OFF (ruling 2026-11-23). No automatic escrow→bank transfer
+// runs anywhere until split payments / instant settlement ship. Interim is
+// pay-on-collection: the release is recorded here, settlement is manual.
 export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
   const orderRef = adminDb.collection('orders').doc(orderId);
 
@@ -86,7 +83,7 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
   });
 
   if (claimed.already) {
-    return { already: true, sellerEarnings: claimed.order.sellerEarnings || 0, payoutStatus: claimed.order.payoutStatus || 'sent' };
+    return { already: true, sellerEarnings: claimed.order.sellerEarnings || 0, payoutStatus: claimed.order.payoutStatus || 'pay_on_collection' };
   }
 
   const order = claimed.order;
@@ -95,70 +92,25 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
   const totalNaira = order.paymentMethod === 'split' && Number(order.onlineAmount) > 0
     ? Number(order.onlineAmount)
     : orderTotalNaira;
-  // Commission was fixed when the order was created (grace-aware). Never recompute at payout.
+  // Commission was fixed when the order was created (5% card / 0% cash).
+  // Never recompute at payout.
   const commission = Number(order.ogasCommission ?? order.platformFee ?? 0);
+  // Seller receives their share clean — no fee deductions. OGas absorbs the
+  // card fee out of its commission; both sides are recorded for accounting.
   const sellerEarnings = Math.max(totalNaira - commission, 0);
-
-  let payoutStatus = 'pending';
-  let transferRef: string | null = null;
-  const sellerRef = order.sellerId ? adminDb.collection('sellers').doc(order.sellerId) : null;
-  const sellerSnap = sellerRef ? await sellerRef.get() : null;
-  const seller = sellerSnap?.data() || {};
-
-  const secret = process.env.PAYSTACK_SECRET_KEY;
-  const accountNumber = seller.accountNumber || seller.bankAccountNumber;
-  const bankCode = seller.bankCode;
-  const accountName = seller.accountName || seller.businessName || 'OGas Seller';
-
-  if (secret && accountNumber && bankCode && sellerEarnings >= 100) {
-    try {
-      let recipient = seller.paystackRecipientCode as string | undefined;
-      if (!recipient) {
-        const rec = await paystackJson('/transferrecipient', secret, {
-          type: 'nuban',
-          name: accountName,
-          account_number: String(accountNumber),
-          bank_code: String(bankCode),
-          currency: 'NGN',
-        });
-        recipient = rec?.data?.recipient_code;
-        if (recipient && sellerRef) {
-          await sellerRef.set({ paystackRecipientCode: recipient }, { merge: true });
-        }
-      }
-      if (recipient) {
-        const t = await paystackJson('/transfer', secret, {
-          source: 'balance',
-          amount: Math.round(sellerEarnings * 100),
-          recipient,
-          reason: `OGas order ${orderId.slice(-6)}`,
-          reference: `OGAS-PAYOUT-${orderId}`,
-        });
-        if (t.status) {
-          payoutStatus = 'sent';
-          transferRef = t.data?.reference || t.data?.transfer_code || null;
-        } else {
-          console.error('Paystack transfer failed', t);
-          payoutStatus = t.message?.toLowerCase?.().includes('duplicate') ? 'sent' : 'pending_manual';
-        }
-      } else {
-        payoutStatus = 'pending_manual';
-      }
-    } catch (err) {
-      console.error('Payout error', err);
-      payoutStatus = 'pending_manual';
-    }
-  } else {
-    payoutStatus = 'awaiting_bank';
-  }
+  const ogasFeeAbsorbed = estimatePaystackFeeNaira(totalNaira);
+  const ogasNet = Math.max(commission - ogasFeeAbsorbed, 0);
+  const payoutStatus = 'pay_on_collection';
 
   await orderRef.update({
     status: 'completed',
     escrowStatus: 'released',
     payoutStatus,
-    transferRef,
+    transferRef: null,
     commission,
     sellerEarnings,
+    ogasFeeAbsorbed,
+    ogasNet,
     releasedBy,
     releasedAt: new Date(),
     buyerConfirmed: releasedBy === 'buyer',
@@ -170,14 +122,12 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
     { merge: true },
   );
 
+  const sellerRef = order.sellerId ? adminDb.collection('sellers').doc(order.sellerId) : null;
   if (sellerRef) {
     await sellerRef.set(
       {
         totalEarnings: FieldValue.increment(sellerEarnings),
-        pendingPayout:
-          payoutStatus === 'sent'
-            ? FieldValue.increment(0)
-            : FieldValue.increment(sellerEarnings),
+        pendingPayout: FieldValue.increment(sellerEarnings),
         totalOrders: FieldValue.increment(1),
         updatedAt: new Date(),
       },
@@ -189,13 +139,12 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
   if (order.buyerPhone) {
     await sendSms(order.buyerPhone, `OGas: escrow released on order #${shortId}. Thank you.`);
   }
-  const sellerPhone = order.sellerPhone || seller.phone;
+  const sellerSnap = sellerRef ? await sellerRef.get() : null;
+  const sellerPhone = order.sellerPhone || sellerSnap?.data()?.phone;
   if (sellerPhone) {
     await sendSms(
       sellerPhone,
-      payoutStatus === 'sent'
-        ? `OGas: Door Code matched. N${sellerEarnings} for order #${shortId} is on the way to your bank.`
-        : `OGas: Order #${shortId} confirmed. N${sellerEarnings} is ready — add your payout account if you have not.`,
+      `OGas: order #${shortId} confirmed. N${sellerEarnings.toLocaleString()} recorded as your earnings — pay-on-collection, OGas settles with you directly.`,
     );
   }
 

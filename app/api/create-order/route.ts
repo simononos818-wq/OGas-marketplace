@@ -7,7 +7,7 @@ import { sendSms } from '../../../lib/sms';
 import { openOrderChat } from '../../../lib/chat-server';
 import { sellerVerified } from '../../../lib/fields';
 import { isNgPhone, normalizeNgPhone } from '../../../lib/phone';
-import { commissionPercentForSeller } from '../../../lib/escrow';
+import { OGAS_COMMISSION_PERCENT, estimatePaystackFeeNaira } from '../../../lib/escrow';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -85,10 +85,15 @@ export async function POST(req: NextRequest) {
     const onlineAmount = requestedOnline >= 100 && requestedOnline < totalAmount ? requestedOnline : totalAmount;
     const cashBalance = Math.max(totalAmount - onlineAmount, 0);
     const isSplit = paymentMethod !== 'cash' && cashBalance > 0;
-    const commissionPct = commissionPercentForSeller(seller);
-    const platformFee = Math.round(onlineAmount * (commissionPct / 100)); // 2% on the online part only; cash balance is seller-collected
     const method = paymentMethod === 'cash' ? 'cash' : 'paystack';
     const isCash = method === 'cash';
+    // THE ONE NUMBER (ruling 2026-11-23): 5% on card orders, locked here at
+    // creation, never recomputed later. Cash orders: 0%, forever.
+    const commissionPct = isCash ? 0 : OGAS_COMMISSION_PERCENT;
+    const platformFee = Math.round(onlineAmount * (commissionPct / 100));
+    // OGas absorbs the Paystack card fee out of its commission — recorded as an
+    // estimate for accounting, never charged to buyer or seller.
+    const paystackFeeEstimate = isCash ? 0 : estimatePaystackFeeNaira(onlineAmount);
 
     const userRef = adminDb.collection('users').doc(user.uid);
     await userRef.set(
@@ -134,6 +139,7 @@ export async function POST(req: NextRequest) {
       ogasCommissionPercent: commissionPct,
       platformFee,
       ogasCommission: platformFee,
+      paystackFeeEstimate,
       usedSplitPayment: false,
       createdAt: new Date(),
       updatedAt: new Date(),
