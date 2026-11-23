@@ -17,21 +17,29 @@ export async function POST(req: NextRequest) {
     }
 
     const { orderId, action, doorCode } = await req.json();
-    if (!orderId) {
+    if (!orderId || typeof orderId !== 'string') {
       return NextResponse.json({ success: false, message: 'Missing order' }, { status: 400 });
     }
 
-    const orderSnap = await adminDb.collection('orders').doc(orderId).get();
+    const orderRef = adminDb.collection('orders').doc(orderId);
+    const orderSnap = await orderRef.get();
     if (!orderSnap.exists) {
       return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
     }
     const order = orderSnap.data()!;
 
+    if (order.buyerId !== user.uid && order.sellerId !== user.uid) {
+      return NextResponse.json({ success: false, message: 'Not your order' }, { status: 403 });
+    }
+
     if (order.escrowStatus === 'cod' || order.paymentMethod === 'cash') {
-      if (order.buyerId !== user.uid && order.sellerId !== user.uid) {
-        return NextResponse.json({ success: false, message: 'Not your order' }, { status: 403 });
+      if (order.status !== 'delivered') {
+        return NextResponse.json({ success: false, message: 'Order must be delivered before it can be completed' }, { status: 400 });
       }
-      await adminDb.collection('orders').doc(orderId).update({
+      if (order.disputeStatus === 'open' || order.disputed === true || order.cancelledAt) {
+        return NextResponse.json({ success: false, message: 'This order is disputed or cancelled' }, { status: 409 });
+      }
+      await orderRef.update({
         status: 'completed',
         escrowStatus: 'cod_done',
         releasedBy: order.buyerId === user.uid ? 'buyer' : 'seller',
@@ -42,8 +50,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'Cash order completed' });
     }
 
-    if (order.paymentStatus !== 'paid' && order.status !== 'paid') {
+    if (order.escrowStatus === 'released' || order.escrowStatus === 'releasing') {
+      return NextResponse.json({ success: true, already: true, message: 'This order has already been released' });
+    }
+    if (order.paymentStatus !== 'paid') {
       return NextResponse.json({ success: false, message: 'Payment is not in escrow yet' }, { status: 400 });
+    }
+    if (order.status !== 'delivered') {
+      return NextResponse.json({ success: false, message: 'Order must be delivered before escrow can be released' }, { status: 400 });
+    }
+    if (order.disputeStatus === 'open' || order.disputed === true || order.cancelledAt) {
+      return NextResponse.json({ success: false, message: 'This order is disputed or cancelled' }, { status: 409 });
     }
 
     if (action === 'seller_code') {
@@ -56,10 +73,7 @@ export async function POST(req: NextRequest) {
       const lockedUntil = secret.lockedUntil?.toDate?.() || (secret.lockedUntil ? new Date(secret.lockedUntil) : null);
       if (lockedUntil && lockedUntil.getTime() > Date.now()) {
         const mins = Math.ceil((lockedUntil.getTime() - Date.now()) / 60000);
-        return NextResponse.json({
-          success: false,
-          message: `Too many tries. Ask the buyer again in ${mins} min.`,
-        }, { status: 429 });
+        return NextResponse.json({ success: false, message: `Too many tries. Ask the buyer again in ${mins} min.` }, { status: 429 });
       }
       if (!order.doorCodeHash || !doorCode || !doorCodesMatch(orderId, order.doorCodeHash, doorCode)) {
         const next = (secret.failedAttempts || 0) + 1;
@@ -82,15 +96,11 @@ export async function POST(req: NextRequest) {
       if (order.sellerId !== user.uid) {
         return NextResponse.json({ success: false, message: 'Only the seller can force-complete' }, { status: 403 });
       }
-      if (order.status !== 'delivered') {
-        return NextResponse.json({ success: false, message: 'Order must be delivered first' }, { status: 400 });
-      }
       const autoCompleteAt = order.autoCompleteAt?.toDate?.() || (order.autoCompleteAt ? new Date(order.autoCompleteAt) : null);
       if (autoCompleteAt && autoCompleteAt.getTime() > Date.now()) {
         const mins = Math.ceil((autoCompleteAt.getTime() - Date.now()) / 60000);
         return NextResponse.json({ success: false, message: 'Wait ' + mins + ' min or ask buyer for Door Code' }, { status: 429 });
       }
-      await adminDb.collection('orders').doc(orderId).update({ status: 'completed', forceCompletedAt: new Date(), updatedAt: new Date() });
       const result = await paySellerFromEscrow(orderId, 'seller_force_complete');
       return NextResponse.json({ success: true, ...result });
     }
