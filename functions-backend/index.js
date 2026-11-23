@@ -9,7 +9,9 @@ admin.initializeApp();
 
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET;
 const TERMII_API_KEY = process.env.TERMII_API_KEY;
-// Sender ID is exactly "OGas" — approved 2026-11-23. Case-sensitive: "OGAS" fails.
+// Sender ID is exactly "OGas" — case-sensitive. As of 2026-11-23 it is still
+// PENDING with Termii (422 SENDER_ID_NOT_APPROVED), so sendSMS falls back to
+// the number route (no sender ID) until approval lands.
 const TERMII_SENDER_ID = process.env.TERMII_SENDER_ID || 'OGas';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const OGas_EMAIL = 'support@ogaslpgmarketplace.com';
@@ -32,12 +34,14 @@ const PROMO_END = new Date('2026-11-01T00:00:00+01:00'); // ends midnight Oct 31
 // ═══════════════════════════════════════════════════════════════
 
 // The ONLY SMS sender in the Firebase backend. One helper, one sender ID,
-// one channel. Transactional traffic uses 'generic' with the approved "OGas" ID.
+// one channel. Branded 'OGas' via generic channel first; if Termii answers
+// 422 SENDER_ID_NOT_APPROVED (still pending), fall back to the number route
+// which delivers without a custom sender ID.
 async function sendSMS(to, message) {
   if (!TERMII_API_KEY) { console.log('SMS skipped: no Termii key'); return; }
   if (!to) { console.log('SMS skipped: no phone'); return; }
+  const cleanTo = String(to).replace(/\s/g, '').replace(/^\+/, '').replace(/^234/, '234').replace(/^0/, '234');
   try {
-    const cleanTo = String(to).replace(/^\+?234/, '234').replace(/^0/, '234');
     const res = await axios.post('https://v3.api.termii.com/api/sms/send', {
       to: cleanTo,
       from: TERMII_SENDER_ID,
@@ -46,10 +50,28 @@ async function sendSMS(to, message) {
       channel: 'generic',
       api_key: TERMII_API_KEY,
     });
-    console.log('SMS sent:', res.data.message_id || res.data);
+    console.log('SMS sent (branded):', res.data.message_id || res.data);
     return res.data;
   } catch (err) {
-    console.error('SMS failed:', err.response?.data || err.message);
+    const data = err.response?.data;
+    const status = err.response?.status;
+    const senderPending = status === 422 && String(data?.message || '').includes('SENDER_ID_NOT_APPROVED');
+    if (!senderPending) {
+      console.error('SMS failed:', data || err.message);
+      return;
+    }
+    console.log('Branded sender pending — falling back to number route');
+  }
+  try {
+    const res = await axios.post('https://v3.api.termii.com/api/sms/number/send', {
+      to: cleanTo,
+      sms: message,
+      api_key: TERMII_API_KEY,
+    });
+    console.log('SMS sent (number route):', res.data.message_id || res.data);
+    return res.data;
+  } catch (err) {
+    console.error('SMS number-route failed:', err.response?.data || err.message);
   }
 }
 
@@ -395,7 +417,7 @@ exports.reconcilePayments = onSchedule('every 30 minutes', async () => {
   }
 });
 
-// C) Day-end balance (23:55 Lagos) -> dailyReports/YYYY-MM-DD. balanced=false flags gaps.
+// C) Day-end balance (23:55 Lagos) -> dailyReports/YYYY-MM-DD.
 // Updated 2026-11-23 for pay-on-collection: reads commission/sellerEarnings.
 exports.dayEndBalance = onSchedule({ schedule: '55 23 * * *', timeZone: 'Africa/Lagos' }, async () => {
   const db = admin.firestore();
