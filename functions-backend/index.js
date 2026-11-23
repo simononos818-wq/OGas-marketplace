@@ -1,6 +1,6 @@
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const functions = require('firebase-functions');
-const {onDocumentUpdated} = require("firebase-functions/v2/firestore");
+const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const admin = require('firebase-admin');
 const axios = require('axios');
 const cors = require('cors')({ origin: true });
@@ -9,10 +9,15 @@ admin.initializeApp();
 
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET;
 const TERMII_API_KEY = process.env.TERMII_API_KEY;
+// Sender ID is exactly "OGas" — approved 2026-11-23. Case-sensitive: "OGAS" fails.
 const TERMII_SENDER_ID = process.env.TERMII_SENDER_ID || 'OGas';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const OGas_EMAIL = 'support@ogaslpgmarketplace.com';
-const COMMISSION_RATE = 0.10;
+
+// Commission lives in exactly one place: OGAS_COMMISSION_PERCENT in
+// lib/escrow.ts (5% card / 0% cash, locked at order creation — ruling
+// 2026-11-23). This backend never computes commission and never moves money.
+// AUTO-PAYOUT IS OFF: no escrow→bank transfer code may live here.
 
 // Gas Points: 1 GP = N1, spendable only inside the app (max 10% of an order).
 const REFERRAL_GP = 300;
@@ -26,10 +31,13 @@ const PROMO_END = new Date('2026-11-01T00:00:00+01:00'); // ends midnight Oct 31
 // HELPERS
 // ═══════════════════════════════════════════════════════════════
 
+// The ONLY SMS sender in the Firebase backend. One helper, one sender ID,
+// one channel. Transactional traffic uses 'generic' with the approved "OGas" ID.
 async function sendSMS(to, message) {
   if (!TERMII_API_KEY) { console.log('SMS skipped: no Termii key'); return; }
+  if (!to) { console.log('SMS skipped: no phone'); return; }
   try {
-    const cleanTo = to.replace(/^\+?234/, '234').replace(/^0/, '234');
+    const cleanTo = String(to).replace(/^\+?234/, '234').replace(/^0/, '234');
     const res = await axios.post('https://v3.api.termii.com/api/sms/send', {
       to: cleanTo,
       from: TERMII_SENDER_ID,
@@ -57,29 +65,8 @@ async function sendPush(userId, title, body, data = {}) {
   }
 }
 
-async function createTransferRecipient(name, accountNumber, bankCode) {
-  const res = await axios.post('https://api.paystack.co/transferrecipient', {
-    type: 'nuban',
-    name,
-    account_number: accountNumber,
-    bank_code: bankCode,
-    currency: 'NGN',
-  }, { headers: { Authorization: `Bearer ${PAYSTACK_SECRET}`, 'Content-Type': 'application/json' } });
-  return res.data.data.recipient_code;
-}
-
-async function initiateTransfer(amountKobo, recipientCode, reason) {
-  const res = await axios.post('https://api.paystack.co/transfer', {
-    source: 'balance',
-    amount: Math.round(amountKobo),
-    recipient: recipientCode,
-    reason,
-  }, { headers: { Authorization: `Bearer ${PAYSTACK_SECRET}`, 'Content-Type': 'application/json' } });
-  return res.data;
-}
-
 // ═══════════════════════════════════════════════════════════════
-// EXISTING FUNCTIONS (unchanged)
+// PAYMENTS (unchanged)
 // ═══════════════════════════════════════════════════════════════
 
 exports.initializePaystackPayment = functions.https.onRequest((req, res) => {
@@ -118,107 +105,63 @@ exports.verifyPaystackPayment = functions.https.onRequest((req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// NEW: SELLER BANK DETAILS
+// ORDER STATUS SMS + PUSH — the single owner of buyer status messages.
+// (Merged 2026-11-23: absorbs the old onOrderStatusChanged +
+// notifyOnOrderChange duplicates. New-order and paid alerts are sent by the
+// Next.js routes — create-order for cash, webhook/notifyPaidEscrow for card.)
 // ═══════════════════════════════════════════════════════════════
 
-exports.onOrderCompleted = onDocumentUpdated("orders/{orderId}", async (event) => {
-  const before = event.data.before.data();
-  const after = event.data.after.data();
-  if (before.status === after.status || after.status !== 'completed') return;
+exports.onOrderStatusChanged = onDocumentUpdated(
+  { document: 'orders/{orderId}', region: 'europe-west3' },
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    if (before.status === after.status) return;
 
-  const orderId = event.params.orderId;
-  const { sellerId, totalAmount, paystackAmount, buyerPhone, sellerPhone, buyerId, buyerEmail, sellerName } = after;
-  const amountKobo = paystackAmount || Math.round(totalAmount * 100);
+    const { status, buyerPhone, sellerPhone, buyerId, sellerName } = after;
+    const orderId = event.params.orderId;
+    const shortId = orderId.slice(-6).toUpperCase();
+    // Weighed on the seller's scale via Weigh & Fill — the number the buyer
+    // paid for, stated plainly (OGas positioning: weight on every delivery).
+    const weighedKg = Number(after.kgDelivered || after.kgAmount || after.kg || 0);
 
-  const sellerDoc = await admin.firestore().collection('sellers').doc(sellerId).get();
-  const seller = sellerDoc.data();
+    switch (status) {
+      case 'confirmed':
+        if (buyerPhone) {
+          await sendSMS(buyerPhone, `OGas order ${shortId}: ${sellerName || 'your seller'} confirmed. Your gas is being prepared.`);
+        }
+        await sendPush(buyerId, 'Order Confirmed', `${sellerName || 'Seller'} confirmed your order.`, { orderId, type: 'confirmed' });
+        break;
 
-  if (!seller?.bankDetails?.recipientCode) {
-    console.error('No bank details for seller:', sellerId);
-    await event.data.after.ref.update({ payoutStatus: 'failed', payoutError: 'Seller bank details missing' });
-    await sendSMS(sellerPhone, 'URGENT: Add your bank details to OGas to receive payouts. Go to your dashboard now.');
-    return;
-  }
+      case 'out_for_delivery':
+        if (buyerPhone) {
+          await sendSMS(buyerPhone, `OGas order ${shortId} is on the way. Have your Door Code ready.`);
+        }
+        await sendPush(buyerId, 'Out for Delivery', 'Your gas is on the way!', { orderId, type: 'out_for_delivery' });
+        break;
 
-  const commission = Math.round(amountKobo * COMMISSION_RATE);
-  const sellerPayout = amountKobo - commission;
+      case 'delivered':
+        if (buyerPhone) {
+          await sendSMS(
+            buyerPhone,
+            weighedKg > 0
+              ? `OGas order ${shortId} delivered — weighed ${weighedKg}kg on the scale. Confirm in the app to release payment.`
+              : `OGas order ${shortId} marked delivered. Confirm in the app to release payment.`,
+          );
+        }
+        await sendPush(buyerId, 'Confirm Delivery', 'Your gas was delivered. Confirm to release payment.', { orderId, type: 'delivered' });
+        if (sellerPhone) {
+          await sendSMS(sellerPhone, `OGas order ${shortId} delivered. Waiting for buyer confirmation.`);
+        }
+        break;
 
-  await event.data.after.ref.update({
-    escrowAmount: amountKobo,
-    commissionAmount: commission,
-    sellerPayoutAmount: sellerPayout,
-    payoutStatus: 'processing',
+      // 'completed' notifications are sent by the escrow release path
+      // (lib/escrow.ts) — nothing here, so nobody gets two SMS.
+    }
   });
 
-  try {
-    const transfer = await initiateTransfer(sellerPayout, seller.bankDetails.recipientCode, `OGas payout - Order ${orderId.slice(-6).toUpperCase()}`);
-
-    await event.data.after.ref.update({
-      payoutStatus: 'completed',
-      payoutRef: transfer.data.transfer_code,
-      completedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    await admin.firestore().collection('commissions').add({
-      orderId, sellerId, amount: commission, rate: COMMISSION_RATE,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    await admin.firestore().collection('payouts').add({
-      orderId, sellerId, amount: sellerPayout,
-      transferCode: transfer.data.transfer_code, status: 'success',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    await sendSMS(sellerPhone, `OGas payout sent! N${(sellerPayout/100).toLocaleString()} to your ${seller.bankDetails.bankName}. Ref: ${transfer.data.transfer_code}`);
-    await sendSMS(buyerPhone, `Your OGas order is complete. Thank you!`);
-    await sendPush(sellerId, 'Payment Released!', `N${(sellerPayout/100).toLocaleString()} sent to your bank.`, { orderId, type: 'payout' });
-    await sendPush(buyerId, 'Order Complete', `Your order with ${sellerName} is finished.`, { orderId, type: 'completed' });
-
-  } catch (error) {
-    console.error('Transfer failed:', error.response?.data || error.message);
-    await event.data.after.ref.update({
-      payoutStatus: 'failed',
-      payoutError: error.response?.data?.message || error.message,
-    });
-    await sendSMS(sellerPhone, `OGas payout failed for order ${orderId.slice(-6)}. Our team will resolve within 24hrs.`);
-  }
-});
-
 // ═══════════════════════════════════════════════════════════════
-// NEW: SMS + PUSH ON EVERY STATUS CHANGE (v2 Firestore trigger)
-// ═══════════════════════════════════════════════════════════════
-
-exports.onOrderStatusChanged = onDocumentUpdated("orders/{orderId}", async (event) => {
-  const before = event.data.before.data();
-  const after = event.data.after.data();
-  if (before.status === after.status) return;
-
-  const { status, buyerPhone, sellerPhone, buyerId, sellerId, sellerName, kgAmount, totalAmount } = after;
-  const orderId = event.params.orderId;
-  const shortId = orderId.slice(-6).toUpperCase();
-
-  switch (status) {
-    case 'confirmed':
-      await sendSMS(buyerPhone, `${sellerName} confirmed your OGas order (${kgAmount}kg). Preparing for delivery.`);
-      await sendPush(buyerId, 'Order Confirmed', `${sellerName} confirmed your ${kgAmount}kg order.`, { orderId, type: 'confirmed' });
-      break;
-
-    case 'out_for_delivery':
-      await sendSMS(buyerPhone, `Your OGas order (${shortId}) is out for delivery!`);
-      await sendPush(buyerId, 'Out for Delivery', 'Your gas is on the way!', { orderId, type: 'out_for_delivery' });
-      break;
-
-    case 'delivered':
-      await sendSMS(buyerPhone, `OGas order ${shortId} marked delivered. Please confirm receipt in the app to release payment.`);
-      await sendPush(buyerId, 'Confirm Delivery', 'Your gas was delivered. Confirm to release payment.', { orderId, type: 'delivered' });
-      await sendSMS(sellerPhone, `Your OGas order ${shortId} is delivered. Waiting for buyer confirmation.`);
-      break;
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════
-// NEW: FCM TOKEN REGISTRATION
+// FCM TOKEN REGISTRATION
 // ═══════════════════════════════════════════════════════════════
 
 exports.registerFCMToken = functions.https.onCall(async (data, context) => {
@@ -231,7 +174,7 @@ exports.registerFCMToken = functions.https.onCall(async (data, context) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// NEW: AUTO-COMPLETE ORDERS
+// AUTO-COMPLETE ORDERS
 // ═══════════════════════════════════════════════════════════════
 
 exports.autoCompleteDeliveredOrders = functions.https.onRequest((req, res) => {
@@ -257,86 +200,6 @@ exports.autoCompleteDeliveredOrders = functions.https.onRequest((req, res) => {
       res.status(500).json({ error: error.message });
     }
   });
-});
-
-// ==================== TERMII SMS HELPER ====================
-const sendTermiiSMS = async (phone, message) => {
-  try {
-    const apiKey = process.env.TERMII_API_KEY;
-    const senderId = process.env.TERMII_SENDER_ID || 'OGas';
-    if (!apiKey) {
-      console.log('Termii API key missing, skipping SMS');
-      return;
-    }
-
-    let to = phone.replace(/\s/g, '').replace(/^\+/, '');
-    if (to.startsWith('0')) to = '234' + to.substring(1);
-    if (!to.startsWith('234')) to = '234' + to;
-
-    const res = await fetch('https://api.ng.termii.com/api/sms/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: apiKey,
-        to: to,
-        from: senderId,
-        sms: message,
-        type: 'plain',
-        channel: 'generic'
-      })
-    });
-
-    const data = await res.json();
-    console.log('Termii SMS sent:', data);
-    return data;
-  } catch (err) {
-    console.error('Termii SMS failed:', err);
-  }
-};
-
-// ==================== NOTIFY ON ORDER STATUS CHANGE ====================
-
-exports.notifyOnOrderChange = onDocumentUpdated('orders/{orderId}', async (event) => {
-  const before = event.data.before.data();
-  const after = event.data.after.data();
-
-  if (before.status === after.status) return;
-
-  // NEW ORDER (pending) → SMS SELLER
-  if (after.status === 'pending' && before.status !== 'pending') {
-    const sellerPhone = after.sellerPhone || after.sellerData?.phone;
-    if (sellerPhone) {
-      const items = (after.items || []).map(i => `${i.quantity}x${i.size}kg`).join(', ');
-      const msg = `OGas Order!\nBuyer: ${after.buyerPhone}\nAddr: ${after.buyerAddress}\nAmt: N${after.totalAmount}\nItems: ${items}\nLogin: ogaslpgmarketplace.com/seller/dashboard`;
-      await sendTermiiSMS(sellerPhone, msg);
-    }
-  }
-
-  // OUT FOR DELIVERY → SMS BUYER
-  if (after.status === 'out_for_delivery' && before.status !== 'out_for_delivery') {
-    if (after.buyerPhone) {
-      const msg = `OGas: Your gas order (N${after.totalAmount}) is out for delivery. Track: ogaslpgmarketplace.com/orders`;
-      await sendTermiiSMS(after.buyerPhone, msg);
-    }
-  }
-
-  // DELIVERED → SMS BUYER TO CONFIRM
-  if (after.status === 'delivered' && before.status !== 'delivered') {
-    if (after.buyerPhone) {
-      const msg = `OGas: Your gas has been delivered! Amt: N${after.totalAmount}. Please confirm receipt in the app to release payment to seller.`;
-      await sendTermiiSMS(after.buyerPhone, msg);
-    }
-  }
-
-  // COMPLETED → SMS SELLER (PAYOUT)
-  if (after.status === 'completed' && before.status !== 'completed') {
-    const sellerPhone = after.sellerPhone || after.sellerData?.phone;
-    if (sellerPhone) {
-      const payout = Math.round(after.totalAmount * 0.9);
-      const msg = `OGas: Order completed! N${payout} will be transferred to your bank account within 24hrs.`;
-      await sendTermiiSMS(sellerPhone, msg);
-    }
-  }
 });
 
 // ===== REFERRAL ENGINE (Gas Points) =====
@@ -424,10 +287,6 @@ exports.onReferralFirstOrder = onDocumentUpdated(
     await sendPush(buyerId, 'Welcome Bonus!', `${REFERRAL_GP} Gas Points have entered your tank.`, { type: 'referral' });
     console.log('Referral paid: ' + referrerId + ' <- ' + buyerId + (referrerIsSeller ? ' (cash)' : ' (GP)'));
   });
-
-// ===== OCTOBER LAUNCH PROMO: order 5kg+, get 500 Gas Points =====
-// Runs on every order completion until Oct 31 2026 (WAT). One bonus per order,
-// repeat orders qualify — we WANT heavy users this month.
 
 // ===== GAS CREDIT: 300 credit on FIRST completed order (every buyer) =====
 // Budget-guarded by promoConfig/gasCreditCampaign (Firestore doc YOU create).
@@ -537,6 +396,7 @@ exports.reconcilePayments = onSchedule('every 30 minutes', async () => {
 });
 
 // C) Day-end balance (23:55 Lagos) -> dailyReports/YYYY-MM-DD. balanced=false flags gaps.
+// Updated 2026-11-23 for pay-on-collection: reads commission/sellerEarnings.
 exports.dayEndBalance = onSchedule({ schedule: '55 23 * * *', timeZone: 'Africa/Lagos' }, async () => {
   const db = admin.firestore();
   const start = new Date(); start.setHours(0, 0, 0, 0);
@@ -551,24 +411,15 @@ exports.dayEndBalance = onSchedule({ schedule: '55 23 * * *', timeZone: 'Africa/
     if (o.paymentStatus === 'expired') expired++;
     if (o.status === 'completed') {
       completedCount++; completedSum += amt;
-      expectedPayout += Number(o.sellerPayoutAmount || 0) / 100;
-      commissionSum += Number(o.commissionAmount || 0) / 100;
+      expectedPayout += Number(o.sellerEarnings || 0);
+      commissionSum += Number(o.commission ?? o.ogasCommission ?? 0);
     }
   });
-  const payoutsSnap = await db.collection('payouts').where('createdAt', '>=', start).get();
-  let payoutSum = 0;
-  payoutsSnap.forEach((d) => { payoutSum += Number(d.data().amount || 0) / 100; });
-  const balanced = Math.abs(expectedPayout - payoutSum) < 1;
   const report = { day, paidCount, paidSum, completedCount, completedSum, abandoned, expired,
-    commissionSum, expectedPayout, payoutSum, balanced,
+    commissionSum, expectedPayout, payoutModel: 'pay_on_collection',
     checkedAt: admin.firestore.FieldValue.serverTimestamp() };
   await db.collection('dailyReports').doc(day).set(report);
   console.log('day-end ' + day + ':', JSON.stringify(report));
-  if (!balanced && process.env.ADMIN_PHONE) {
-    try {
-      await sendSMS(process.env.ADMIN_PHONE, 'OGas day-end ' + day + ': IMBALANCE. Expected payout ' + expectedPayout + ' vs sent ' + payoutSum + '. See dailyReports/' + day);
-    } catch (e) { console.error('admin alert failed:', e.message); }
-  }
 });
 
 exports.onFirstOrderGasCredit = onDocumentUpdated(
