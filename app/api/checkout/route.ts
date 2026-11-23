@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '../../../lib/firebase-admin';
-import { OGAS_COMMISSION_PERCENT, commissionPercentForSeller } from '../../../lib/escrow';
+import { OGAS_COMMISSION_PERCENT } from '../../../lib/escrow';
 import { requireUser } from '../../../lib/require-user';
 import { orderBuyerId, orderTotal } from '../../../lib/fields';
 
@@ -125,14 +125,12 @@ export async function POST(req: NextRequest) {
     }
 
     const reference = `OGAS-${orderId}-${Date.now()}`;
+    // The commission percent was locked at order creation (5% card / 0% cash,
+    // ruling 2026-11-23). If an old order is missing it, fall back to the one
+    // number — never recompute per-seller.
     let orderCommissionPercent = Number(order.ogasCommissionPercent ?? NaN);
     if (!Number.isFinite(orderCommissionPercent)) {
-      try {
-        const sellerSnap = await adminDb.collection('sellers').doc(resolvedSellerId).get();
-        orderCommissionPercent = commissionPercentForSeller(sellerSnap.data() || {});
-      } catch {
-        orderCommissionPercent = OGAS_COMMISSION_PERCENT;
-      }
+      orderCommissionPercent = OGAS_COMMISSION_PERCENT;
     }
     const commissionInKobo = Math.round(amountInKobo * (orderCommissionPercent / 100));
     const guestEmail =
