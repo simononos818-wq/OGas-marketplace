@@ -1,18 +1,43 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Seller photos: front of store, cylinder stock
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+    function isImageUnder5MB() {
+      return request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic)');
+    }
+
+    // Seller photos: front of store, cylinder stock. Public shop images,
+    // owner-only uploads, images only, 5 MB cap.
     match /sellers/{uid}/{file=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid && request.resource.size < 5 * 1024 * 1024;
+      allow write: if isOwner(uid) && isImageUnder5MB();
     }
-    // User profile pictures
+
+    // User profile pictures. Public avatars, same upload restrictions.
     match /users/{uid}/{file=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid && request.resource.size < 5 * 1024 * 1024;
+      allow write: if isOwner(uid) && isImageUnder5MB();
     }
+
+    // Identity and compliance documents (future NCRP/KYC uploads): NEVER
+    // publicly readable. Owners can upload images or PDFs; only server-side
+    // (Admin SDK) routes may read them back for review.
+    match /identity/{uid}/{file=**} {
+      allow read: if false;
+      allow write: if isOwner(uid) && request.resource.size < 5 * 1024 * 1024
+        && (request.resource.contentType.matches('image/(jpeg|png|webp|heic)')
+            || request.resource.contentType == 'application/pdf');
+    }
+
+    // Default deny: nothing else in this bucket is readable or writable.
     match /{allPaths=**} {
-      allow read: if true;
+      allow read: if false;
       allow write: if false;
     }
   }

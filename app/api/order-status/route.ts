@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireUser } from '../../../lib/require-user';
 import { postSystemMessage } from '../../../lib/chat-server';
@@ -36,12 +37,37 @@ export async function POST(req: NextRequest) {
   if (order.sellerId !== user.uid) {
     return NextResponse.json({ success: false, message: 'Not your order' }, { status: 403 });
   }
+
+  // DISPUTE FREEZE: a disputed or cancelled order cannot be advanced by the
+  // seller. Escrow release routes enforce the same freeze — this closes the
+  // path where a seller walks a disputed order to 'delivered' to unlock it.
+  if (order.disputeStatus === 'open' || order.disputed === true || order.cancelledAt) {
+    return NextResponse.json({
+      success: false,
+      message: 'This order is disputed or cancelled and cannot be updated.',
+    }, { status: 409 });
+  }
+
   const allowed = SELLER_NEXT[order.status] || [];
   if (!allowed.includes(status)) {
     return NextResponse.json({ success: false, message: 'Invalid status change' }, { status: 400 });
   }
 
-  const update: Record<string, unknown> = { status, updatedAt: new Date() };
+  const now = new Date();
+  // ACTOR AUDIT: every status change records who did it and when. Receipt
+  // corrections must be auditable revisions, never silent edits.
+  const update: Record<string, unknown> = {
+    status,
+    updatedAt: now,
+    statusChangedBy: user.uid,
+    statusChangedAt: now,
+    statusHistory: FieldValue.arrayUnion({
+      status,
+      by: user.uid,
+      role: 'seller',
+      at: now,
+    }),
+  };
 
   // WEIGHED RECEIPT: delivery is only marked after the seller enters the kg on the scale
   if (status === 'delivered') {
@@ -53,9 +79,9 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     update.kgDelivered = kg;
-    update.weighedAt = new Date();
-    update.deliveredAt = new Date();
-    update.autoCompleteAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    update.weighedAt = now;
+    update.deliveredAt = now;
+    update.autoCompleteAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
   }
 
   await snap.ref.update(update);
