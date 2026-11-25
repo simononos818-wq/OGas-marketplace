@@ -1,6 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireUser } from '../../../lib/require-user';
+
+const PRIVATE_BANK_FIELDS = [
+  'accountNumber', 'bankCode', 'bankName', 'accountName', 'bankResolved',
+  'bankUpdatedAt', 'paystackRecipientCode', 'bankLocked',
+] as const;
+
+// Upgrade older seller records lazily and atomically. This preserves existing
+// payout-lock state and removes legacy bank fields from the public seller doc.
+async function getOrMigratePrivateBank(sellerRef: FirebaseFirestore.DocumentReference) {
+  const privateRef = adminDb.collection('sellerPrivate').doc(sellerRef.id);
+  return adminDb.runTransaction(async (tx) => {
+    const [sellerSnap, privateSnap] = await Promise.all([
+      tx.get(sellerRef),
+      tx.get(privateRef),
+    ]);
+    const privateData = privateSnap.data() || {};
+    const sellerData = sellerSnap.data() || {};
+    const legacy = Object.fromEntries(
+      PRIVATE_BANK_FIELDS
+        .filter((field) => Object.prototype.hasOwnProperty.call(sellerData, field))
+        .map((field) => [field, sellerData[field]]),
+    );
+    if (!privateSnap.exists && Object.keys(legacy).length) {
+      tx.set(privateRef, { ...legacy, migratedAt: new Date() }, { merge: true });
+      tx.update(sellerRef, Object.fromEntries(
+        PRIVATE_BANK_FIELDS.map((field) => [field, FieldValue.delete()]),
+      ));
+      return legacy;
+    }
+    if (Object.keys(legacy).length) {
+      tx.update(sellerRef, Object.fromEntries(
+        PRIVATE_BANK_FIELDS.map((field) => [field, FieldValue.delete()]),
+      ));
+    }
+    return privateData;
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,15 +61,15 @@ export async function POST(req: NextRequest) {
     }
 
     const sellerRef = adminDb.collection('sellers').doc(user.uid);
-    const sellerSnap = await sellerRef.get();
+    const privateRef = adminDb.collection('sellerPrivate').doc(user.uid);
+    const [sellerSnap, privateSnap] = await Promise.all([sellerRef.get(), privateRef.get()]);
     if (!sellerSnap.exists) {
       return NextResponse.json({ success: false, message: 'Seller profile not found. Register as a seller first.' }, { status: 404 });
     }
-    const existing = sellerSnap.data()!;
+    const existing = await getOrMigratePrivateBank(sellerRef);
 
-    // PAYOUT LOCK: once a seller has received at least one successful payout,
-    // the payout account cannot be changed in-app (kills account-takeover
-    // bank-swap fraud). Changes go through support after identity checks.
+    // Payout lock: once a seller has received a successful payout, bank changes
+    // require support-led identity verification.
     const alreadyHasBank = Boolean(existing.accountNumber && existing.bankCode);
     const isChange = alreadyHasBank && (existing.accountNumber !== accountNumber || existing.bankCode !== bankCode);
     if (isChange) {
@@ -72,23 +110,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Could not verify account name. Check the details and try again.' }, { status: 400 });
     }
 
-    await sellerRef.set(
-      {
-        accountNumber,
-        bankCode,
-        bankName,
-        accountName,
-        bankResolved: resolved,
-        bankUpdatedAt: new Date(),
-        paystackRecipientCode: null,
-        'gates.bankLinked': true,
-      },
-      { merge: true },
-    );
+    // Never put account numbers, bank codes, or recipient identifiers in the
+    // publicly readable seller profile.
+    await privateRef.set({
+      accountNumber,
+      bankCode,
+      bankName,
+      accountName,
+      bankResolved: resolved,
+      bankUpdatedAt: new Date(),
+      paystackRecipientCode: null,
+      bankLocked: Boolean(existing.bankLocked),
+      updatedAt: new Date(),
+    }, { merge: true });
+    await sellerRef.set({ 'gates.bankLinked': true }, { merge: true });
 
-    // Payout retry sweep: pay out orders released while seller had no bank
-    // details. Only orders where Paystack holds money (paystackRef present) —
-    // cash orders are excluded so we never double-pay.
+    // Remove legacy payout fields from the public seller document as soon as
+    // this seller next saves bank details. Existing records require migration.
+    await sellerRef.update({
+      accountNumber: FieldValue.delete(),
+      bankCode: FieldValue.delete(),
+      bankName: FieldValue.delete(),
+      accountName: FieldValue.delete(),
+      bankResolved: FieldValue.delete(),
+      bankUpdatedAt: FieldValue.delete(),
+      paystackRecipientCode: FieldValue.delete(),
+      bankLocked: FieldValue.delete(),
+    });
+
     let retried = 0;
     let paidNow = 0;
     try {
@@ -117,8 +166,7 @@ export async function POST(req: NextRequest) {
               const r: any = await paySellerFromEscrow(d.id, 'bank_details_added');
               if (r && (r.payoutStatus === 'sent' || r.success === true)) {
                 paidNow++;
-                // First successful payout locks the bank account
-                await sellerRef.set({ bankLocked: true }, { merge: true });
+                await privateRef.set({ bankLocked: true }, { merge: true });
               }
             } catch (e) {
               console.error('payout retry failed for', d.id, e);
@@ -153,7 +201,7 @@ export async function GET(req: NextRequest) {
     if (!sellerSnap.exists) {
       return NextResponse.json({ success: false, message: 'Seller not found' }, { status: 404 });
     }
-    const s = sellerSnap.data()!;
+    const s = await getOrMigratePrivateBank(adminDb.collection('sellers').doc(user.uid));
     return NextResponse.json({
       success: true,
       accountNumber: s.accountNumber || '',

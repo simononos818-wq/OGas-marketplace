@@ -72,6 +72,12 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
     if (order.escrowStatus === 'released' || order.escrowStatus === 'releasing') {
       return { already: true as const, order };
     }
+    if (order.status !== 'delivered') {
+      throw new Error('Order must be delivered before escrow can be released');
+    }
+    if (order.disputeStatus === 'open' || order.disputed === true || order.cancelledAt) {
+      throw new Error('This order is disputed or cancelled and cannot be released');
+    }
     if (order.paymentStatus !== 'paid' && order.status !== 'paid') {
       throw new Error('Payment is not in escrow yet');
     }
@@ -88,15 +94,10 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
 
   const order = claimed.order;
   const orderTotalNaira = Number(order.totalAmount || order.total || order.totalPrice || 0);
-  // Escrow only ever holds the online part; the cash balance stays with the seller.
   const totalNaira = order.paymentMethod === 'split' && Number(order.onlineAmount) > 0
     ? Number(order.onlineAmount)
     : orderTotalNaira;
-  // Commission was fixed when the order was created (5% card / 0% cash).
-  // Never recompute at payout.
   const commission = Number(order.ogasCommission ?? order.platformFee ?? 0);
-  // Seller receives their share clean — no fee deductions. OGas absorbs the
-  // card fee out of its commission; both sides are recorded for accounting.
   const sellerEarnings = Math.max(totalNaira - commission, 0);
   const ogasFeeAbsorbed = estimatePaystackFeeNaira(totalNaira);
   const ogasNet = Math.max(commission - ogasFeeAbsorbed, 0);

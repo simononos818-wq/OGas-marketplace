@@ -1,87 +1,134 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
 
+    // Admin access comes only from a verified, fixed admin identity or a
+    // trusted Firebase custom claim. Never trust a client-editable user profile.
     function isAdmin() {
-      return request.auth != null && (
-        request.auth.token.email == 'simononos818@gmail.com' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      return signedIn() && (
+        request.auth.token.get('admin', false) == true ||
+        (
+          request.auth.token.get('email', '') == 'simononos818@gmail.com' &&
+          request.auth.token.get('email_verified', false) == true
+        )
       );
     }
 
-    // USERS
+    function isOrderParticipant(order) {
+      return signedIn() && (
+        order.buyerId == request.auth.uid ||
+        order.sellerId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    function isChatParticipant(chat) {
+      return signedIn() && (
+        chat.buyerId == request.auth.uid ||
+        chat.sellerId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    function hasProtectedUserFields(data) {
+      return data.keys().hasAny(['role', 'admin', 'isAdmin', 'permissions']);
+    }
+
+    // USERS: a user can edit their own ordinary profile fields, never roles.
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && (
-        request.auth.uid == userId || isAdmin()
+      allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == userId
+        && !hasProtectedUserFields(request.resource.data);
+      allow update: if isAdmin() || (
+        signedIn() && request.auth.uid == userId &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['role', 'admin', 'isAdmin', 'permissions'])
       );
       allow delete: if false;
     }
 
-    // SELLERS — self-serve edits allowed, but approval/verification/level
-    // fields can ONLY change via admin. Create must start unapproved.
+    // SELLERS: public store discovery remains available. Payout/bank data must
+    // live in sellerPrivate/{sellerId}, which has no client access below.
     match /sellers/{sellerId} {
       allow read: if true;
-      allow create: if request.auth != null && request.auth.uid == sellerId
+      allow create: if signedIn() && request.auth.uid == sellerId
         && request.resource.data.get('isApproved', false) == false
         && request.resource.data.get('isVerified', false) == false
         && request.resource.data.get('verified', false) == false
         && request.resource.data.get('status', 'pending') == 'pending'
-        && request.resource.data.get('sellerStatus', 'pending') == 'pending';
-      allow update: if request.auth != null && (
-        isAdmin() || (
-          request.auth.uid == sellerId &&
-          !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['isApproved', 'verified', 'isVerified', 'status', 'sellerStatus', 'level', 'gates', 'approvalNotes', 'completedOrders'])
-        )
+        && request.resource.data.get('sellerStatus', 'pending') == 'pending'
+        && !request.resource.data.keys().hasAny([
+          'accountNumber', 'bankCode', 'bankName', 'accountName',
+          'bankResolved', 'bankUpdatedAt', 'paystackRecipientCode', 'bankLocked'
+        ]);
+      allow update: if isAdmin() || (
+        signedIn() && request.auth.uid == sellerId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'isApproved', 'verified', 'isVerified', 'status', 'sellerStatus',
+          'level', 'gates', 'approvalNotes', 'completedOrders',
+          'accountNumber', 'bankCode', 'bankName', 'accountName',
+          'bankResolved', 'bankUpdatedAt', 'paystackRecipientCode', 'bankLocked'
+        ])
       );
       allow delete: if false;
     }
 
-    // ORDERS
+    // Server APIs (Admin SDK) own all order creation and state/payment changes.
+    // Clients may only read orders in which they are a buyer or seller.
     match /orders/{orderId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && (
-        resource.data.buyerId == request.auth.uid ||
-        resource.data.sellerId == request.auth.uid ||
-        isAdmin()
-      );
-      allow delete: if false;
+      allow get, list: if isOrderParticipant(resource.data);
+      allow create, update, delete: if false;
     }
 
-    // ORDER SECRETS (door codes)
+    // Door codes are returned to the buyer by the authenticated order API.
+    // No client can write or enumerate these secret documents.
     match /orderSecrets/{secretId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow get: if signedIn() && resource.data.buyerId == request.auth.uid;
+      allow list, create, update, delete: if false;
     }
 
-    // CHATS + MESSAGES
+    // Chat content is readable only by the order's two participants.
+    // Message creation, edits, and read-state changes go through server APIs.
     match /chats/{chatId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-    }
-    match /chats/{chatId}/messages/{messageId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow get, list: if isChatParticipant(resource.data);
+      allow create, update, delete: if false;
+
+      match /messages/{messageId} {
+        function parentChat() {
+          return get(/databases/$(database)/documents/chats/$(chatId)).data;
+        }
+        allow get, list: if isChatParticipant(parentChat());
+        allow create, update, delete: if false;
+      }
     }
 
-    // GAS POINTS LEDGER — reads by owner only; all writes are server-side
+    match /sellerPrivate/{sellerId} {
+      allow read, write: if false;
+    }
+
+    // GAS POINTS LEDGER — owner reads only; all writes are server-side.
     match /pointsTransactions/{txId} {
-      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow write: if false;
     }
 
-    // NOTIFICATIONS
     match /notifications/{notifId} {
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null;
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
     }
 
-    // PAYOUTS
     match /payouts/{payoutId} {
-      allow read: if request.auth != null && (isAdmin() || request.auth.uid == resource.data.sellerId);
+      allow read: if signedIn() && (
+        isAdmin() || request.auth.uid == resource.data.sellerId
+      );
+      allow write: if false;
     }
+
+    // Default deny for every collection not explicitly listed above.
   }
 }

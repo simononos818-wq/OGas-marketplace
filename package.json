@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:security": "node --test tests/security-regression.test.mjs",
     "export": "next export"
   },
   "dependencies": {
