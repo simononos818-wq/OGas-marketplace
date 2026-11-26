@@ -55,3 +55,34 @@ test('storage allows images only, keeps identity documents private, default-deni
   assert.match(storageRules, /allow read: if false;/);
   assert.doesNotMatch(storageRules, /allow read: if true;\s*\n\s*allow write: if false;/);
 });
+
+
+const paymentVerification = readFileSync(new URL('../lib/paystack-verification.ts', import.meta.url), 'utf8');
+const verifyPaymentRoute = readFileSync(new URL('../app/api/verify-payment/route.ts', import.meta.url), 'utf8');
+const webhookRoute = readFileSync(new URL('../app/api/webhook/route.ts', import.meta.url), 'utf8');
+
+test('Paystack verification binds reference, order metadata, NGN currency and exact amount', () => {
+  assert.match(paymentVerification, /transaction\.reference !== storedReference/);
+  assert.match(paymentVerification, /transaction\.metadata\?\.orderId !== orderId/);
+  assert.match(paymentVerification, /transaction\.currency !== 'NGN'/);
+  assert.match(paymentVerification, /paidKobo !== expectedKobo/);
+});
+
+test('manual payment verification is buyer-only and uses the stored reference', () => {
+  assert.match(verifyPaymentRoute, /order\.buyerId !== user\.uid/);
+  assert.match(verifyPaymentRoute, /order\.paystackRef/);
+  assert.match(verifyPaymentRoute, /validatePaystackTransaction/);
+  assert.doesNotMatch(verifyPaymentRoute, /findPaystackReference/);
+});
+
+test('webhook validates verified transaction identity and claims paid state atomically', () => {
+  assert.match(webhookRoute, /verified\.data\?\.reference !== reference/);
+  assert.match(webhookRoute, /order\.paystackRef !== reference/);
+  assert.match(webhookRoute, /validatePaystackTransaction/);
+  assert.match(webhookRoute, /adminDb\.runTransaction/);
+  assert.doesNotMatch(webhookRoute, /cardFeeKobo > 250000/);
+});
+
+test('seller force-completion requires a valid elapsed auto-complete timestamp', () => {
+  assert.match(releaseRoute, /!autoCompleteAt \|\| !Number\.isFinite\(autoCompleteAt\.getTime\(\)\)/);
+});
