@@ -4,6 +4,7 @@ import { adminDb } from '../../../lib/firebase-admin';
 import { notifyPaidEscrow } from '../../../lib/escrow';
 import { postSystemMessage } from '../../../lib/chat-server';
 import { notifyOrderEvent } from '../../../lib/notify';
+import { validatePaystackTransaction } from '../../../lib/paystack-verification';
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,10 +46,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, skipped: 'not_success' });
     }
 
-    const resolvedOrderId = orderId || verified.data?.metadata?.orderId;
-    if (!resolvedOrderId) {
-      return NextResponse.json({ received: true, skipped: 'no_order' });
+    const verifiedOrderId = verified.data?.metadata?.orderId;
+    if (!verifiedOrderId || (orderId && orderId !== verifiedOrderId) || verified.data?.reference !== reference) {
+      return NextResponse.json({ received: true, skipped: 'transaction_identity_mismatch' });
     }
+    const resolvedOrderId = verifiedOrderId;
 
     const orderRef = adminDb.collection('orders').doc(resolvedOrderId);
     const orderSnap = await orderRef.get();
@@ -60,48 +62,57 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, message: 'Already processed' });
     }
 
-    const paidKobo = verified.data.amount;
-
-    // If Gas Points were applied at checkout, the expected amount is the
-    // reduced chargedAmount, not the full order total.
+    if (order.paystackRef !== reference) {
+      return NextResponse.json({ received: true, skipped: 'stored_reference_mismatch' });
+    }
+    // Gas Points reduce the stored charge. OGas absorbs Paystack fees, so
+    // Paystack's verified NGN amount must equal the exact checkout amount.
     const expectedNaira = Number(
       order.chargedAmount ?? order.totalAmount ?? order.total ?? order.totalPrice ?? 0,
     );
     const expectedKobo = Math.round(expectedNaira * 100);
-    const cardFeeKobo = Math.max(0, paidKobo - expectedKobo);
-    // Paystack may pass its card fee to the customer (charged = order total + fee).
-    // Accept expected total up to +₦2,500 fee cap; record the fee for clean accounting.
-    if (!(expectedNaira > 0) || paidKobo < expectedKobo - 100 || cardFeeKobo > 250000) {
-      console.error('webhook amount mismatch', { orderId: resolvedOrderId, paidKobo, expectedNaira });
+    const validation = validatePaystackTransaction(verified.data, resolvedOrderId, reference, expectedKobo);
+    if (!validation.ok) {
+      console.error('webhook transaction validation failed', { orderId: resolvedOrderId, reason: validation.reason });
       try {
         await adminDb.collection('webhookAlerts').add({
-          type: 'amount_mismatch',
+          type: validation.reason,
           orderId: resolvedOrderId,
           reference,
-          paidKobo,
+          paidKobo: Number(verified.data?.amount) || 0,
           expectedNaira,
           createdAt: new Date(),
         });
       } catch (alertErr) {
         console.error('webhook alert write failed:', alertErr);
       }
-      return NextResponse.json({ received: true, skipped: 'amount_mismatch' });
+      return NextResponse.json({ received: true, skipped: validation.reason });
     }
+    const paidKobo = validation.paidKobo;
 
-    await orderRef.update({
-      status: 'paid',
-      paymentStatus: 'paid',
-      escrowStatus: 'held',
-      usedSplitPayment: false,
-      paystackRef: reference,
-      paystackAmount: paidKobo,
-      cardFeeKobo,
-      paidAt: new Date(),
-      verifiedAt: new Date(),
-      verifiedViaWebhook: true,
-      customerEmail: verified.data.customer?.email || null,
-      updatedAt: new Date(),
+    const transition = await adminDb.runTransaction(async (tx) => {
+      const current = await tx.get(orderRef);
+      if (!current.exists) return 'missing';
+      const currentOrder = current.data()!;
+      if (currentOrder.paymentStatus === 'paid' || currentOrder.status === 'paid') return 'already';
+      if (currentOrder.paystackRef !== reference) return 'reference_mismatch';
+      if (currentOrder.paymentStatus !== 'pending' || currentOrder.cancelledAt) return 'not_payable';
+      tx.update(orderRef, {
+        status: 'paid',
+        paymentStatus: 'paid',
+        escrowStatus: 'held',
+        usedSplitPayment: false,
+        paystackAmount: paidKobo,
+        paidAt: new Date(),
+        verifiedAt: new Date(),
+        verifiedViaWebhook: true,
+        customerEmail: verified.data.customer?.email || null,
+        updatedAt: new Date(),
+      });
+      return 'updated';
     });
+    if (transition === 'already') return NextResponse.json({ received: true, message: 'Already processed' });
+    if (transition !== 'updated') return NextResponse.json({ received: true, skipped: transition });
 
     // ── Gas Points deduction (atomic, exactly once) ────────────────────
     const pointsRedeemed = Math.max(0, Math.floor(Number(order.pointsRedeemed) || 0));
