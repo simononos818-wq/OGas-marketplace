@@ -3,24 +3,7 @@ import { adminDb } from '../../../lib/firebase-admin';
 import { requireUser } from '../../../lib/require-user';
 import { notifyPaidEscrow } from '../../../lib/escrow';
 import { postSystemMessage } from '../../../lib/chat-server';
-
-async function findPaystackReference(secret: string, orderId?: string, reference?: string) {
-  if (reference) return String(reference);
-  if (!orderId) return '';
-
-  const orderSnap = await adminDb.collection('orders').doc(orderId).get();
-  const stored = orderSnap.data()?.paystackRef as string | undefined;
-  if (stored) return stored;
-
-  const res = await fetch('https://api.paystack.co/transaction?perPage=50', {
-    headers: { Authorization: `Bearer ${secret}` },
-  });
-  const data = await res.json();
-  const hit = (data.data || []).find(
-    (t: any) => t.status === 'success' && t.metadata?.orderId === orderId,
-  );
-  return hit?.reference || '';
-}
+import { validatePaystackTransaction } from '../../../lib/paystack-verification';
 
 export async function POST(req: NextRequest) {
   try {
@@ -63,19 +46,19 @@ export async function POST(req: NextRequest) {
     }
     const order = orderSnap.data()!;
 
-    if (order.buyerId !== user.uid && order.sellerId !== user.uid) {
-      return NextResponse.json({ success: false, message: 'Not your order' }, { status: 403 });
+    if (order.buyerId !== user.uid) {
+      return NextResponse.json({ success: false, message: 'Only the buyer can verify this payment' }, { status: 403 });
     }
 
     if (order.paymentStatus === 'paid' || order.status === 'paid') {
       return NextResponse.json({ success: true, message: 'Already marked paid', orderId: resolvedOrderId });
     }
 
-    const reference = await findPaystackReference(secretKey, resolvedOrderId, bodyRef);
-    if (!reference) {
+    const reference = String(order.paystackRef || '').trim();
+    if (!reference || (bodyRef && bodyRef !== reference)) {
       return NextResponse.json({
         success: false,
-        message: 'No Paystack reference on this order yet. Confirm the charge in Paystack Transactions.',
+        message: 'Payment reference does not match this order. Restart checkout if needed.',
       }, { status: 400 });
     }
 
@@ -84,45 +67,50 @@ export async function POST(req: NextRequest) {
       { headers: { Authorization: `Bearer ${secretKey}` } },
     );
     const data = await res.json();
-    if (!data.status || data.data?.status !== 'success') {
-      return NextResponse.json({
-        success: false,
-        message: data.message || 'Paystack has not confirmed this payment',
-      }, { status: 400 });
-    }
-
-    const metaOrderId = data.data?.metadata?.orderId;
-    if (metaOrderId && metaOrderId !== resolvedOrderId) {
-      return NextResponse.json({ success: false, message: 'Payment does not match this order' }, { status: 400 });
-    }
-
-    // If Gas Points were applied at checkout, the expected amount is the
-    // reduced chargedAmount, not the full order total.
-    const paidKobo = Number(data.data.amount);
+    // Gas Points reduce the amount charged; the stored checkout reference,
+    // metadata, NGN currency and exact amount must all match.
     const expectedNaira = Number(
       order.chargedAmount ?? order.totalAmount ?? order.total ?? order.totalPrice ?? 0,
     );
     const expectedKobo = Math.round(expectedNaira * 100);
-    if (expectedKobo > 0 && Math.abs(paidKobo - expectedKobo) > 100) {
+    const validation = validatePaystackTransaction(data.data, resolvedOrderId, reference, expectedKobo);
+    if (!data.status || !validation.ok) {
       return NextResponse.json({
         success: false,
-        message: 'Paid amount does not match order total',
+        message: validation.ok ? (data.message || 'Paystack has not confirmed this payment') : 'Payment verification did not match this order',
       }, { status: 400 });
     }
+    const paidKobo = validation.paidKobo;
 
-    await orderRef.update({
-      status: 'paid',
-      paymentStatus: 'paid',
-      escrowStatus: 'held',
-      usedSplitPayment: false,
-      paystackRef: reference,
-      paystackAmount: paidKobo,
-      customerEmail: data.data.customer?.email || null,
-      paidAt: new Date(),
-      verifiedAt: new Date(),
-      verifiedViaApi: true,
-      updatedAt: new Date(),
+    // Claim the paid transition atomically so a webhook and browser callback
+    // cannot both process the same order as a first payment.
+    const transition = await adminDb.runTransaction(async (tx) => {
+      const current = await tx.get(orderRef);
+      if (!current.exists) return 'missing';
+      const currentOrder = current.data()!;
+      if (currentOrder.paymentStatus === 'paid' || currentOrder.status === 'paid') return 'already';
+      if (currentOrder.paystackRef !== reference) return 'reference_mismatch';
+      if (currentOrder.paymentStatus !== 'pending' || currentOrder.cancelledAt) return 'not_payable';
+      tx.update(orderRef, {
+        status: 'paid',
+        paymentStatus: 'paid',
+        escrowStatus: 'held',
+        usedSplitPayment: false,
+        paystackAmount: paidKobo,
+        customerEmail: data.data.customer?.email || null,
+        paidAt: new Date(),
+        verifiedAt: new Date(),
+        verifiedViaApi: true,
+        updatedAt: new Date(),
+      });
+      return 'updated';
     });
+    if (transition === 'already') {
+      return NextResponse.json({ success: true, message: 'Already marked paid', orderId: resolvedOrderId });
+    }
+    if (transition !== 'updated') {
+      return NextResponse.json({ success: false, message: 'Order is no longer payable or its payment reference changed' }, { status: 409 });
+    }
 
     // ── Gas Points deduction (atomic, exactly once) ────────────────────
     const pointsRedeemed = Math.max(0, Math.floor(Number(order.pointsRedeemed) || 0));
