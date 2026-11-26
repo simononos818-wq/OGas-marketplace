@@ -102,9 +102,19 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
   const ogasFeeAbsorbed = estimatePaystackFeeNaira(totalNaira);
   const ogasNet = Math.max(commission - ogasFeeAbsorbed, 0);
   const payoutStatus = 'pay_on_collection';
+  const releasedAt = new Date();
+  const releaseRole = releasedBy === 'buyer' ? 'buyer' : 'seller';
 
   await orderRef.update({
     status: 'completed',
+    statusChangedBy: releasedBy,
+    statusChangedAt: releasedAt,
+    statusHistory: FieldValue.arrayUnion({
+      status: 'completed',
+      by: releasedBy,
+      role: releaseRole,
+      at: releasedAt,
+    }),
     escrowStatus: 'released',
     payoutStatus,
     transferRef: null,
@@ -113,9 +123,9 @@ export async function paySellerFromEscrow(orderId: string, releasedBy: string) {
     ogasFeeAbsorbed,
     ogasNet,
     releasedBy,
-    releasedAt: new Date(),
+    releasedAt,
     buyerConfirmed: releasedBy === 'buyer',
-    updatedAt: new Date(),
+    updatedAt: releasedAt,
   });
 
   await adminDb.collection('orderSecrets').doc(orderId).set(

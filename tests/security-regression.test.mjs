@@ -55,3 +55,17 @@ test('storage allows images only, keeps identity documents private, default-deni
   assert.match(storageRules, /allow read: if false;/);
   assert.doesNotMatch(storageRules, /allow read: if true;\s*\n\s*allow write: if false;/);
 });
+
+test('escrow completion appends a completed status audit event', () => {
+  assert.match(escrow, /statusChangedBy: releasedBy/);
+  assert.match(escrow, /statusChangedAt: releasedAt/);
+  assert.match(escrow, /statusHistory: FieldValue\.arrayUnion/);
+  assert.match(escrow, /role: releaseRole/);
+});
+
+test('cash completion appends a completed status audit event', () => {
+  assert.match(releaseRoute, /statusChangedBy: user\.uid/);
+  assert.match(releaseRoute, /statusChangedAt: completedAt/);
+  assert.match(releaseRoute, /statusHistory: FieldValue\.arrayUnion/);
+  assert.match(releaseRoute, /role: completedRole/);
+});

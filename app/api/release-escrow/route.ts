@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireUser } from '../../../lib/require-user';
 import { doorCodesMatch } from '../../../lib/door-code';
@@ -39,12 +40,22 @@ export async function POST(req: NextRequest) {
       if (order.disputeStatus === 'open' || order.disputed === true || order.cancelledAt) {
         return NextResponse.json({ success: false, message: 'This order is disputed or cancelled' }, { status: 409 });
       }
+      const completedAt = new Date();
+      const completedRole = order.buyerId === user.uid ? 'buyer' : 'seller';
       await orderRef.update({
         status: 'completed',
+        statusChangedBy: user.uid,
+        statusChangedAt: completedAt,
+        statusHistory: FieldValue.arrayUnion({
+          status: 'completed',
+          by: user.uid,
+          role: completedRole,
+          at: completedAt,
+        }),
         escrowStatus: 'cod_done',
-        releasedBy: order.buyerId === user.uid ? 'buyer' : 'seller',
-        releasedAt: new Date(),
-        updatedAt: new Date(),
+        releasedBy: completedRole,
+        releasedAt: completedAt,
+        updatedAt: completedAt,
       });
       await postSystemMessage(orderId, SYSTEM_COPY.cash_done);
       return NextResponse.json({ success: true, message: 'Cash order completed' });
