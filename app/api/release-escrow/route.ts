@@ -97,7 +97,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, message: 'Only the seller can force-complete' }, { status: 403 });
       }
       const autoCompleteAt = order.autoCompleteAt?.toDate?.() || (order.autoCompleteAt ? new Date(order.autoCompleteAt) : null);
-      if (autoCompleteAt && autoCompleteAt.getTime() > Date.now()) {
+      if (!autoCompleteAt || !Number.isFinite(autoCompleteAt.getTime())) {
+        return NextResponse.json({ success: false, message: 'Automatic completion time is missing or invalid. Ask the buyer to confirm with the Door Code.' }, { status: 409 });
+      }
+      if (autoCompleteAt.getTime() > Date.now()) {
         const mins = Math.ceil((autoCompleteAt.getTime() - Date.now()) / 60000);
         return NextResponse.json({ success: false, message: 'Wait ' + mins + ' min or ask buyer for Door Code' }, { status: 429 });
       }
