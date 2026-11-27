@@ -55,3 +55,40 @@ test('storage allows images only, keeps identity documents private, default-deni
   assert.match(storageRules, /allow read: if false;/);
   assert.doesNotMatch(storageRules, /allow read: if true;\s*\n\s*allow write: if false;/);
 });
+
+
+const checkout = readFileSync(new URL('../app/api/checkout/route.ts', import.meta.url), 'utf8');
+const webhook = readFileSync(new URL('../app/api/webhook/route.ts', import.meta.url), 'utf8');
+const verifyPayment = readFileSync(new URL('../app/api/verify-payment/route.ts', import.meta.url), 'utf8');
+
+test('Paystack checkout derives price server-side and stores a canonical payment intent', () => {
+  assert.match(checkout, /randomBytes\(8\)/);
+  assert.match(checkout, /amountKobo,/);
+  assert.match(checkout, /currency: 'NGN'/);
+  assert.match(checkout, /payment:\s*\{/);
+  assert.match(checkout, /orderBuyerId\(current\) !== user\.uid/);
+  assert.doesNotMatch(checkout, /body\.amount|amount != null/);
+  assert.doesNotMatch(checkout, /sellerId \|\| order\.sellerId/);
+  assert.match(checkout, /usedSplitPayment: isSplit/);
+});
+
+test('Paystack webhook authenticates raw body and matches exact stored reference, NGN and kobo', () => {
+  assert.match(webhook, /createHmac\('sha512'/);
+  assert.match(webhook, /timingSafeEqual/);
+  assert.match(webhook, /where\('payment\.reference', '==', reference\)/);
+  assert.match(webhook, /payment\.reference !== reference/);
+  assert.match(webhook, /payment\.currency !== 'NGN'/);
+  assert.match(webhook, /Number\(payment\.amount\) !== expected/);
+  assert.match(webhook, /adminDb\.runTransaction/);
+  assert.match(webhook, /paymentStatus: 'paid'/);
+  assert.doesNotMatch(webhook, /250000|expectedKobo - 100|cardFeeKobo = Math\.max/);
+});
+
+test('browser verification is buyer-only and cannot mutate payment status', () => {
+  assert.match(verifyPayment, /Only the buyer can check this payment/);
+  assert.match(verifyPayment, /callbackReference !== storedReference/);
+  assert.match(verifyPayment, /payment\.currency !== 'NGN'/);
+  assert.match(verifyPayment, /Number\(payment\.amount\) !== expectedKobo/);
+  assert.match(verifyPayment, /read-only/);
+  assert.doesNotMatch(verifyPayment, /orderRef\.update|orderRef\.set|findPaystackReference/);
+});
