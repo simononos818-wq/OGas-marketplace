@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       adminDb.collection('orders').where('payment.reference', '==', reference).limit(2).get(),
       adminDb.collection('orders').where('paystackRef', '==', reference).limit(2).get(),
     ]);
-    const uniqueMatches = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    const uniqueMatches = new Map<string, any>();
     canonicalMatches.docs.forEach((doc) => uniqueMatches.set(doc.id, doc));
     legacyMatches.docs.forEach((doc) => uniqueMatches.set(doc.id, doc));
     if (uniqueMatches.size !== 1) {
