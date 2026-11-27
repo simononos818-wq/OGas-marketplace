@@ -37,6 +37,26 @@ service cloud.firestore {
       return data.keys().hasAny(['role', 'admin', 'isAdmin', 'permissions']);
     }
 
+    function userChangedServerFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'gasPoints',
+        'totalSpent', 'totalOrders', 'lifetimeSpend',
+        'referralBalance', 'wallet', 'walletBalance'
+      ]);
+    }
+
+    function hasProtectedSellerFields(data) {
+      return data.diff(resource.data).affectedKeys().hasAny([
+        'isApproved', 'verified', 'isVerified', 'status', 'sellerStatus',
+        'level', 'gates', 'approvalNotes', 'completedOrders',
+        'accountNumber', 'bankCode', 'bankName', 'accountName',
+        'bankResolved', 'bankUpdatedAt', 'paystackRecipientCode', 'bankLocked',
+        'totalEarnings', 'pendingPayout', 'availableBalance',
+        'totalOrders', 'successOrders', 'cancelledOrders',
+        'rating', 'reviewCount', 'ratingSum'
+      ]);
+    }
+
     // USERS: a user can edit their own ordinary profile fields, never roles.
     match /users/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
@@ -45,6 +65,7 @@ service cloud.firestore {
         && !hasProtectedUserFields(request.resource.data);
       allow update: if isAdmin() || (
         signedIn() && request.auth.uid == userId &&
+        !userChangedServerFields() &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['role', 'admin', 'isAdmin', 'permissions'])
       );
@@ -63,16 +84,14 @@ service cloud.firestore {
         && request.resource.data.get('sellerStatus', 'pending') == 'pending'
         && !request.resource.data.keys().hasAny([
           'accountNumber', 'bankCode', 'bankName', 'accountName',
-          'bankResolved', 'bankUpdatedAt', 'paystackRecipientCode', 'bankLocked'
+          'bankResolved', 'bankUpdatedAt', 'paystackRecipientCode', 'bankLocked',
+          'totalEarnings', 'pendingPayout', 'availableBalance',
+          'totalOrders', 'successOrders', 'cancelledOrders',
+          'rating', 'reviewCount', 'ratingSum'
         ]);
       allow update: if isAdmin() || (
         signedIn() && request.auth.uid == sellerId &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'isApproved', 'verified', 'isVerified', 'status', 'sellerStatus',
-          'level', 'gates', 'approvalNotes', 'completedOrders',
-          'accountNumber', 'bankCode', 'bankName', 'accountName',
-          'bankResolved', 'bankUpdatedAt', 'paystackRecipientCode', 'bankLocked'
-        ])
+        !hasProtectedSellerFields(request.resource.data)
       );
       allow delete: if false;
     }
