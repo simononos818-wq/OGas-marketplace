@@ -81,19 +81,19 @@ export async function POST(req: NextRequest) {
 
     // The stored order reference is the authority. Metadata is only a secondary
     // cross-check and can never select an order.
-    let matches = await adminDb.collection('orders')
-      .where('payment.reference', '==', reference).limit(2).get();
-    let legacyMatch = false;
-    if (matches.empty) {
-      matches = await adminDb.collection('orders').where('paystackRef', '==', reference).limit(2).get();
-      legacyMatch = !matches.empty;
-    }
-    if (matches.size !== 1) {
-      await recordRejectedPayment({ reference, reason: matches.empty ? 'no_stored_reference_match' : 'multiple_stored_reference_matches', matchCount: matches.size });
+    const [canonicalMatches, legacyMatches] = await Promise.all([
+      adminDb.collection('orders').where('payment.reference', '==', reference).limit(2).get(),
+      adminDb.collection('orders').where('paystackRef', '==', reference).limit(2).get(),
+    ]);
+    const uniqueMatches = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    canonicalMatches.docs.forEach((doc) => uniqueMatches.set(doc.id, doc));
+    legacyMatches.docs.forEach((doc) => uniqueMatches.set(doc.id, doc));
+    if (uniqueMatches.size !== 1) {
+      await recordRejectedPayment({ reference, reason: uniqueMatches.size === 0 ? 'no_stored_reference_match' : 'multiple_stored_reference_matches', matchCount: uniqueMatches.size });
       return NextResponse.json({ received: true, skipped: 'order_reference_not_unique' });
     }
 
-    const matchedDoc = matches.docs[0];
+    const matchedDoc = [...uniqueMatches.values()][0];
     const orderId = matchedDoc.id;
     const metadataOrderId = payment.metadata?.orderId || eventData.metadata?.orderId;
     if (metadataOrderId && String(metadataOrderId) !== orderId) {
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
         return { state: 'not_pending' as const };
       }
 
-      let buyerSnap: FirebaseFirestore.DocumentSnapshot | null = null;
+      let buyerSnap: any = null;
       if (buyerRef) buyerSnap = await tx.get(buyerRef);
       const balance = Math.max(0, Math.floor(Number(buyerSnap?.data()?.gasPoints) || 0));
       const pointsRedeemed = Math.max(0, Math.floor(Number(current.pointsRedeemed) || 0));
