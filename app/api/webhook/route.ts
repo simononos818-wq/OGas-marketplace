@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, skipped: 'metadata_crosscheck_failed' });
     }
 
-    const orderRef = matchedDoc.ref;
+    const orderRef = adminDb.collection('orders').doc(orderId);
     const expected = expectedKobo(matchedDoc.data());
     if (!expected || Number(payment.amount) !== expected) {
       await recordRejectedPayment({ reference, orderId, expectedAmountKobo: expected, receivedAmountKobo: Number(payment.amount), reason: 'exact_amount_mismatch' });
