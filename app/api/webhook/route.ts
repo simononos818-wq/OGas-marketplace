@@ -1,195 +1,237 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { adminDb } from '../../../lib/firebase-admin';
 import { notifyPaidEscrow } from '../../../lib/escrow';
 import { postSystemMessage } from '../../../lib/chat-server';
 import { notifyOrderEvent } from '../../../lib/notify';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function validSignature(rawBody: string, signature: string | null, secret: string): boolean {
+  if (!signature || !/^[a-f0-9]{128}$/i.test(signature)) return false;
+  const expected = createHmac('sha512', secret).update(rawBody).digest();
+  const supplied = Buffer.from(signature, 'hex');
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+function expectedKobo(order: Record<string, any>): number {
+  const paymentAmount = Number(order.payment?.amountKobo);
+  if (Number.isSafeInteger(paymentAmount) && paymentAmount > 0) return paymentAmount;
+  const legacyNaira = Number(order.chargedAmount ?? order.onlineAmount ?? order.totalAmount ?? order.total ?? order.totalPrice ?? 0);
+  return Number.isFinite(legacyNaira) && legacyNaira > 0 ? Math.round(legacyNaira * 100) : 0;
+}
+
+async function recordRejectedPayment(details: Record<string, unknown>) {
+  console.error('Paystack webhook rejected payment:', details);
+  try {
+    await adminDb.collection('webhookAlerts').add({
+      type: 'paystack_integrity_rejection',
+      ...details,
+      createdAt: new Date(),
+    });
+  } catch (err) {
+    console.error('Could not persist Paystack rejection alert:', err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const secret = process.env.PAYSTACK_SECRET_KEY;
-    if (!secret) {
-      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
-    }
+    if (!secret) return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
 
     const rawBody = await req.text();
-    const signature = req.headers.get('x-paystack-signature');
-    if (!signature) {
-      return NextResponse.json({ ok: false }, { status: 401 });
-    }
-    const hash = createHmac('sha512', secret).update(rawBody).digest('hex');
-    const sigA = Buffer.from(hash, 'hex');
-    const sigB = Buffer.from(signature, 'hex');
-    if (sigA.length !== sigB.length || !timingSafeEqual(sigA, sigB)) {
-      console.error('webhook bad signature');
+    if (!validSignature(rawBody, req.headers.get('x-paystack-signature'), secret)) {
+      console.error('Paystack webhook signature invalid');
       return NextResponse.json({ ok: false }, { status: 401 });
     }
 
-    const event = JSON.parse(rawBody);
-    if (event.event !== 'charge.success') {
-      return NextResponse.json({ received: true });
+    let event: any;
+    try {
+      event = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
     }
+    if (event?.event !== 'charge.success') return NextResponse.json({ received: true });
 
-    const data = event.data;
-    const reference = data.reference;
-    const orderId = data.metadata?.orderId;
-    if (!reference) {
-      return NextResponse.json({ received: true });
-    }
+    const eventData = event.data || {};
+    const reference = typeof eventData.reference === 'string' ? eventData.reference : '';
+    if (!reference) return NextResponse.json({ received: true, skipped: 'missing_reference' });
 
-    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+    // Always ask Paystack's server-side API for the canonical transaction record.
+    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
       headers: { Authorization: `Bearer ${secret}` },
+      cache: 'no-store',
     });
+    if (!verifyRes.ok) throw new Error(`Paystack verification HTTP ${verifyRes.status}`);
     const verified = await verifyRes.json();
-    if (!verified.status || verified.data?.status !== 'success') {
-      return NextResponse.json({ received: true, skipped: 'not_success' });
+    const payment = verified?.data || {};
+    if (!verified?.status || payment.status !== 'success') {
+      return NextResponse.json({ received: true, skipped: 'transaction_not_successful' });
     }
 
-    const resolvedOrderId = orderId || verified.data?.metadata?.orderId;
-    if (!resolvedOrderId) {
-      return NextResponse.json({ received: true, skipped: 'no_order' });
+    if (
+      payment.reference !== reference ||
+      payment.currency !== 'NGN' ||
+      !Number.isSafeInteger(Number(payment.amount))
+    ) {
+      await recordRejectedPayment({ reference, reason: 'provider_reference_currency_or_amount_invalid' });
+      return NextResponse.json({ received: true, skipped: 'provider_data_mismatch' });
     }
 
-    const orderRef = adminDb.collection('orders').doc(resolvedOrderId);
-    const orderSnap = await orderRef.get();
-    if (!orderSnap.exists) {
-      return NextResponse.json({ received: true, skipped: 'missing_order' });
-    }
-    const order = orderSnap.data()!;
-    if (order.paymentStatus === 'paid' || order.status === 'paid') {
-      return NextResponse.json({ received: true, message: 'Already processed' });
+    // The stored order reference is the authority. Metadata is only a secondary
+    // cross-check and can never select an order.
+    const [canonicalMatches, legacyMatches] = await Promise.all([
+      adminDb.collection('orders').where('payment.reference', '==', reference).limit(2).get(),
+      adminDb.collection('orders').where('paystackRef', '==', reference).limit(2).get(),
+    ]);
+    const uniqueMatches = new Map<string, any>();
+    canonicalMatches.docs.forEach((doc) => uniqueMatches.set(doc.id, doc));
+    legacyMatches.docs.forEach((doc) => uniqueMatches.set(doc.id, doc));
+    if (uniqueMatches.size !== 1) {
+      await recordRejectedPayment({ reference, reason: uniqueMatches.size === 0 ? 'no_stored_reference_match' : 'multiple_stored_reference_matches', matchCount: uniqueMatches.size });
+      return NextResponse.json({ received: true, skipped: 'order_reference_not_unique' });
     }
 
-    const paidKobo = verified.data.amount;
+    const matchedDoc = [...uniqueMatches.values()][0];
+    const orderId = matchedDoc.id;
+    const metadataOrderId = payment.metadata?.orderId || eventData.metadata?.orderId;
+    if (metadataOrderId && String(metadataOrderId) !== orderId) {
+      await recordRejectedPayment({ reference, orderId, metadataOrderId: String(metadataOrderId), reason: 'metadata_order_crosscheck_failed' });
+      return NextResponse.json({ received: true, skipped: 'metadata_crosscheck_failed' });
+    }
 
-    // If Gas Points were applied at checkout, the expected amount is the
-    // reduced chargedAmount, not the full order total.
-    const expectedNaira = Number(
-      order.chargedAmount ?? order.totalAmount ?? order.total ?? order.totalPrice ?? 0,
-    );
-    const expectedKobo = Math.round(expectedNaira * 100);
-    const cardFeeKobo = Math.max(0, paidKobo - expectedKobo);
-    // Paystack may pass its card fee to the customer (charged = order total + fee).
-    // Accept expected total up to +₦2,500 fee cap; record the fee for clean accounting.
-    if (!(expectedNaira > 0) || paidKobo < expectedKobo - 100 || cardFeeKobo > 250000) {
-      console.error('webhook amount mismatch', { orderId: resolvedOrderId, paidKobo, expectedNaira });
-      try {
-        await adminDb.collection('webhookAlerts').add({
-          type: 'amount_mismatch',
-          orderId: resolvedOrderId,
-          reference,
-          paidKobo,
-          expectedNaira,
-          createdAt: new Date(),
-        });
-      } catch (alertErr) {
-        console.error('webhook alert write failed:', alertErr);
-      }
+    const orderRef = adminDb.collection('orders').doc(orderId);
+    const expected = expectedKobo(matchedDoc.data());
+    if (!expected || Number(payment.amount) !== expected) {
+      await recordRejectedPayment({ reference, orderId, expectedAmountKobo: expected, receivedAmountKobo: Number(payment.amount), reason: 'exact_amount_mismatch' });
       return NextResponse.json({ received: true, skipped: 'amount_mismatch' });
     }
+    const storedCurrency = matchedDoc.data()?.payment?.currency || 'NGN';
+    if (storedCurrency !== 'NGN') {
+      await recordRejectedPayment({ reference, orderId, storedCurrency, receivedCurrency: payment.currency, reason: 'stored_currency_mismatch' });
+      return NextResponse.json({ received: true, skipped: 'currency_mismatch' });
+    }
 
-    await orderRef.update({
-      status: 'paid',
-      paymentStatus: 'paid',
-      escrowStatus: 'held',
-      usedSplitPayment: false,
-      paystackRef: reference,
-      paystackAmount: paidKobo,
-      cardFeeKobo,
-      paidAt: new Date(),
-      verifiedAt: new Date(),
-      verifiedViaWebhook: true,
-      customerEmail: verified.data.customer?.email || null,
-      updatedAt: new Date(),
+    const buyerId = String(matchedDoc.data()?.buyerId || matchedDoc.data()?.userId || '');
+    const buyerRef = buyerId ? adminDb.collection('users').doc(buyerId) : null;
+    const spendLogRef = adminDb.collection('pointsTransactions').doc();
+    const earnLogRef = adminDb.collection('pointsTransactions').doc();
+    const eventRef = adminDb.collection('paymentWebhookEvents').doc(createHash('sha256').update(reference).digest('hex'));
+    const paidAt = new Date();
+
+    const transition = await adminDb.runTransaction(async (tx) => {
+      const currentSnap = await tx.get(orderRef);
+      if (!currentSnap.exists) return { state: 'missing' as const };
+      const current: any = currentSnap.data();
+      const currentStoredReference = current.payment?.reference || current.paystackRef;
+      if (currentStoredReference !== reference) return { state: 'reference_changed' as const };
+      const currentExpected = expectedKobo(current);
+      if (currentExpected !== Number(payment.amount)) return { state: 'amount_changed' as const };
+      if ((current.payment?.currency || 'NGN') !== 'NGN') return { state: 'currency_changed' as const };
+      if (current.paymentStatus === 'paid' || current.payment?.status === 'paid' || current.status === 'paid') {
+        return { state: 'already_paid' as const };
+      }
+      if (current.paymentStatus !== 'pending' && current.payment?.status !== 'pending') {
+        return { state: 'not_pending' as const };
+      }
+
+      let buyerSnap: any = null;
+      if (buyerRef) buyerSnap = await tx.get(buyerRef);
+      const balance = Math.max(0, Math.floor(Number(buyerSnap?.data()?.gasPoints) || 0));
+      const pointsRedeemed = Math.max(0, Math.floor(Number(current.pointsRedeemed) || 0));
+      const deduct = current.pointsDeducted ? 0 : Math.min(pointsRedeemed, balance);
+      const earn = current.pointsEarned ? 0 : Math.min(500, Math.floor((Number(payment.amount) / 100) * 0.02));
+      const nextBalance = balance - deduct + earn;
+
+      tx.update(orderRef, {
+        status: 'paid',
+        paymentStatus: 'paid',
+        escrowStatus: 'held',
+        usedSplitPayment: Number(current.cashBalance) > 0 || current.paymentMethod === 'split',
+        paystackRef: reference,
+        paystackAmount: Number(payment.amount),
+        cardFeeKobo: 0,
+        payment: {
+          ...(current.payment || {}),
+          reference,
+          provider: 'paystack',
+          amountKobo: Number(payment.amount),
+          currency: 'NGN',
+          status: 'paid',
+          paystackTxnId: String(payment.id ?? ''),
+          verifiedAmountKobo: Number(payment.amount),
+          channel: String(payment.channel || ''),
+          paidAt,
+          verifiedAt: paidAt,
+        },
+        paidAt,
+        verifiedAt: paidAt,
+        verifiedViaWebhook: true,
+        customerEmail: payment.customer?.email || null,
+        pointsDeducted: true,
+        pointsDeductedCount: deduct,
+        pointsEarned: true,
+        pointsEarnedCount: earn,
+        updatedAt: paidAt,
+      });
+      if (buyerRef && (deduct > 0 || earn > 0)) {
+        tx.set(buyerRef, { gasPoints: nextBalance, updatedAt: paidAt }, { merge: true });
+      }
+      if (buyerId && deduct > 0) {
+        tx.set(spendLogRef, { uid: buyerId, type: 'spend', points: deduct, reason: 'order_discount', orderId, reference, createdAt: paidAt });
+      }
+      if (buyerId && earn > 0) {
+        tx.set(earnLogRef, { uid: buyerId, type: 'earn', points: earn, reason: 'order_cashback', orderId, reference, createdAt: paidAt });
+      }
+      tx.set(eventRef, {
+        reference,
+        orderId,
+        type: 'charge.success',
+        status: 'confirmed',
+        amountKobo: Number(payment.amount),
+        currency: 'NGN',
+        channel: String(payment.channel || ''),
+        paystackTxnId: String(payment.id ?? ''),
+        createdAt: paidAt,
+      }, { merge: true });
+      return { state: 'paid' as const, order: current };
     });
 
-    // ── Gas Points deduction (atomic, exactly once) ────────────────────
-    const pointsRedeemed = Math.max(0, Math.floor(Number(order.pointsRedeemed) || 0));
-    if (pointsRedeemed > 0 && !order.pointsDeducted && order.buyerId) {
-      const buyerRef = adminDb.collection('users').doc(order.buyerId);
-      const txLogRef = adminDb.collection('pointsTransactions').doc();
-      try {
-        await adminDb.runTransaction(async (tx) => {
-          const [oSnap, uSnap] = await Promise.all([tx.get(orderRef), tx.get(buyerRef)]);
-          if (oSnap.data()?.pointsDeducted) return;
-          const balance = Math.max(0, Math.floor(Number(uSnap.data()?.gasPoints) || 0));
-          const deduct = Math.min(pointsRedeemed, balance);
-          tx.set(buyerRef, { gasPoints: balance - deduct }, { merge: true });
-          tx.update(orderRef, { pointsDeducted: true, pointsDeductedCount: deduct });
-          tx.set(txLogRef, {
-            uid: order.buyerId,
-            type: 'spend',
-            points: deduct,
-            reason: 'order_discount',
-            orderId: resolvedOrderId,
-            createdAt: new Date(),
-          });
-        });
-      } catch (pointsErr) {
-        // Payment is already confirmed — never fail the order over points.
-        console.error('Points deduction failed (payment still valid):', pointsErr);
-      }
+    if (transition.state === 'missing' || transition.state === 'reference_changed' || transition.state === 'amount_changed' || transition.state === 'currency_changed' || transition.state === 'not_pending') {
+      await recordRejectedPayment({ reference, orderId, reason: transition.state });
+      return NextResponse.json({ received: true, skipped: transition.state });
     }
+    if (transition.state === 'already_paid') return NextResponse.json({ received: true, message: 'Already processed' });
 
-    // ── GasBack: every paid order earns GP (2% back, max 500 GP/order) ──
-    if (!order.pointsEarned && order.buyerId && expectedNaira > 0) {
-      const earnRef = adminDb.collection('users').doc(order.buyerId);
-      const earnLogRef = adminDb.collection('pointsTransactions').doc();
-      try {
-        await adminDb.runTransaction(async (tx) => {
-          const oSnap = await tx.get(orderRef);
-          if (oSnap.data()?.pointsEarned) return;
-          const earn = Math.min(500, Math.floor(expectedNaira * 0.02));
-          tx.update(orderRef, { pointsEarned: true, pointsEarnedCount: earn });
-          if (earn <= 0) return;
-          const uSnap = await tx.get(earnRef);
-          const bal = Math.max(0, Math.floor(Number(uSnap.data()?.gasPoints) || 0));
-          tx.set(earnRef, { gasPoints: bal + earn }, { merge: true });
-          tx.set(earnLogRef, {
-            uid: order.buyerId,
-            type: 'earn',
-            points: earn,
-            reason: 'order_cashback',
-            orderId: resolvedOrderId,
-            createdAt: new Date(),
-          });
-        });
-      } catch (earnErr) {
-        // Payment is already confirmed — never fail the order over points.
-        console.error('GasBack failed (payment still valid):', earnErr);
-      }
-    }
-
-    await notifyPaidEscrow(resolvedOrderId);
-    await postSystemMessage(resolvedOrderId, 'Chat is open. Payment is locked in escrow until Door Code or buyer confirm.');
-
-    // SMS buyer + seller via Termii (payment confirmed = order placed)
-    try {
-      const sellerId = order.sellerId || order.vendorId || order.shopId;
-      let sellerPhone: string | undefined;
-      let sellerName: string | undefined = order.sellerName || order.vendorName || order.shopName;
-      if (sellerId) {
-        const vSnap = await adminDb.collection('vendors').doc(String(sellerId)).get();
-        if (vSnap.exists) {
-          const vd: any = vSnap.data()!;
-          sellerPhone = vd.phone || vd.phoneNumber || vd.whatsapp;
-          sellerName = sellerName || vd.businessName || vd.name;
+    const order = transition.order;
+    // Payment is committed before external notifications. A notification failure
+    // is logged separately and cannot roll back or invalidate a confirmed payment.
+    const notifications = await Promise.allSettled([
+      notifyPaidEscrow(orderId),
+      postSystemMessage(orderId, 'Payment is confirmed and locked in escrow until Door Code or buyer confirmation.'),
+      (async () => {
+        const sellerId = order.sellerId || order.vendorId || order.shopId;
+        let sellerPhone: string | undefined;
+        const sellerName = order.sellerName || order.vendorName || order.shopName;
+        if (sellerId) {
+          const sellerSnap = await adminDb.collection('sellers').doc(String(sellerId)).get();
+          const seller = sellerSnap.data() || {};
+          sellerPhone = seller.phone || seller.phoneNumber || seller.whatsapp;
         }
-      }
-      const buyerPhone = order.buyerPhone || order.customerPhone || order.phone;
-      const kg = Number(order.kg || order.kilograms || 0);
-      const total = Number(order.total || order.totalAmount || (paidKobo ? paidKobo / 100 : 0) || 0);
-      await notifyOrderEvent(
-        { id: resolvedOrderId, buyerPhone, sellerPhone, sellerName, kg, total },
-        'placed'
-      );
-    } catch (smsErr) {
-      console.error('placed SMS failed:', smsErr);
-    }
+        const buyerPhone = order.buyerPhone || order.customerPhone || order.phone;
+        const kg = Number(order.kg || order.kilograms || order.gasSize || 0);
+        const total = Number(order.total || order.totalAmount || 0);
+        await notifyOrderEvent({ id: orderId, buyerPhone, sellerPhone, sellerName, kg, total }, 'placed');
+      })(),
+    ]);
+    notifications.forEach((result, index) => {
+      if (result.status === 'rejected') console.error('Post-payment notification failed:', { index, error: result.reason });
+    });
 
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ received: true, paymentStatus: 'paid' });
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('Paystack webhook processing error:', error);
     return NextResponse.json({ error: 'processing_failed' }, { status: 500 });
   }
 }

@@ -68,7 +68,7 @@ function OrdersContent() {
         if (cancelled) return;
         if (data.success) {
           setCallbackState('success');
-          setCallbackMessage('Payment locked in escrow. Share the Door Code only at the door.');
+          setCallbackMessage(data.paid ? 'Payment is confirmed and held in escrow. Share the Door Code only at the door.' : (data.message || 'Paystack confirms your charge. OGas is finalising your order securely. Do not pay again.'));
         } else {
           setCallbackState('error');
           setCallbackMessage(data.message || 'We could not confirm this payment. Contact support if you were charged.');
@@ -232,7 +232,7 @@ function OrdersContent() {
         {callbackState === 'success' && (
           <div className="border rounded-2xl p-4 mb-6 text-center" style={{ background: '#e7f9ee', borderColor: '#b7e8cd' }}>
             <div className="font-bold text-lg mb-1" style={{ color: '#0fa958' }}>🎉 {callbackMessage}</div>
-            <p className="text-sm" style={{ color: '#0a7a42' }}>Open Messages to talk to the store. Share the Door Code only at the door.</p>
+            <p className="text-sm" style={{ color: '#0a7a42' }}>Your order will update automatically when OGas completes secure confirmation. Please do not pay again. If the order does not update shortly, contact support with your payment reference.</p>
           </div>
         )}
 
