@@ -101,12 +101,17 @@ export async function POST(req: NextRequest) {
         throw new Error('ORDER_NOT_PAYABLE');
       }
       const existing = current.payment || {};
-      if (existing.status === 'pending' && existing.reference && Number(existing.amountKobo) === amountKobo) {
+      if (existing.status === 'pending' && existing.reference) {
+        if (Number(existing.amountKobo) !== amountKobo) throw new Error('PAYMENT_ALREADY_PENDING');
         if (existing.authorizationUrl) {
           return { existing: true as const, reference: existing.reference as string, url: existing.authorizationUrl as string };
         }
         throw new Error('CHECKOUT_IN_PROGRESS');
       }
+      const currentTotal = orderTotal(current);
+      const currentOnline = Number(current.onlineAmount) || 0;
+      const currentExpected = currentOnline >= MIN_CHARGE_NAIRA && currentOnline < currentTotal ? currentOnline : currentTotal;
+      if (Math.round(currentExpected * 100) !== Math.round(expectedOnlineNaira * 100)) throw new Error('ORDER_AMOUNT_CHANGED');
       tx.update(orderRef, {
         payment: {
           reference,
@@ -202,6 +207,8 @@ export async function POST(req: NextRequest) {
     if (code === 'NOT_ORDER_BUYER') return NextResponse.json({ success: false, message: 'Not your order' }, { status: 403 });
     if (code === 'ORDER_NOT_PAYABLE') return NextResponse.json({ success: false, message: 'This order cannot be paid' }, { status: 409 });
     if (code === 'CHECKOUT_IN_PROGRESS') return NextResponse.json({ success: false, message: 'Payment checkout is already being prepared. Please wait a moment and refresh.' }, { status: 409 });
+    if (code === 'PAYMENT_ALREADY_PENDING') return NextResponse.json({ success: false, message: 'A payment is already open for this order. Resume that checkout before starting another payment.' }, { status: 409 });
+    if (code === 'ORDER_AMOUNT_CHANGED') return NextResponse.json({ success: false, message: 'The order amount changed. Refresh the order and try again.' }, { status: 409 });
     console.error('Checkout error:', error);
     return NextResponse.json({ success: false, message: 'Server error. Try again.' }, { status: 500 });
   }
