@@ -1,199 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '../../../lib/firebase-admin';
 import { requireUser } from '../../../lib/require-user';
-import { notifyPaidEscrow } from '../../../lib/escrow';
-import { postSystemMessage } from '../../../lib/chat-server';
+import { orderBuyerId } from '../../../lib/fields';
 
-async function findPaystackReference(secret: string, orderId?: string, reference?: string) {
-  if (reference) return String(reference);
-  if (!orderId) return '';
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-  const orderSnap = await adminDb.collection('orders').doc(orderId).get();
-  const stored = orderSnap.data()?.paystackRef as string | undefined;
-  if (stored) return stored;
-
-  const res = await fetch('https://api.paystack.co/transaction?perPage=50', {
-    headers: { Authorization: `Bearer ${secret}` },
-  });
-  const data = await res.json();
-  const hit = (data.data || []).find(
-    (t: any) => t.status === 'success' && t.metadata?.orderId === orderId,
-  );
-  return hit?.reference || '';
-}
-
+// This endpoint is deliberately read-only. Paystack's signed webhook is the
+// only path allowed to transition an order to paid.
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    if (!user) {
-      return NextResponse.json({ success: false, message: 'Sign in required' }, { status: 401 });
-    }
+    if (!user) return NextResponse.json({ success: false, message: 'Sign in required' }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
-    const orderId = (body.orderId as string | undefined)?.trim();
-    const bodyRef = (body.reference as string | undefined)?.trim();
+    const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
+    const callbackReference = typeof body.reference === 'string' ? body.reference.trim() : '';
+    if (!orderId) return NextResponse.json({ success: false, message: 'Missing orderId' }, { status: 400 });
 
-    if (!orderId && !bodyRef) {
-      return NextResponse.json({ success: false, message: 'Missing orderId or reference' }, { status: 400 });
+    const orderRef = adminDb.collection('orders').doc(orderId);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
+    const order = orderSnap.data()!;
+    if (orderBuyerId(order) !== user.uid) {
+      return NextResponse.json({ success: false, message: 'Only the buyer can check this payment' }, { status: 403 });
+    }
+
+    if (order.paymentStatus === 'paid' || order.payment?.status === 'paid' || order.status === 'paid') {
+      return NextResponse.json({ success: true, paid: true, orderId, message: 'Payment is confirmed and held in escrow.' });
+    }
+
+    const storedReference = String(order.payment?.reference || order.paystackRef || '');
+    if (!storedReference) {
+      return NextResponse.json({ success: false, message: 'No payment reference is stored for this order.' }, { status: 409 });
+    }
+    if (callbackReference && callbackReference !== storedReference) {
+      return NextResponse.json({ success: false, message: 'Callback reference does not match this order.' }, { status: 400 });
     }
 
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
-    if (!secretKey) {
-      return NextResponse.json({ success: false, message: 'Paystack not configured' }, { status: 500 });
-    }
+    if (!secretKey) return NextResponse.json({ success: false, message: 'Paystack not configured' }, { status: 500 });
 
-    let resolvedOrderId = orderId || '';
-    if (!resolvedOrderId && bodyRef) {
-      const verifyPeek = await fetch(
-        `https://api.paystack.co/transaction/verify/${encodeURIComponent(bodyRef)}`,
-        { headers: { Authorization: `Bearer ${secretKey}` } },
-      );
-      const peek = await verifyPeek.json();
-      resolvedOrderId = peek.data?.metadata?.orderId || '';
-    }
-
-    if (!resolvedOrderId) {
-      return NextResponse.json({ success: false, message: 'Could not link this payment to an order' }, { status: 400 });
-    }
-
-    const orderRef = adminDb.collection('orders').doc(resolvedOrderId);
-    const orderSnap = await orderRef.get();
-    if (!orderSnap.exists) {
-      return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
-    }
-    const order = orderSnap.data()!;
-
-    if (order.buyerId !== user.uid && order.sellerId !== user.uid) {
-      return NextResponse.json({ success: false, message: 'Not your order' }, { status: 403 });
-    }
-
-    if (order.paymentStatus === 'paid' || order.status === 'paid') {
-      return NextResponse.json({ success: true, message: 'Already marked paid', orderId: resolvedOrderId });
-    }
-
-    const reference = await findPaystackReference(secretKey, resolvedOrderId, bodyRef);
-    if (!reference) {
-      return NextResponse.json({
-        success: false,
-        message: 'No Paystack reference on this order yet. Confirm the charge in Paystack Transactions.',
-      }, { status: 400 });
-    }
-
-    const res = await fetch(
-      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
-      { headers: { Authorization: `Bearer ${secretKey}` } },
-    );
-    const data = await res.json();
-    if (!data.status || data.data?.status !== 'success') {
-      return NextResponse.json({
-        success: false,
-        message: data.message || 'Paystack has not confirmed this payment',
-      }, { status: 400 });
-    }
-
-    const metaOrderId = data.data?.metadata?.orderId;
-    if (metaOrderId && metaOrderId !== resolvedOrderId) {
-      return NextResponse.json({ success: false, message: 'Payment does not match this order' }, { status: 400 });
-    }
-
-    // If Gas Points were applied at checkout, the expected amount is the
-    // reduced chargedAmount, not the full order total.
-    const paidKobo = Number(data.data.amount);
-    const expectedNaira = Number(
-      order.chargedAmount ?? order.totalAmount ?? order.total ?? order.totalPrice ?? 0,
-    );
-    const expectedKobo = Math.round(expectedNaira * 100);
-    if (expectedKobo > 0 && Math.abs(paidKobo - expectedKobo) > 100) {
-      return NextResponse.json({
-        success: false,
-        message: 'Paid amount does not match order total',
-      }, { status: 400 });
-    }
-
-    await orderRef.update({
-      status: 'paid',
-      paymentStatus: 'paid',
-      escrowStatus: 'held',
-      usedSplitPayment: false,
-      paystackRef: reference,
-      paystackAmount: paidKobo,
-      customerEmail: data.data.customer?.email || null,
-      paidAt: new Date(),
-      verifiedAt: new Date(),
-      verifiedViaApi: true,
-      updatedAt: new Date(),
+    const res = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(storedReference)}`, {
+      headers: { Authorization: `Bearer ${secretKey}` },
+      cache: 'no-store',
     });
-
-    // ── Gas Points deduction (atomic, exactly once) ────────────────────
-    const pointsRedeemed = Math.max(0, Math.floor(Number(order.pointsRedeemed) || 0));
-    if (pointsRedeemed > 0 && !order.pointsDeducted && order.buyerId) {
-      const buyerRef = adminDb.collection('users').doc(order.buyerId);
-      const txLogRef = adminDb.collection('pointsTransactions').doc();
-      try {
-        await adminDb.runTransaction(async (tx) => {
-          const [oSnap, uSnap] = await Promise.all([tx.get(orderRef), tx.get(buyerRef)]);
-          if (oSnap.data()?.pointsDeducted) return;
-          const balance = Math.max(0, Math.floor(Number(uSnap.data()?.gasPoints) || 0));
-          const deduct = Math.min(pointsRedeemed, balance);
-          tx.set(buyerRef, { gasPoints: balance - deduct }, { merge: true });
-          tx.update(orderRef, { pointsDeducted: true, pointsDeductedCount: deduct });
-          tx.set(txLogRef, {
-            uid: order.buyerId,
-            type: 'spend',
-            points: deduct,
-            reason: 'order_discount',
-            orderId: resolvedOrderId,
-            createdAt: new Date(),
-          });
-        });
-      } catch (pointsErr) {
-        // Payment is already confirmed — never fail the order over points.
-        console.error('Points deduction failed (payment still valid):', pointsErr);
-      }
+    if (!res.ok) return NextResponse.json({ success: false, message: 'Could not verify payment with Paystack yet.' }, { status: 502 });
+    const result = await res.json();
+    const payment = result?.data || {};
+    if (!result?.status || payment.status !== 'success') {
+      return NextResponse.json({ success: false, message: result?.message || 'Paystack has not confirmed this payment.' }, { status: 409 });
     }
 
-    // ── GasBack: every paid order earns GP (2% back, max 500 GP/order) ──
-    if (!order.pointsEarned && order.buyerId && expectedNaira > 0) {
-      const earnRef = adminDb.collection('users').doc(order.buyerId);
-      const earnLogRef = adminDb.collection('pointsTransactions').doc();
-      try {
-        await adminDb.runTransaction(async (tx) => {
-          const oSnap = await tx.get(orderRef);
-          if (oSnap.data()?.pointsEarned) return;
-          const earn = Math.min(500, Math.floor(expectedNaira * 0.02));
-          tx.update(orderRef, { pointsEarned: true, pointsEarnedCount: earn });
-          if (earn <= 0) return;
-          const uSnap = await tx.get(earnRef);
-          const bal = Math.max(0, Math.floor(Number(uSnap.data()?.gasPoints) || 0));
-          tx.set(earnRef, { gasPoints: bal + earn }, { merge: true });
-          tx.set(earnLogRef, {
-            uid: order.buyerId,
-            type: 'earn',
-            points: earn,
-            reason: 'order_cashback',
-            orderId: resolvedOrderId,
-            createdAt: new Date(),
-          });
-        });
-      } catch (earnErr) {
-        // Payment is already confirmed — never fail the order over points.
-        console.error('GasBack failed (payment still valid):', earnErr);
-      }
+    const expectedKobo = Number(order.payment?.amountKobo) ||
+      Math.round(Number(order.chargedAmount ?? order.onlineAmount ?? order.totalAmount ?? order.total ?? order.totalPrice ?? 0) * 100);
+    if (
+      payment.reference !== storedReference ||
+      payment.currency !== 'NGN' ||
+      Number(payment.amount) !== expectedKobo ||
+      (payment.metadata?.orderId && String(payment.metadata.orderId) !== orderId)
+    ) {
+      console.error('Read-only payment verification mismatch:', { orderId, storedReference, providerReference: payment.reference, expectedKobo, paidKobo: payment.amount, currency: payment.currency });
+      return NextResponse.json({ success: false, message: 'Payment details do not match this order. Contact OGas support if you were charged.' }, { status: 409 });
     }
 
-    await notifyPaidEscrow(resolvedOrderId);
-    await postSystemMessage(
-      resolvedOrderId,
-      'Chat is open. Payment is locked in escrow until Door Code or buyer confirm.',
-    );
-
+    // Do not update Firestore here. The authenticated Paystack webhook performs
+    // the atomic pending -> paid transition after signature verification.
     return NextResponse.json({
       success: true,
-      message: 'Payment held in escrow',
-      orderId: resolvedOrderId,
+      paid: false,
+      awaitingWebhook: true,
+      orderId,
+      message: 'Paystack confirms the charge. OGas is waiting for its secure payment notification to finalise escrow.',
     });
   } catch (error) {
-    console.error('Verify error:', error);
-    return NextResponse.json({ success: false, message: 'Server error' }, { status: 500 });
+    console.error('Read-only payment verification error:', error);
+    return NextResponse.json({ success: false, message: 'Server error checking payment' }, { status: 500 });
   }
 }
